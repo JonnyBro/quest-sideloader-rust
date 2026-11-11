@@ -11,7 +11,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use super::EventSink;
 use super::install::{self, DeviceLocks, InstallContext, ReviewDecision};
-use super::task::{TaskEntry, TaskId, TaskKind, TaskSnapshot, TaskState, TempDir, Tracker};
+use super::task::{TaskEntry, TaskId, TaskKind, TaskSnapshot, TaskState, Tracker};
 use crate::adb::AdbServer;
 use crate::archive::{self, ArchiveError};
 use crate::catalog::{
@@ -19,6 +19,7 @@ use crate::catalog::{
 };
 use crate::format_bytes;
 use crate::sideload::SideloadError;
+use crate::sideload::run::Update;
 
 const MIB: u64 = 1024 * 1024;
 /// Written into the unpacked folder once extraction finished.
@@ -356,11 +357,20 @@ async fn run(
 	install::install_from(&ctx, &files_dir, tracker, review).await?;
 
 	if deps.keep_downloads {
-		Ok(Some(files_dir))
-	} else {
-		drop(TempDir(job_dir));
-		Ok(None)
+		return Ok(Some(files_dir));
 	}
+	// Removed before the task reports done, so a failure (on Windows, often a scanner holding a file open)
+	// is visible instead of silently leaving gigabytes behind.
+	let dir = job_dir.clone();
+	let removed = tokio::task::spawn_blocking(move || remove_if_exists(&dir))
+		.await
+		.map_err(|e| JobError::Failed(e.to_string()))?;
+	if let Err(e) = removed {
+		tracker.report(Update::Warning(format!(
+			"installed, but the downloaded files could not be removed: {e}"
+		)));
+	}
+	Ok(None)
 }
 
 async fn download(
