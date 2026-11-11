@@ -1,5 +1,8 @@
 # Quest Sideloader
 
+[![CI](https://github.com/JonnyBro/quest-sideloader-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/JonnyBro/quest-sideloader-rust/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/JonnyBro/quest-sideloader-rust)](https://github.com/JonnyBro/quest-sideloader-rust/releases/latest)
+
 Desktop sideloader for Meta Quest headsets, written in Rust with egui.
 
 ## Layout
