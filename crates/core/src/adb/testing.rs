@@ -94,28 +94,53 @@ impl FakeAdb {
 	}
 }
 
-async fn serve(mut s: TcpStream, rec: std::sync::Arc<std::sync::Mutex<Recorded>>) {
-	let request = read_request(&mut s).await;
-	match request.as_str() {
+type Shared = std::sync::Arc<std::sync::Mutex<Recorded>>;
+
+async fn serve(mut s: TcpStream, rec: Shared) {
+	// Clients of other, finished tests drop connections mid-request; that's
+	// not a failure of the test that owns this fake.
+	let _ = try_serve(&mut s, &rec).await;
+}
+
+async fn try_read_request(s: &mut TcpStream) -> std::io::Result<String> {
+	let mut len = [0u8; 4];
+	s.read_exact(&mut len).await?;
+	let len = std::str::from_utf8(&len)
+		.ok()
+		.and_then(|l| usize::from_str_radix(l, 16).ok())
+		.ok_or_else(|| std::io::Error::other("bad length"))?;
+	let mut buf = vec![0u8; len];
+	s.read_exact(&mut buf).await?;
+	String::from_utf8(buf).map_err(std::io::Error::other)
+}
+
+async fn try_header(s: &mut TcpStream) -> std::io::Result<([u8; 4], usize)> {
+	let mut header = [0u8; 8];
+	s.read_exact(&mut header).await?;
+	let len = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
+	Ok(([header[0], header[1], header[2], header[3]], len))
+}
+
+async fn try_serve(s: &mut TcpStream, rec: &Shared) -> std::io::Result<()> {
+	match try_read_request(s).await?.as_str() {
 		"host:version" => {
-			s.write_all(b"OKAY").await.unwrap();
-			write_hex(&mut s, "0029").await;
+			s.write_all(b"OKAY").await?;
+			s.write_all(b"00040029").await?;
 		}
 		"host:track-devices-l" => {
-			s.write_all(b"OKAY").await.unwrap();
-			write_hex(&mut s, "SER1 device model:Quest_3 transport_id:1\n").await;
+			s.write_all(b"OKAY").await?;
+			let devices = "SER1 device model:Quest_3 transport_id:1\n";
+			s.write_all(format!("{:04x}{devices}", devices.len()).as_bytes())
+				.await?;
 			let mut sink = Vec::new();
 			let _ = s.read_to_end(&mut sink).await;
 		}
 		"host:transport:SER1" => {
-			s.write_all(b"OKAY").await.unwrap();
-			let service = read_request(&mut s).await;
-			s.write_all(b"OKAY").await.unwrap();
+			s.write_all(b"OKAY").await?;
+			let service = try_read_request(s).await?;
+			s.write_all(b"OKAY").await?;
 			if service == "sync:" {
-				let files = receive_files(&mut s).await;
-				let mut rec = rec.lock().unwrap();
-				rec.pushed
-					.extend(files.into_iter().map(|(path, _, data)| (path, data)));
+				receive_and_record(s, rec).await?;
 			} else if let Some(command) = service.strip_prefix("shell,v2,raw:") {
 				rec.lock().unwrap().shell.push(command.to_owned());
 				const EXISTING_DIRS: [&str; 3] =
@@ -124,9 +149,57 @@ async fn serve(mut s: TcpStream, rec: std::sync::Arc<std::sync::Mutex<Recorded>>
 					Some(path) if !EXISTING_DIRS.contains(&path) => 1,
 					_ => 0,
 				};
-				s.write_all(&packet(3, &[exit])).await.unwrap();
+				s.write_all(&packet(3, &[exit])).await?;
 			}
 		}
-		other => panic!("fake adb: unexpected request {other}"),
+		other => {
+			return Err(std::io::Error::other(format!(
+				"fake adb: unexpected request {other}"
+			)));
+		}
+	}
+	Ok(())
+}
+
+/// Records each pushed file before acknowledging it. The client waits for that
+/// acknowledgement, so once its task is done every file is already recorded.
+async fn receive_and_record(s: &mut TcpStream, rec: &Shared) -> std::io::Result<()> {
+	loop {
+		let (id, len) = try_header(s).await?;
+		match &id {
+			b"QUIT" => return Ok(()),
+			b"SEND" => {}
+			other => {
+				return Err(std::io::Error::other(format!(
+					"unexpected sync request {other:?}"
+				)));
+			}
+		}
+		let mut target = vec![0u8; len];
+		s.read_exact(&mut target).await?;
+		let target = String::from_utf8_lossy(&target).into_owned();
+		let path = target
+			.rsplit_once(',')
+			.map_or(target.as_str(), |(p, _)| p)
+			.to_owned();
+		let mut content = Vec::new();
+		loop {
+			let (id, len) = try_header(s).await?;
+			match &id {
+				b"DATA" => {
+					let mut chunk = vec![0u8; len];
+					s.read_exact(&mut chunk).await?;
+					content.extend(chunk);
+				}
+				b"DONE" => break,
+				other => {
+					return Err(std::io::Error::other(format!(
+						"unexpected sync data {other:?}"
+					)));
+				}
+			}
+		}
+		rec.lock().unwrap().pushed.push((path, content));
+		s.write_all(b"OKAY\0\0\0\0").await?;
 	}
 }
