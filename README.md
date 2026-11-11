@@ -4,10 +4,16 @@ Desktop sideloader for Meta Quest headsets, written in Rust with egui.
 
 ## Layout
 
-- `crates/core` — everything that is not UI: settings, the background engine and,
-  later, ADB, the mirror catalog, downloads, extraction and installation.
+- `crates/core` — everything that is not UI: settings, the background engine, an
+  async client for the ADB server protocol and, later, the mirror catalog,
+  downloads, extraction and installation.
 - `crates/app` — the egui desktop application. It sends commands to the engine
   and renders the events it gets back.
+
+## Requirements
+
+`adb` (Android platform-tools) on `PATH`, or its path set in Settings. On Linux the
+headset also needs udev rules (for example the `android-udev` package).
 
 ## Build
 
