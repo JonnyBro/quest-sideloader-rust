@@ -3,6 +3,7 @@
 
 mod devices;
 mod install;
+mod library;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -13,12 +14,14 @@ use std::thread::JoinHandle;
 use tokio::sync::mpsc;
 
 use crate::adb::{AdbServer, DeviceEntry, DeviceInfo};
+use crate::catalog::Catalog;
 use crate::error::{Error, Result};
 use crate::paths::AppPaths;
 use crate::settings::Settings;
 use crate::sideload::script::ScriptAnalysis;
 
 pub use install::{ReviewDecision, TaskId, TaskSnapshot, TaskState};
+pub use library::CatalogStatus;
 
 #[derive(Debug)]
 pub enum Command {
@@ -37,6 +40,8 @@ pub enum Command {
 		decision: ReviewDecision,
 	},
 	CancelTask(TaskId),
+	/// Download the active mirror's metadata again.
+	SyncCatalog,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,6 +62,9 @@ pub enum Event {
 		info: std::result::Result<DeviceInfo, String>,
 	},
 	TaskUpdated(TaskSnapshot),
+	/// The active mirror's catalog; `None` when there is no mirror or it was never synced.
+	CatalogLoaded(Option<Arc<Catalog>>),
+	CatalogStatus(CatalogStatus),
 	/// install.txt has lines that need the user's decision; answer with
 	/// [`Command::ReviewScript`].
 	ScriptReview {
@@ -162,6 +170,7 @@ struct State {
 	tasks: HashMap<TaskId, install::TaskEntry>,
 	next_task: TaskId,
 	device_locks: install::DeviceLocks,
+	library: library::Library,
 }
 
 impl State {
@@ -218,10 +227,20 @@ impl State {
 		match result {
 			Ok(Ok(())) => {
 				let adb_changed = settings.adb_path != self.settings.adb_path;
+				let rclone_changed = settings.rclone_path != self.settings.rclone_path;
+				let mirror_changed = settings.active_mirror() != self.settings.active_mirror();
 				self.settings = settings.clone();
 				self.sink.emit(Event::SettingsSaved(settings));
 				if adb_changed {
 					self.restart_tracker();
+				}
+				if rclone_changed {
+					self.library
+						.set_rclone_path(self.settings.rclone_path.clone());
+				}
+				if mirror_changed {
+					self.library
+						.activate(self.settings.active_mirror().cloned());
 				}
 			}
 			Ok(Err(e)) => self.sink.emit(Event::SettingsSaveFailed(e.to_string())),
@@ -242,6 +261,12 @@ async fn run(
 	tracing::info!("engine started");
 	let adb = AdbServer::with_port(settings.adb_path.clone(), adb_port);
 	let tracker = devices::spawn_tracker(adb.clone(), sink.clone());
+	let mut library = library::Library::new(
+		settings.rclone_path.clone(),
+		paths.catalog_dir(),
+		sink.clone(),
+	);
+	library.activate(settings.active_mirror().cloned());
 	let mut state = State {
 		paths,
 		settings,
@@ -252,6 +277,7 @@ async fn run(
 		tasks: HashMap::new(),
 		next_task: 0,
 		device_locks: install::DeviceLocks::default(),
+		library,
 	};
 
 	while let Some(command) = commands.recv().await {
@@ -269,9 +295,14 @@ async fn run(
 			Command::Install { serial, path } => state.start_install(serial, path),
 			Command::ReviewScript { task, decision } => state.review(task, decision),
 			Command::CancelTask(task) => state.cancel(task),
+			Command::SyncCatalog => {
+				let mirror = state.settings.active_mirror().cloned();
+				state.library.sync(mirror);
+			}
 		}
 	}
 	state.tracker.abort();
+	state.library.abort();
 	for task in state.tasks.values() {
 		task.abort.abort();
 	}

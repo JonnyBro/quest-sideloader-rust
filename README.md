@@ -15,6 +15,19 @@ Desktop sideloader for Meta Quest headsets, written in Rust with egui.
 `adb` (Android platform-tools) on `PATH`, or its path set in Settings. On Linux the
 headset also needs udev rules (for example the `android-udev` package).
 
+## Library mirrors
+
+The library is optional. Add a mirror in Settings → Mirrors:
+
+- a VRP-style server config, `{"baseUri": "https://.../", "password": "<base64>"}`;
+- an rclone config with a remote that has a `Quest Games` folder (needs `rclone`).
+
+Both kinds can send extra HTTP headers, such as an `X-API-Key` the mirror
+requires. For rclone they are passed through `RCLONE_HEADER`, not the command line.
+
+The mirror's `meta.7z` is unpacked under the data directory; game notes come
+only from it.
+
 ## Build
 
 ```bash

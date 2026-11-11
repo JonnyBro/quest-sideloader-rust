@@ -79,6 +79,22 @@ impl DevicesView {
 			})
 	}
 
+	pub fn installed_apps(&self) -> Option<super::library::InstalledApps<'_>> {
+		let device = self.install_target()?;
+		let Some(InfoState::Loaded(info)) = self.info.get(&device.serial) else {
+			return None;
+		};
+		Some(super::library::InstalledApps {
+			device_name: device.display_name(),
+			serial: &device.serial,
+			versions: info
+				.packages
+				.iter()
+				.map(|p| (p.name.as_str(), p.version_code))
+				.collect(),
+		})
+	}
+
 	pub fn on_info(&mut self, serial: String, info: Result<DeviceInfo, String>) {
 		if !self.devices.iter().any(|d| d.serial == serial) {
 			return;

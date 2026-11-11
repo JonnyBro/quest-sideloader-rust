@@ -6,7 +6,10 @@ use std::path::PathBuf;
 use quest_sideloader_core::sideload::{InstallPlan, Source, script};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-	let path: PathBuf = std::env::args_os().nth(1).ok_or("usage: apk_info <path>")?.into();
+	let path: PathBuf = std::env::args_os()
+		.nth(1)
+		.ok_or("usage: apk_info <path>")?
+		.into();
 	let plan = match Source::classify(&path)? {
 		Source::Apk(p) => InstallPlan::from_apk(&p)?,
 		Source::Folder(p) => InstallPlan::from_folder(&p)?,

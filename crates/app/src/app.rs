@@ -39,6 +39,7 @@ pub struct SideloaderApp {
 	devices_view: ui::devices::DevicesView,
 	tasks_view: ui::tasks::TasksView,
 	review_dialog: ui::review::ReviewDialog,
+	library_view: ui::library::LibraryView,
 	settings_view: ui::settings::SettingsView,
 }
 
@@ -56,6 +57,7 @@ impl SideloaderApp {
 			Arc::new(move || ctx.request_repaint()),
 		)?;
 		apply_theme(&cc.egui_ctx, settings.theme);
+		egui_extras::install_image_loaders(&cc.egui_ctx);
 
 		Ok(Self {
 			engine,
@@ -69,6 +71,7 @@ impl SideloaderApp {
 			devices_view: ui::devices::DevicesView::new(),
 			tasks_view: ui::tasks::TasksView::new(),
 			review_dialog: ui::review::ReviewDialog::new(),
+			library_view: ui::library::LibraryView::new(),
 			settings_view: ui::settings::SettingsView::new(settings),
 		})
 	}
@@ -77,7 +80,7 @@ impl SideloaderApp {
 		match event {
 			Event::SettingsSaved(settings) => {
 				apply_theme(ctx, settings.theme);
-				self.settings_view.saved(settings);
+				self.settings_view.saved(settings, &self.paths.rclone_dir());
 				self.status = Some(Status::Info("Settings saved".into()));
 			}
 			Event::SettingsSaveFailed(message) => {
@@ -87,6 +90,8 @@ impl SideloaderApp {
 			Event::AdbStatus(status) => self.devices_view.on_adb_status(status),
 			Event::DevicesChanged(devices) => self.devices_view.on_devices_changed(devices),
 			Event::DeviceInfo { serial, info } => self.devices_view.on_info(serial, info),
+			Event::CatalogLoaded(catalog) => self.library_view.on_catalog(catalog),
+			Event::CatalogStatus(status) => self.library_view.on_status(status),
 			Event::TaskUpdated(snapshot) => {
 				if snapshot.state.is_finished() {
 					self.review_dialog.forget(snapshot.id);
@@ -195,13 +200,26 @@ impl eframe::App for SideloaderApp {
 		}
 		egui::CentralPanel::default().show(ui, |ui| match self.tab {
 			Tab::Devices => self.devices_view.show(ui, &mut commands),
-			Tab::Library | Tab::Downloads => {
+			Tab::Library => {
+				let installed = self.devices_view.installed_apps();
+				self.library_view.show(
+					ui,
+					self.settings_view.active_mirror_name(),
+					installed.as_ref(),
+					&mut commands,
+				);
+			}
+			Tab::Downloads => {
 				ui.centered_and_justified(|ui| ui.weak("Not implemented yet"));
 			}
 			Tab::Settings => {
 				let default_downloads = self.paths.default_downloads_dir();
-				self.settings_view
-					.show(ui, &default_downloads, &mut commands);
+				self.settings_view.show(
+					ui,
+					&default_downloads,
+					&self.paths.rclone_dir(),
+					&mut commands,
+				);
 			}
 		});
 		let ctx = ui.ctx().clone();

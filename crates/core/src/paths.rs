@@ -50,6 +50,15 @@ impl AppPaths {
 		self.data_dir.join("downloads")
 	}
 
+	pub fn catalog_dir(&self) -> PathBuf {
+		self.data_dir.join("catalog")
+	}
+
+	/// Copies of imported rclone configs, one per mirror.
+	pub fn rclone_dir(&self) -> PathBuf {
+		self.config_dir.join("rclone")
+	}
+
 	pub fn cache_dir(&self) -> &Path {
 		&self.cache_dir
 	}

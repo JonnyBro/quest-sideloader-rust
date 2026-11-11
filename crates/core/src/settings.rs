@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::catalog::Mirror;
 use crate::error::{Error, IoContext, Result};
 use crate::paths::AppPaths;
 
@@ -25,6 +26,13 @@ pub struct Settings {
 	/// `None` means `adb` from `PATH`.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub adb_path: Option<PathBuf>,
+	/// `None` means `rclone` from `PATH`.
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub rclone_path: Option<PathBuf>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub active_mirror: Option<String>,
+	#[serde(skip_serializing_if = "Vec::is_empty")]
+	pub mirrors: Vec<Mirror>,
 }
 
 impl Settings {
@@ -64,13 +72,26 @@ impl Settings {
 		self.max_concurrent_downloads = self
 			.max_concurrent_downloads
 			.clamp(1, MAX_CONCURRENT_DOWNLOADS);
-		if self
-			.adb_path
-			.as_ref()
-			.is_some_and(|p| p.as_os_str().is_empty())
-		{
-			self.adb_path = None;
+		for path in [&mut self.adb_path, &mut self.rclone_path] {
+			if path.as_ref().is_some_and(|p| p.as_os_str().is_empty()) {
+				*path = None;
+			}
 		}
+		if self
+			.active_mirror
+			.as_ref()
+			.is_some_and(|id| !self.mirrors.iter().any(|m| &m.id == id))
+		{
+			self.active_mirror = None;
+		}
+		if self.active_mirror.is_none() {
+			self.active_mirror = self.mirrors.first().map(|m| m.id.clone());
+		}
+	}
+
+	pub fn active_mirror(&self) -> Option<&Mirror> {
+		let id = self.active_mirror.as_ref()?;
+		self.mirrors.iter().find(|m| &m.id == id)
 	}
 }
 
@@ -81,6 +102,9 @@ impl Default for Settings {
 			max_concurrent_downloads: 2,
 			theme: Theme::default(),
 			adb_path: None,
+			rclone_path: None,
+			active_mirror: None,
+			mirrors: Vec::new(),
 		}
 	}
 }
@@ -90,7 +114,12 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
 		std::fs::create_dir_all(parent).at(parent)?;
 	}
 	let tmp = path.with_extension("toml.tmp");
-	std::fs::write(&tmp, bytes).at(&tmp)?;
+	let mut options = std::fs::OpenOptions::new();
+	options.write(true).create(true).truncate(true);
+	// Mirror passwords and API keys live here.
+	#[cfg(unix)]
+	std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+	std::io::Write::write_all(&mut options.open(&tmp).at(&tmp)?, bytes).at(&tmp)?;
 	std::fs::rename(&tmp, path).at(path)
 }
 
@@ -117,9 +146,53 @@ mod tests {
 			max_concurrent_downloads: 4,
 			theme: Theme::Dark,
 			adb_path: Some("/opt/platform-tools/adb".into()),
+			rclone_path: None,
+			active_mirror: Some("m1".into()),
+			mirrors: vec![Mirror {
+				id: "m1".into(),
+				name: "Main".into(),
+				kind: crate::catalog::MirrorKind::Http {
+					base_uri: "https://example.org/".into(),
+				},
+				password: "aGk=".into(),
+				headers: vec![crate::catalog::Header {
+					name: "X-Api-Key".into(),
+					value: "k".into(),
+				}],
+			}],
 		};
 		settings.save(&paths).unwrap();
 		assert_eq!(Settings::load(&paths).unwrap(), settings);
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::PermissionsExt;
+			let mode = std::fs::metadata(paths.settings_file())
+				.unwrap()
+				.permissions()
+				.mode();
+			assert_eq!(mode & 0o777, 0o600);
+		}
+	}
+
+	#[test]
+	fn active_mirror_falls_back_to_first() {
+		let mut settings = Settings {
+			active_mirror: Some("gone".into()),
+			..Settings::default()
+		};
+		settings.normalize();
+		assert_eq!(settings.active_mirror, None);
+		settings.mirrors.push(Mirror {
+			id: "a".into(),
+			name: "A".into(),
+			kind: crate::catalog::MirrorKind::Http {
+				base_uri: "https://a/".into(),
+			},
+			password: "aGk=".into(),
+			headers: Vec::new(),
+		});
+		settings.normalize();
+		assert_eq!(settings.active_mirror().map(|m| m.name.as_str()), Some("A"));
 	}
 
 	#[test]
