@@ -206,10 +206,12 @@ impl eframe::App for SideloaderApp {
 			Tab::Devices => self.devices_view.show(ui, &mut commands),
 			Tab::Library => {
 				let installed = self.devices_view.installed_apps();
+				let ignored = self.settings_view.contribute_ignored();
 				self.library_view.show(
 					ui,
 					self.settings_view.active_mirror_name(),
 					installed.as_ref(),
+					&ignored,
 					&mut commands,
 				);
 			}

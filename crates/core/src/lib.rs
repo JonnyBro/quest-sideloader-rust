@@ -1,6 +1,7 @@
 pub mod adb;
 pub mod archive;
 pub mod catalog;
+pub mod contribute;
 pub mod engine;
 pub mod error;
 mod format;

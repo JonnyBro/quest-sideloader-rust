@@ -119,6 +119,8 @@ fn task_row(
 			(TaskKind::Download, None) => "download only".to_owned(),
 			(TaskKind::Install, Some(serial)) => format!("install · {serial}"),
 			(TaskKind::Install, None) => "install".to_owned(),
+			(TaskKind::Upload, Some(serial)) => format!("upload to the library · {serial}"),
+			(TaskKind::Upload, None) => "upload to the library".to_owned(),
 		});
 		ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
 			if task.state.is_finished() {

@@ -33,6 +33,9 @@ pub enum AdbError {
 	#[error("push to {remote} failed: {message}")]
 	PushFailed { remote: String, message: String },
 
+	#[error("pull of {remote} failed: {message}")]
+	PullFailed { remote: String, message: String },
+
 	#[error("installation failed: {0}")]
 	InstallFailed(String),
 }

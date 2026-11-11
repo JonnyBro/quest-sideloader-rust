@@ -1,3 +1,4 @@
+pub mod contribute;
 pub mod devices;
 pub mod library;
 pub mod mirrors;

@@ -70,6 +70,7 @@ pub struct LibraryView {
 	selected: Option<usize>,
 	rows: Vec<usize>,
 	rows_key: Option<RowsKey>,
+	contribute: super::contribute::ContributeView,
 }
 
 impl LibraryView {
@@ -85,6 +86,7 @@ impl LibraryView {
 			selected: None,
 			rows: Vec::new(),
 			rows_key: None,
+			contribute: super::contribute::ContributeView::new(),
 		}
 	}
 
@@ -173,9 +175,18 @@ impl LibraryView {
 		ui: &mut egui::Ui,
 		mirror_name: Option<&str>,
 		installed: Option<&InstalledApps<'_>>,
+		contribute_ignored: &std::collections::HashSet<String>,
 		commands: &mut Vec<Command>,
 	) {
 		self.toolbar(ui, mirror_name, installed, commands);
+		if let (Some(catalog), Some(apps)) = (&self.catalog, installed) {
+			let catalog = catalog.clone();
+			self.contribute
+				.banner(ui, &catalog, apps, contribute_ignored);
+			let ctx = ui.ctx().clone();
+			self.contribute
+				.window(&ctx, &catalog, apps, contribute_ignored, commands);
+		}
 		ui.separator();
 
 		let Some(catalog) = self.catalog.clone() else {

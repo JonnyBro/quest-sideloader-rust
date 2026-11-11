@@ -106,6 +106,68 @@ impl<S: AsyncRead + AsyncWrite + Unpin> SyncSession<S> {
 		}
 	}
 
+	/// Copies a device file to `local` (written to `local.part`, then renamed).
+	pub async fn recv_file(
+		&mut self,
+		remote: &str,
+		local: &Path,
+		progress: Progress<'_>,
+	) -> Result<(), AdbError> {
+		let local_err = |source| AdbError::LocalIo {
+			path: local.to_path_buf(),
+			source,
+		};
+		let len = u32::try_from(remote.len())
+			.map_err(|_| AdbError::Protocol("remote path too long".into()))?;
+		self.write_header(b"RECV", len).await?;
+		timed(async { Ok(self.stream.write_all(remote.as_bytes()).await?) }).await?;
+		timed(async { Ok(self.stream.flush().await?) }).await?;
+
+		if let Some(parent) = local.parent() {
+			tokio::fs::create_dir_all(parent).await.map_err(local_err)?;
+		}
+		let mut part_name = local.file_name().unwrap_or_default().to_os_string();
+		part_name.push(".part");
+		let part = local.with_file_name(part_name);
+		let mut file = tokio::fs::File::create(&part).await.map_err(local_err)?;
+		loop {
+			let mut header = [0u8; 8];
+			timed(async { Ok(self.stream.read_exact(&mut header).await?) }).await?;
+			let len = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
+			match &header[..4] {
+				b"DATA" => {
+					if len > MAX_CHUNK {
+						return Err(AdbError::Protocol(format!("sync chunk of {len} bytes")));
+					}
+					let chunk = &mut self.buf[..len];
+					timed(async { Ok(self.stream.read_exact(chunk).await?) }).await?;
+					file.write_all(&self.buf[..len]).await.map_err(local_err)?;
+					progress(len as u64);
+				}
+				b"DONE" => break,
+				b"FAIL" => {
+					let mut message = vec![0u8; len];
+					timed(async { Ok(self.stream.read_exact(&mut message).await?) }).await?;
+					drop(file);
+					let _ = tokio::fs::remove_file(&part).await;
+					return Err(AdbError::PullFailed {
+						remote: remote.to_owned(),
+						message: String::from_utf8_lossy(&message).into_owned(),
+					});
+				}
+				other => {
+					return Err(AdbError::Protocol(format!(
+						"unexpected sync reply {:?}",
+						String::from_utf8_lossy(other)
+					)));
+				}
+			}
+		}
+		file.flush().await.map_err(local_err)?;
+		drop(file);
+		tokio::fs::rename(&part, local).await.map_err(local_err)
+	}
+
 	pub async fn quit(mut self) -> Result<(), AdbError> {
 		self.write_header(b"QUIT", 0).await
 	}

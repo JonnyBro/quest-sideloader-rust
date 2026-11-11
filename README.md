@@ -41,6 +41,17 @@ Mirrors are run by volunteers, so the app limits how hard it hits them:
   not retried;
 - rclone requests are rate-limited with `--tpslimit`.
 
+### Sharing new app versions
+
+When a headset has an app the library doesn't have, or a newer version of one,
+the Library tab offers to upload it through the mirror's own upload config
+(`.meta/upload.config` in its metadata). The mirror's blacklist and the
+headset's system apps are skipped, and each app can be dismissed for good.
+
+Nothing is uploaded without a click on that app's Upload button. An upload
+contains the APK, the app's OBB files, the headset model and an anonymous
+headset id (SHA-256 of the serial number). The headset is only read from.
+
 ## Building from source
 
 You need:

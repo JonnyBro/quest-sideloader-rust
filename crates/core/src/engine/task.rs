@@ -18,6 +18,8 @@ pub type TaskId = u64;
 pub enum TaskKind {
 	Install,
 	Download,
+	/// Sending an app version from the headset to the mirror.
+	Upload,
 }
 
 #[derive(Debug, Clone, PartialEq)]

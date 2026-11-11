@@ -1,6 +1,7 @@
 //! Background side of the app: the UI sends [`Command`]s, the engine works on a
 //! tokio runtime in its own thread and reports back with [`Event`]s.
 
+mod contribute;
 mod devices;
 mod downloads;
 mod install;
@@ -49,6 +50,15 @@ pub enum Command {
 		game: Game,
 		serial: Option<String>,
 	},
+	/// Upload an app from the headset to the active mirror. Only send this
+	/// after the user agreed to share that app.
+	Contribute {
+		serial: String,
+		package: String,
+		name: String,
+	},
+	/// Stop offering this package for upload.
+	IgnoreContribution(String),
 	/// Moves a queued download by `delta` places (negative is earlier).
 	MoveDownload {
 		task: TaskId,
@@ -189,6 +199,7 @@ struct State {
 	device_locks: install::DeviceLocks,
 	library: library::Library,
 	queue: downloads::Queue,
+	upload_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl State {
@@ -264,6 +275,32 @@ impl State {
 		self.tasks
 			.insert(id, downloads::entry(release, review, tracker));
 		self.start_downloads();
+	}
+
+	fn start_contribution(&mut self, serial: String, package: String, name: String) {
+		let Some(upload_config) = self.library.current().and_then(|c| c.upload_config()) else {
+			self.sink.emit(Event::Error(
+				"This mirror doesn't accept uploads (its metadata has no upload config)".into(),
+			));
+			return;
+		};
+		let id = self.new_task_id();
+		let entry = contribute::spawn(contribute::Upload {
+			id,
+			device: self.adb.device(serial),
+			package,
+			name,
+			upload_config,
+			work_dir: self
+				.paths
+				.cache_dir()
+				.join("contribute")
+				.join(format!("task-{id}")),
+			fetcher: self.library.fetcher().clone(),
+			lock: self.upload_lock.clone(),
+			sink: self.sink.clone(),
+		});
+		self.tasks.insert(id, entry);
 	}
 
 	fn start_downloads(&mut self) {
@@ -376,6 +413,7 @@ async fn run(
 		device_locks: install::DeviceLocks::default(),
 		library,
 		queue: downloads::Queue::new(slot_tx),
+		upload_lock: Arc::default(),
 	};
 
 	loop {
@@ -406,6 +444,18 @@ async fn run(
 			Command::CancelTask(task) => state.cancel(task),
 			Command::Download { game, serial } => state.enqueue_download(game, serial),
 			Command::MoveDownload { task, delta } => state.queue.move_by(task, delta),
+			Command::IgnoreContribution(package) => {
+				let mut settings = state.settings.clone();
+				if !settings.contribute_ignored.contains(&package) {
+					settings.contribute_ignored.push(package);
+					state.save_settings(settings).await;
+				}
+			}
+			Command::Contribute {
+				serial,
+				package,
+				name,
+			} => state.start_contribution(serial, package, name),
 			Command::SyncCatalog => {
 				let mirror = state.settings.active_mirror().cloned();
 				state.library.sync(mirror);

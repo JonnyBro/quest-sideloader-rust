@@ -41,6 +41,10 @@ impl SettingsView {
 		self.saving = false;
 	}
 
+	pub fn contribute_ignored(&self) -> std::collections::HashSet<String> {
+		self.saved.contribute_ignored.iter().cloned().collect()
+	}
+
 	pub fn active_mirror_name(&self) -> Option<&str> {
 		self.saved.active_mirror().map(|m| m.name.as_str())
 	}

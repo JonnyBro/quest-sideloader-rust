@@ -19,6 +19,7 @@ pub struct Catalog {
 	pub synced_at: SystemTime,
 	meta_dir: PathBuf,
 	thumbnails: HashSet<String>,
+	blacklist: HashSet<String>,
 }
 
 impl Catalog {
@@ -45,6 +46,17 @@ impl Catalog {
 		(!text.is_empty()).then_some(text)
 	}
 
+	/// rclone config the mirror publishes for contributing new app versions.
+	pub fn upload_config(&self) -> Option<PathBuf> {
+		let path = self.meta_dir.join(".meta/upload.config");
+		path.is_file().then_some(path)
+	}
+
+	/// Packages the mirror doesn't want offered for upload.
+	pub fn is_blacklisted(&self, package: &str) -> bool {
+		self.blacklist.contains(package)
+	}
+
 	/// Loads a previously synced catalog; `None` if this mirror was never synced.
 	pub fn load(root: &Path, mirror_id: &str) -> Result<Option<Self>, CatalogError> {
 		let dir = root.join(mirror_id).join("current");
@@ -65,12 +77,21 @@ impl Catalog {
 					.collect()
 			})
 			.unwrap_or_default();
+		let blacklist = std::fs::read_to_string(dir.join(".meta/nouns/blacklist.txt"))
+			.map(|text| {
+				text.lines()
+					.map(|l| l.trim().to_owned())
+					.filter(|l| !l.is_empty())
+					.collect()
+			})
+			.unwrap_or_default();
 		Ok(Some(Self {
 			mirror_id: mirror_id.to_owned(),
 			games,
 			synced_at,
 			meta_dir: dir,
 			thumbnails,
+			blacklist,
 		}))
 	}
 }
@@ -168,6 +189,17 @@ mod tests {
 		.unwrap();
 		std::fs::write(dir.join(".meta/thumbnails/com.a.game.jpg"), b"jpg").unwrap();
 		std::fs::write(dir.join(".meta/notes/A v1.txt"), "  Needs hand tracking.\n").unwrap();
+		std::fs::create_dir_all(dir.join(".meta/nouns")).unwrap();
+		std::fs::write(
+			dir.join(".meta/nouns/blacklist.txt"),
+			"com.discord\r\n\r\ncom.x.y\n",
+		)
+		.unwrap();
+		std::fs::write(
+			dir.join(".meta/upload.config"),
+			"[RSL-gameuploads]\ntype = ftp\n",
+		)
+		.unwrap();
 	}
 
 	#[test]
@@ -191,6 +223,10 @@ mod tests {
 		);
 		assert_eq!(catalog.note("missing"), None);
 		assert_eq!(catalog.note("../../etc/passwd"), None);
+		assert!(catalog.is_blacklisted("com.discord"));
+		assert!(catalog.is_blacklisted("com.x.y"));
+		assert!(!catalog.is_blacklisted("com.a.game"));
+		assert!(catalog.upload_config().is_some());
 	}
 
 	fn packed_meta(dir: &Path, password: &str) -> Vec<u8> {

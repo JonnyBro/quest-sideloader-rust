@@ -76,6 +76,9 @@ pub struct Settings {
 	pub active_mirror: Option<String>,
 	#[serde(skip_serializing_if = "Vec::is_empty")]
 	pub mirrors: Vec<Mirror>,
+	/// Packages the user doesn't want to be asked to upload again.
+	#[serde(skip_serializing_if = "Vec::is_empty")]
+	pub contribute_ignored: Vec<String>,
 }
 
 impl Settings {
@@ -150,6 +153,7 @@ impl Default for Settings {
 			rclone_path: None,
 			active_mirror: None,
 			mirrors: Vec::new(),
+			contribute_ignored: Vec::new(),
 		}
 	}
 }
@@ -210,6 +214,7 @@ mod tests {
 					value: "k".into(),
 				}],
 			}],
+			contribute_ignored: vec!["com.discord".into()],
 		};
 		settings.save(&paths).unwrap();
 		assert_eq!(Settings::load(&paths).unwrap(), settings);

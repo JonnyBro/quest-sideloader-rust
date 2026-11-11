@@ -21,10 +21,26 @@ pub enum CatalogStatus {
 	Failed(String),
 }
 
+/// Remembers the catalog it last announced, for the engine's own use.
+#[derive(Clone)]
+struct LibrarySink {
+	sink: EventSink,
+	current: Arc<Mutex<Option<Arc<Catalog>>>>,
+}
+
+impl LibrarySink {
+	fn emit(&self, event: Event) {
+		if let Event::CatalogLoaded(catalog) = &event {
+			*self.current.lock().expect("catalog lock poisoned") = catalog.clone();
+		}
+		self.sink.emit(event);
+	}
+}
+
 pub(super) struct Library {
 	fetcher: Fetcher,
 	root: PathBuf,
-	sink: EventSink,
+	sink: LibrarySink,
 	job: Option<JoinHandle<()>>,
 	limit: (u64, u8),
 	last_manual_sync: Option<Instant>,
@@ -36,6 +52,10 @@ const SYNC_COOLDOWN: Duration = Duration::from_secs(10 * 60);
 impl Library {
 	pub fn new(rclone_path: Option<PathBuf>, root: PathBuf, sink: EventSink) -> Self {
 		let fetcher = Fetcher::new(rclone_path).expect("HTTP client with default TLS settings");
+		let sink = LibrarySink {
+			sink,
+			current: Arc::new(Mutex::new(None)),
+		};
 		Self {
 			fetcher,
 			root,
@@ -44,6 +64,15 @@ impl Library {
 			limit: (0, 1),
 			last_manual_sync: None,
 		}
+	}
+
+	/// The catalog the UI was last given.
+	pub fn current(&self) -> Option<Arc<Catalog>> {
+		self.sink
+			.current
+			.lock()
+			.expect("catalog lock poisoned")
+			.clone()
 	}
 
 	pub fn fetcher(&self) -> &Fetcher {
@@ -151,7 +180,7 @@ impl Library {
 	}
 }
 
-async fn run_sync(fetcher: &Fetcher, mirror: &Mirror, root: &std::path::Path, sink: &EventSink) {
+async fn run_sync(fetcher: &Fetcher, mirror: &Mirror, root: &std::path::Path, sink: &LibrarySink) {
 	let last = Mutex::new(Instant::now() - PROGRESS_INTERVAL);
 	let report = |stage: SyncStage| {
 		let mut last = last.lock().expect("progress lock poisoned");

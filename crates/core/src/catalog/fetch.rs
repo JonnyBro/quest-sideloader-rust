@@ -160,6 +160,35 @@ impl Fetcher {
 			.arg("copyto")
 			.arg(source)
 			.arg(dest)
+			.args(["--retries", "3", "--low-level-retries", "10"])
+			.args(self.rclone_bwlimit());
+		self.run_rclone(command, progress).await
+	}
+
+	/// Uploads one file into the root of `remote` defined in `config_file`.
+	pub async fn rclone_upload(
+		&self,
+		config_file: &Path,
+		remote: &str,
+		file: &Path,
+		progress: FetchProgress<'_>,
+	) -> Result<(), CatalogError> {
+		let mut command = self.rclone_command(config_file, &[]);
+		command
+			.arg("copy")
+			.arg(file)
+			.arg(format!("{remote}:"))
+			.args(["--checkers", "1", "--retries", "2", "--inplace"]);
+		self.run_rclone(command, progress).await
+	}
+
+	/// Runs rclone with JSON logs, reporting its transfer stats as progress.
+	async fn run_rclone(
+		&self,
+		mut command: tokio::process::Command,
+		progress: FetchProgress<'_>,
+	) -> Result<(), CatalogError> {
+		command
 			.args([
 				"--use-json-log",
 				"--stats",
@@ -167,8 +196,6 @@ impl Fetcher {
 				"--stats-log-level",
 				"NOTICE",
 			])
-			.args(["--retries", "3", "--low-level-retries", "10"])
-			.args(self.rclone_bwlimit())
 			.stdout(Stdio::null())
 			.stderr(Stdio::piped());
 		let mut child = command.spawn().map_err(|e| self.spawn_error(e))?;
@@ -896,6 +923,42 @@ mod tests {
 			fetcher.rclone_bwlimit(),
 			["--bwlimit", "1000B"],
 			"clones share the limit"
+		);
+	}
+
+	/// Real rclone uploading to a local alias remote; skipped without rclone.
+	#[tokio::test]
+	async fn rclone_upload_copies_file() {
+		if std::process::Command::new("rclone")
+			.arg("version")
+			.output()
+			.is_err()
+		{
+			eprintln!("rclone not installed, skipping");
+			return;
+		}
+		let dir = tempfile::tempdir().unwrap();
+		let inbox = dir.path().join("inbox");
+		std::fs::create_dir_all(&inbox).unwrap();
+		let config = dir.path().join("upload.config");
+		std::fs::write(
+			&config,
+			format!(
+				"[RSL-gameuploads]\ntype = alias\nremote = {}\n",
+				inbox.display()
+			),
+		)
+		.unwrap();
+		let file = dir.path().join("Game v1 com.x.y 1 Quest 3S.zip");
+		std::fs::write(&file, b"zip bytes").unwrap();
+		Fetcher::new(None)
+			.unwrap()
+			.rclone_upload(&config, "RSL-gameuploads", &file, &|_, _| {})
+			.await
+			.unwrap();
+		assert_eq!(
+			std::fs::read(inbox.join("Game v1 com.x.y 1 Quest 3S.zip")).unwrap(),
+			b"zip bytes"
 		);
 	}
 }

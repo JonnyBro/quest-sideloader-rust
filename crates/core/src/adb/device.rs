@@ -133,6 +133,51 @@ impl Device {
 		Ok(out.success())
 	}
 
+	/// Copies device files to the computer: `(remote path, local path)` pairs.
+	pub async fn pull(
+		&self,
+		files: &[(String, std::path::PathBuf)],
+		progress: Progress<'_>,
+	) -> Result<(), AdbError> {
+		let stream = timed(self.open("sync:")).await?;
+		let mut session = SyncSession::new(stream);
+		for (remote, local) in files {
+			session.recv_file(remote, local, progress).await?;
+		}
+		session.quit().await
+	}
+
+	/// Regular files under `dir` with their sizes; empty if it doesn't exist.
+	pub async fn list_files(&self, dir: &str) -> Result<Vec<(String, u64)>, AdbError> {
+		let quoted = shell_words::quote(dir);
+		let out = self
+			.shell(&format!(
+				"[ -d {quoted} ] && find {quoted} -type f -exec stat -c '%s %n' {{}} +"
+			))
+			.await?;
+		Ok(out
+			.stdout
+			.lines()
+			.filter_map(|line| {
+				let (size, path) = line.split_once(' ')?;
+				Some((path.to_owned(), size.parse().ok()?))
+			})
+			.collect())
+	}
+
+	/// Path of the installed base APK of `package`.
+	pub async fn apk_path(&self, package: &str) -> Result<String, AdbError> {
+		let out = self
+			.shell_ok(&format!("pm path {}", shell_words::quote(package)))
+			.await?;
+		out.lines()
+			.filter_map(|l| l.trim().strip_prefix("package:"))
+			.find(|p| p.ends_with("/base.apk"))
+			.or_else(|| out.lines().find_map(|l| l.trim().strip_prefix("package:")))
+			.map(str::to_owned)
+			.ok_or_else(|| AdbError::Server(format!("{package} is not installed")))
+	}
+
 	/// Pushes a file, or every file of a directory, to `remote`. Missing remote
 	/// directories are created by adbd.
 	pub async fn push(
@@ -451,5 +496,96 @@ mod tests {
 		assert!(
 			matches!(err, AdbError::InstallFailed(m) if m.contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE"))
 		);
+	}
+
+	async fn serve_recv(s: &mut TcpStream, expect: &str, reply: Result<Vec<u8>, &str>) {
+		let (id, len) = read_sync_header(s).await;
+		assert_eq!(&id, b"RECV");
+		let mut path = vec![0u8; len as usize];
+		s.read_exact(&mut path).await.unwrap();
+		assert_eq!(String::from_utf8(path).unwrap(), expect);
+		match reply {
+			Ok(data) => {
+				for chunk in data.chunks(50_000) {
+					s.write_all(b"DATA").await.unwrap();
+					s.write_all(&(chunk.len() as u32).to_le_bytes())
+						.await
+						.unwrap();
+					s.write_all(chunk).await.unwrap();
+				}
+				s.write_all(b"DONE\0\0\0\0").await.unwrap();
+			}
+			Err(message) => {
+				s.write_all(b"FAIL").await.unwrap();
+				s.write_all(&(message.len() as u32).to_le_bytes())
+					.await
+					.unwrap();
+				s.write_all(message.as_bytes()).await.unwrap();
+			}
+		}
+	}
+
+	#[tokio::test]
+	async fn pull_receives_files() {
+		let data: Vec<u8> = (0..120_000u32).map(|i| (i % 241) as u8).collect();
+		let served = data.clone();
+		let (addr, server) = fake_device("sync:".into(), move |mut s| async move {
+			serve_recv(&mut s, "/data/app/x/base.apk", Ok(served)).await;
+			serve_recv(
+				&mut s,
+				"/sdcard/Android/obb/com.x/main.obb",
+				Ok(b"obb".to_vec()),
+			)
+			.await;
+			let (id, _) = read_sync_header(&mut s).await;
+			assert_eq!(&id, b"QUIT");
+		})
+		.await;
+		let dir = tempfile::tempdir().unwrap();
+		let files = vec![
+			(
+				"/data/app/x/base.apk".to_owned(),
+				dir.path().join("com.x.apk"),
+			),
+			(
+				"/sdcard/Android/obb/com.x/main.obb".to_owned(),
+				dir.path().join("com.x/main.obb"),
+			),
+		];
+		let received = std::sync::atomic::AtomicU64::new(0);
+		AdbServer::with_addr(addr)
+			.device("SER1")
+			.pull(&files, &|n| {
+				received.fetch_add(n, std::sync::atomic::Ordering::Relaxed);
+			})
+			.await
+			.unwrap();
+		server.await.unwrap();
+		assert_eq!(std::fs::read(dir.path().join("com.x.apk")).unwrap(), data);
+		assert_eq!(
+			std::fs::read(dir.path().join("com.x/main.obb")).unwrap(),
+			b"obb"
+		);
+		assert_eq!(received.into_inner(), data.len() as u64 + 3);
+	}
+
+	#[tokio::test]
+	async fn pull_failure_leaves_no_partial_file() {
+		let (addr, _server) = fake_device("sync:".into(), |mut s| async move {
+			serve_recv(&mut s, "/secret", Err("Permission denied")).await;
+		})
+		.await;
+		let dir = tempfile::tempdir().unwrap();
+		let local = dir.path().join("secret");
+		let err = AdbServer::with_addr(addr)
+			.device("SER1")
+			.pull(&[("/secret".to_owned(), local.clone())], &|_| {})
+			.await
+			.unwrap_err();
+		assert!(
+			matches!(err, AdbError::PullFailed { message, .. } if message == "Permission denied")
+		);
+		assert!(!local.exists());
+		assert!(!dir.path().join("secret.part").exists());
 	}
 }
