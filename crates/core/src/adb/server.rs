@@ -152,25 +152,12 @@ impl DeviceTracker {
 
 #[cfg(test)]
 mod tests {
-	use tokio::io::{AsyncReadExt, AsyncWriteExt};
+	use tokio::io::AsyncWriteExt;
 	use tokio::net::TcpListener;
 
 	use super::*;
 	use crate::adb::DeviceState;
-
-	async fn read_request(stream: &mut TcpStream) -> String {
-		let mut len = [0u8; 4];
-		stream.read_exact(&mut len).await.unwrap();
-		let len = usize::from_str_radix(std::str::from_utf8(&len).unwrap(), 16).unwrap();
-		let mut buf = vec![0u8; len];
-		stream.read_exact(&mut buf).await.unwrap();
-		String::from_utf8(buf).unwrap()
-	}
-
-	async fn write_hex(stream: &mut TcpStream, payload: &str) {
-		let framed = format!("{:04x}{payload}", payload.len());
-		stream.write_all(framed.as_bytes()).await.unwrap();
-	}
+	use crate::adb::testing::*;
 
 	#[tokio::test]
 	async fn version_and_device_tracking() {

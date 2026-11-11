@@ -2,7 +2,10 @@
 //! tokio runtime in its own thread and reports back with [`Event`]s.
 
 mod devices;
+mod install;
 
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc as std_mpsc;
 use std::thread::JoinHandle;
@@ -13,6 +16,9 @@ use crate::adb::{AdbServer, DeviceEntry, DeviceInfo};
 use crate::error::{Error, Result};
 use crate::paths::AppPaths;
 use crate::settings::Settings;
+use crate::sideload::script::ScriptAnalysis;
+
+pub use install::{ReviewDecision, TaskId, TaskSnapshot, TaskState};
 
 #[derive(Debug)]
 pub enum Command {
@@ -21,6 +27,16 @@ pub enum Command {
 	/// `host` or `host:port`.
 	ConnectWireless(String),
 	DisconnectWireless(String),
+	/// Install an APK, a release folder or a ZIP on the headset.
+	Install {
+		serial: String,
+		path: PathBuf,
+	},
+	ReviewScript {
+		task: TaskId,
+		decision: ReviewDecision,
+	},
+	CancelTask(TaskId),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +55,14 @@ pub enum Event {
 	DeviceInfo {
 		serial: String,
 		info: std::result::Result<DeviceInfo, String>,
+	},
+	TaskUpdated(TaskSnapshot),
+	/// install.txt has lines that need the user's decision; answer with
+	/// [`Command::ReviewScript`].
+	ScriptReview {
+		task: TaskId,
+		title: String,
+		analysis: ScriptAnalysis,
 	},
 	Notice(String),
 	Error(String),
@@ -135,9 +159,52 @@ struct State {
 	adb_port: u16,
 	adb: AdbServer,
 	tracker: tokio::task::JoinHandle<()>,
+	tasks: HashMap<TaskId, install::TaskEntry>,
+	next_task: TaskId,
+	device_locks: install::DeviceLocks,
 }
 
 impl State {
+	fn start_install(&mut self, serial: String, path: PathBuf) {
+		self.next_task += 1;
+		let id = self.next_task;
+		let entry = install::spawn(install::NewTask {
+			id,
+			device: self.adb.device(serial),
+			source: path,
+			work_dir: self.paths.cache_dir().join("sideload"),
+			locks: self.device_locks.clone(),
+			sink: self.sink.clone(),
+		});
+		self.tasks.retain(|_, t| !t.abort.is_finished());
+		self.tasks.insert(id, entry);
+	}
+
+	fn review(&mut self, id: TaskId, decision: ReviewDecision) {
+		if let Some(sender) = self.tasks.get_mut(&id).and_then(|t| t.review.take()) {
+			let _ = sender.send(decision);
+		}
+	}
+
+	fn cancel(&mut self, id: TaskId) {
+		let Some(task) = self.tasks.remove(&id) else {
+			return;
+		};
+		if task.abort.is_finished() {
+			return;
+		}
+		task.abort.abort();
+		self.sink.emit(Event::TaskUpdated(TaskSnapshot {
+			id,
+			serial: task.serial,
+			title: task.title,
+			stage: "Cancelled".into(),
+			progress: None,
+			state: TaskState::Cancelled,
+			warnings: Vec::new(),
+		}));
+	}
+
 	fn restart_tracker(&mut self) {
 		self.tracker.abort();
 		self.adb = AdbServer::with_port(self.settings.adb_path.clone(), self.adb_port);
@@ -182,6 +249,9 @@ async fn run(
 		adb_port,
 		adb,
 		tracker,
+		tasks: HashMap::new(),
+		next_task: 0,
+		device_locks: install::DeviceLocks::default(),
 	};
 
 	while let Some(command) = commands.recv().await {
@@ -196,9 +266,15 @@ async fn run(
 			Command::DisconnectWireless(address) => {
 				devices::spawn_disconnect(state.adb.clone(), address, state.sink.clone());
 			}
+			Command::Install { serial, path } => state.start_install(serial, path),
+			Command::ReviewScript { task, decision } => state.review(task, decision),
+			Command::CancelTask(task) => state.cancel(task),
 		}
 	}
 	state.tracker.abort();
+	for task in state.tasks.values() {
+		task.abort.abort();
+	}
 	tracing::info!("engine stopped");
 }
 

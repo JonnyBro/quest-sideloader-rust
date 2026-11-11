@@ -6,8 +6,12 @@ mod error;
 mod parse;
 mod protocol;
 mod server;
+mod sync;
+#[cfg(test)]
+pub(crate) mod testing;
 
 pub use device::{Device, ShellOutput};
 pub use error::AdbError;
 pub use parse::{Battery, DeviceEntry, DeviceInfo, DeviceState, Package, Storage};
 pub use server::{AdbServer, DEFAULT_PORT, DeviceTracker};
+pub use sync::{LocalFile, Progress, list_files};

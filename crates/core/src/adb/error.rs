@@ -22,4 +22,17 @@ pub enum AdbError {
 
 	#[error("adb request timed out")]
 	Timeout,
+
+	#[error("cannot read {path}: {source}")]
+	LocalIo {
+		path: PathBuf,
+		#[source]
+		source: std::io::Error,
+	},
+
+	#[error("push to {remote} failed: {message}")]
+	PushFailed { remote: String, message: String },
+
+	#[error("installation failed: {0}")]
+	InstallFailed(String),
 }

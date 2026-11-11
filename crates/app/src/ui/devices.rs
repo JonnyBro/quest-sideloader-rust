@@ -62,6 +62,23 @@ impl DevicesView {
 		self.devices = devices;
 	}
 
+	/// Where dropped files go: the selected headset if it's online, otherwise
+	/// the only online one.
+	pub fn install_target(&self) -> Option<&DeviceEntry> {
+		let online = |d: &&DeviceEntry| d.state == DeviceState::Online;
+		self.selected
+			.as_ref()
+			.and_then(|s| self.devices.iter().find(|d| &d.serial == s))
+			.filter(online)
+			.or_else(|| {
+				let mut all = self.devices.iter().filter(online);
+				match (all.next(), all.next()) {
+					(Some(only), None) => Some(only),
+					_ => None,
+				}
+			})
+	}
+
 	pub fn on_info(&mut self, serial: String, info: Result<DeviceInfo, String>) {
 		if !self.devices.iter().any(|d| d.serial == serial) {
 			return;
@@ -181,6 +198,31 @@ impl DevicesView {
 		});
 		ui.weak(&device.serial);
 		ui.add_space(8.0);
+
+		if device.state == DeviceState::Online {
+			ui.horizontal(|ui| {
+				if ui.button("Install APK or ZIP…").clicked()
+					&& let Some(file) = rfd::FileDialog::new()
+						.add_filter("APK or ZIP", &["apk", "zip"])
+						.pick_file()
+				{
+					commands.push(Command::Install {
+						serial: device.serial.clone(),
+						path: file,
+					});
+				}
+				if ui.button("Install folder…").clicked()
+					&& let Some(folder) = rfd::FileDialog::new().pick_folder()
+				{
+					commands.push(Command::Install {
+						serial: device.serial.clone(),
+						path: folder,
+					});
+				}
+				ui.weak("or drop files onto the window");
+			});
+			ui.add_space(8.0);
+		}
 
 		if let Some(hint) = state_hint(&device.state) {
 			ui.label(hint);

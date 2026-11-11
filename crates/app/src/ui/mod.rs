@@ -1,5 +1,7 @@
 pub mod devices;
+pub mod review;
 pub mod settings;
+pub mod tasks;
 
 pub fn format_bytes(bytes: u64) -> String {
 	const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
