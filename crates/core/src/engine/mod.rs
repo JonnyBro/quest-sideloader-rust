@@ -2,8 +2,10 @@
 //! tokio runtime in its own thread and reports back with [`Event`]s.
 
 mod devices;
+mod downloads;
 mod install;
 mod library;
+mod task;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -14,14 +16,15 @@ use std::thread::JoinHandle;
 use tokio::sync::mpsc;
 
 use crate::adb::{AdbServer, DeviceEntry, DeviceInfo};
-use crate::catalog::Catalog;
+use crate::catalog::{Catalog, Game};
 use crate::error::{Error, Result};
 use crate::paths::AppPaths;
 use crate::settings::Settings;
 use crate::sideload::script::ScriptAnalysis;
 
-pub use install::{ReviewDecision, TaskId, TaskSnapshot, TaskState};
+pub use install::ReviewDecision;
 pub use library::CatalogStatus;
+pub use task::{TaskId, TaskKind, TaskSnapshot, TaskState};
 
 #[derive(Debug)]
 pub enum Command {
@@ -40,6 +43,17 @@ pub enum Command {
 		decision: ReviewDecision,
 	},
 	CancelTask(TaskId),
+	/// Download a release from the active mirror; with `serial`, install it
+	/// on that headset afterwards.
+	Download {
+		game: Game,
+		serial: Option<String>,
+	},
+	/// Moves a queued download by `delta` places (negative is earlier).
+	MoveDownload {
+		task: TaskId,
+		delta: isize,
+	},
 	/// Download the active mirror's metadata again.
 	SyncCatalog,
 }
@@ -160,6 +174,9 @@ impl Drop for Engine {
 	}
 }
 
+/// Mirrors forbid bulk downloading; a short queue keeps the app on the right side of that.
+const MAX_DOWNLOAD_JOBS: usize = 10;
+
 struct State {
 	paths: AppPaths,
 	settings: Settings,
@@ -167,26 +184,96 @@ struct State {
 	adb_port: u16,
 	adb: AdbServer,
 	tracker: tokio::task::JoinHandle<()>,
-	tasks: HashMap<TaskId, install::TaskEntry>,
+	tasks: HashMap<TaskId, task::TaskEntry>,
 	next_task: TaskId,
 	device_locks: install::DeviceLocks,
 	library: library::Library,
+	queue: downloads::Queue,
 }
 
 impl State {
-	fn start_install(&mut self, serial: String, path: PathBuf) {
+	fn new_task_id(&mut self) -> TaskId {
+		self.tasks
+			.retain(|_, t| t.abort.as_ref().is_none_or(|a| !a.is_finished()));
 		self.next_task += 1;
-		let id = self.next_task;
-		let entry = install::spawn(install::NewTask {
+		self.next_task
+	}
+
+	fn start_install(&mut self, serial: String, path: PathBuf) {
+		let id = self.new_task_id();
+		let ctx = install::InstallContext {
 			id,
 			device: self.adb.device(serial),
-			source: path,
 			work_dir: self.paths.cache_dir().join("sideload"),
 			locks: self.device_locks.clone(),
 			sink: self.sink.clone(),
-		});
-		self.tasks.retain(|_, t| !t.abort.is_finished());
-		self.tasks.insert(id, entry);
+			title_from_files: true,
+		};
+		self.tasks.insert(id, install::spawn(ctx, path));
+	}
+
+	fn download_deps(&self) -> downloads::Deps {
+		downloads::Deps {
+			fetcher: self.library.fetcher().clone(),
+			adb: self.adb.clone(),
+			locks: self.device_locks.clone(),
+			sink: self.sink.clone(),
+			work_dir: self.paths.cache_dir().join("sideload"),
+			downloads_dir: self.settings.downloads_dir.clone(),
+			keep_downloads: self.settings.keep_downloads,
+		}
+	}
+
+	fn enqueue_download(&mut self, game: Game, serial: Option<String>) {
+		let Some(mirror) = self.settings.active_mirror().cloned() else {
+			self.sink.emit(Event::Error(
+				"No mirror configured. Add one in Settings.".into(),
+			));
+			return;
+		};
+		let unfinished = |t: &&task::TaskEntry| {
+			t.release.is_some() && t.abort.as_ref().is_none_or(|a| !a.is_finished())
+		};
+		if self.tasks.values().filter(unfinished).count() >= MAX_DOWNLOAD_JOBS {
+			self.sink.emit(Event::Notice(format!(
+				"The download queue is full ({MAX_DOWNLOAD_JOBS}); wait for a download to finish"
+			)));
+			return;
+		}
+		let active = self
+			.tasks
+			.values()
+			.filter(unfinished)
+			.any(|t| t.release.as_deref() == Some(game.release_name.as_str()));
+		if active {
+			self.sink.emit(Event::Notice(format!(
+				"{} is already in the queue",
+				game.name
+			)));
+			return;
+		}
+		let id = self.new_task_id();
+		let release = game.release_name.clone();
+		let job = downloads::Job {
+			id,
+			game,
+			mirror,
+			serial,
+		};
+		let (review, tracker) = self.queue.push(job, self.sink.clone());
+		self.tasks
+			.insert(id, downloads::entry(release, review, tracker));
+		self.start_downloads();
+	}
+
+	fn start_downloads(&mut self) {
+		let deps = self.download_deps();
+		let limit = usize::from(self.settings.max_concurrent_downloads);
+		for (id, abort) in self.queue.start_ready(limit, &deps) {
+			if let Some(entry) = self.tasks.get_mut(&id) {
+				entry.abort = Some(abort);
+			}
+		}
 	}
 
 	fn review(&mut self, id: TaskId, decision: ReviewDecision) {
@@ -199,19 +286,15 @@ impl State {
 		let Some(task) = self.tasks.remove(&id) else {
 			return;
 		};
-		if task.abort.is_finished() {
-			return;
+		let queued = self.queue.remove_pending(id);
+		let running = task.abort.as_ref().is_some_and(|a| !a.is_finished());
+		if let Some(abort) = &task.abort {
+			abort.abort();
 		}
-		task.abort.abort();
-		self.sink.emit(Event::TaskUpdated(TaskSnapshot {
-			id,
-			serial: task.serial,
-			title: task.title,
-			stage: "Cancelled".into(),
-			progress: None,
-			state: TaskState::Cancelled,
-			warnings: Vec::new(),
-		}));
+		if queued || running {
+			task.tracker
+				.finish(TaskState::Cancelled, Some("Cancelled".into()), None);
+		}
 	}
 
 	fn restart_tracker(&mut self) {
@@ -228,16 +311,25 @@ impl State {
 			Ok(Ok(())) => {
 				let adb_changed = settings.adb_path != self.settings.adb_path;
 				let rclone_changed = settings.rclone_path != self.settings.rclone_path;
+				let limit_changed = settings.download_limit != self.settings.download_limit
+					|| settings.max_concurrent_downloads != self.settings.max_concurrent_downloads;
 				let mirror_changed = settings.active_mirror() != self.settings.active_mirror();
 				self.settings = settings.clone();
 				self.sink.emit(Event::SettingsSaved(settings));
 				if adb_changed {
 					self.restart_tracker();
 				}
+				if limit_changed {
+					self.library.set_bandwidth_limit(
+						self.settings.download_limit.bytes_per_sec(),
+						self.settings.max_concurrent_downloads,
+					);
+				}
 				if rclone_changed {
 					self.library
 						.set_rclone_path(self.settings.rclone_path.clone());
 				}
+				self.start_downloads();
 				if mirror_changed {
 					self.library
 						.activate(self.settings.active_mirror().cloned());
@@ -266,7 +358,12 @@ async fn run(
 		paths.catalog_dir(),
 		sink.clone(),
 	);
+	library.set_bandwidth_limit(
+		settings.download_limit.bytes_per_sec(),
+		settings.max_concurrent_downloads,
+	);
 	library.activate(settings.active_mirror().cloned());
+	let (slot_tx, mut slot_rx) = mpsc::unbounded_channel();
 	let mut state = State {
 		paths,
 		settings,
@@ -278,9 +375,21 @@ async fn run(
 		next_task: 0,
 		device_locks: install::DeviceLocks::default(),
 		library,
+		queue: downloads::Queue::new(slot_tx),
 	};
 
-	while let Some(command) = commands.recv().await {
+	loop {
+		let command = tokio::select! {
+			command = commands.recv() => match command {
+				Some(command) => command,
+				None => break,
+			},
+			Some(id) = slot_rx.recv() => {
+				state.queue.slot_freed(id);
+				state.start_downloads();
+				continue;
+			}
+		};
 		match command {
 			Command::SaveSettings(settings) => state.save_settings(settings).await,
 			Command::RefreshDevice(serial) => {
@@ -295,6 +404,8 @@ async fn run(
 			Command::Install { serial, path } => state.start_install(serial, path),
 			Command::ReviewScript { task, decision } => state.review(task, decision),
 			Command::CancelTask(task) => state.cancel(task),
+			Command::Download { game, serial } => state.enqueue_download(game, serial),
+			Command::MoveDownload { task, delta } => state.queue.move_by(task, delta),
 			Command::SyncCatalog => {
 				let mirror = state.settings.active_mirror().cloned();
 				state.library.sync(mirror);
@@ -303,8 +414,9 @@ async fn run(
 	}
 	state.tracker.abort();
 	state.library.abort();
-	for task in state.tasks.values() {
-		task.abort.abort();
+	state.queue.abort_all();
+	for abort in state.tasks.values().filter_map(|t| t.abort.as_ref()) {
+		abort.abort();
 	}
 	tracing::info!("engine stopped");
 }

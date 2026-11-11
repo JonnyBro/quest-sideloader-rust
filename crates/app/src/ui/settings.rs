@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use quest_sideloader_core::settings::{MAX_CONCURRENT_DOWNLOADS, Theme};
+use quest_sideloader_core::settings::{MAX_CONCURRENT_DOWNLOADS, SpeedUnit, Theme};
 use quest_sideloader_core::{Command, Settings};
 
 use super::mirrors::{self, MirrorForm};
@@ -99,11 +99,42 @@ impl SettingsView {
 				});
 				ui.end_row();
 
+				ui.label("After installing");
+				ui.checkbox(
+					&mut self.draft.keep_downloads,
+					"Keep downloaded files for reinstalling",
+				);
+				ui.end_row();
+
 				ui.label("Parallel downloads");
 				ui.add(egui::Slider::new(
 					&mut self.draft.max_concurrent_downloads,
 					1..=MAX_CONCURRENT_DOWNLOADS,
 				));
+				ui.end_row();
+
+				ui.label("Speed limit");
+				ui.horizontal(|ui| {
+					let limit = &mut self.draft.download_limit;
+					ui.add(
+						egui::DragValue::new(&mut limit.value)
+							.range(0..=10_000_000)
+							.speed(64),
+					);
+					egui::ComboBox::from_id_salt("speed_unit")
+						.selected_text(limit.unit.label())
+						.width(70.0)
+						.show_ui(ui, |ui| {
+							for unit in [SpeedUnit::KiB, SpeedUnit::KB] {
+								ui.selectable_value(&mut limit.unit, unit, unit.label());
+							}
+						});
+					ui.weak(if limit.value == 0 {
+						"unlimited"
+					} else {
+						"for all downloads together"
+					});
+				});
 				ui.end_row();
 
 				ui.label("ADB binary");

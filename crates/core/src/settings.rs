@@ -10,6 +10,46 @@ pub const MAX_CONCURRENT_DOWNLOADS: u8 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+pub enum SpeedUnit {
+	/// 1024 bytes.
+	#[default]
+	KiB,
+	/// 1000 bytes.
+	KB,
+}
+
+impl SpeedUnit {
+	pub fn bytes(self) -> u64 {
+		match self {
+			Self::KiB => 1024,
+			Self::KB => 1000,
+		}
+	}
+
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::KiB => "KiB/s",
+			Self::KB => "KB/s",
+		}
+	}
+}
+
+/// Total download speed limit; a value of 0 means unlimited.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SpeedLimit {
+	pub value: u32,
+	pub unit: SpeedUnit,
+}
+
+impl SpeedLimit {
+	pub fn bytes_per_sec(self) -> u64 {
+		u64::from(self.value) * self.unit.bytes()
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Theme {
 	#[default]
 	System,
@@ -22,7 +62,10 @@ pub enum Theme {
 pub struct Settings {
 	pub downloads_dir: PathBuf,
 	pub max_concurrent_downloads: u8,
+	pub download_limit: SpeedLimit,
 	pub theme: Theme,
+	/// Keep unpacked releases after installing them, for reinstalling later.
+	pub keep_downloads: bool,
 	/// `None` means `adb` from `PATH`.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub adb_path: Option<PathBuf>,
@@ -100,7 +143,9 @@ impl Default for Settings {
 		Self {
 			downloads_dir: PathBuf::new(),
 			max_concurrent_downloads: 2,
+			download_limit: SpeedLimit::default(),
 			theme: Theme::default(),
+			keep_downloads: false,
 			adb_path: None,
 			rclone_path: None,
 			active_mirror: None,
@@ -144,7 +189,12 @@ mod tests {
 		let settings = Settings {
 			downloads_dir: dir.path().join("dl"),
 			max_concurrent_downloads: 4,
+			download_limit: SpeedLimit {
+				value: 2500,
+				unit: SpeedUnit::KB,
+			},
 			theme: Theme::Dark,
+			keep_downloads: true,
 			adb_path: Some("/opt/platform-tools/adb".into()),
 			rclone_path: None,
 			active_mirror: Some("m1".into()),
@@ -217,5 +267,26 @@ mod tests {
 			Settings::load(&paths),
 			Err(Error::SettingsParse { .. })
 		));
+	}
+
+	#[test]
+	fn speed_limit_units() {
+		let kib = SpeedLimit {
+			value: 2,
+			unit: SpeedUnit::KiB,
+		};
+		let kb = SpeedLimit {
+			value: 2,
+			unit: SpeedUnit::KB,
+		};
+		assert_eq!(kib.bytes_per_sec(), 2048);
+		assert_eq!(kb.bytes_per_sec(), 2000);
+		assert_eq!(SpeedLimit::default().bytes_per_sec(), 0);
+		let text = toml::to_string(&Settings {
+			download_limit: kb,
+			..Settings::default()
+		})
+		.unwrap();
+		assert!(text.contains("unit = \"kb\""), "{text}");
 	}
 }

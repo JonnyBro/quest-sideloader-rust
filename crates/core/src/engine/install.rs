@@ -1,122 +1,23 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex as StdMutex};
-use std::time::{Duration, Instant};
 
 use tokio::sync::{Mutex, oneshot};
 
+use super::task::{TaskEntry, TaskKind, TaskSnapshot, TaskState, TempDir, Tracker};
 use super::{Event, EventSink};
 use crate::adb::Device;
-use crate::sideload::run::{self, Update};
+use crate::sideload::run;
 use crate::sideload::script::{self, ScriptAnalysis};
 use crate::sideload::{InstallPlan, SideloadError, Source, extract_zip, io_err};
 
-pub type TaskId = u64;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum TaskState {
-	Running,
-	AwaitingReview,
-	Done,
-	Failed(String),
-	Cancelled,
-}
-
-impl TaskState {
-	pub fn is_finished(&self) -> bool {
-		matches!(self, Self::Done | Self::Failed(_) | Self::Cancelled)
-	}
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct TaskSnapshot {
-	pub id: TaskId,
-	pub serial: String,
-	pub title: String,
-	pub stage: String,
-	/// 0.0..=1.0 while bytes are moving.
-	pub progress: Option<f32>,
-	pub state: TaskState,
-	pub warnings: Vec<String>,
-}
+pub use super::task::TaskId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReviewDecision {
 	RunAll,
 	SafeOnly,
 	Cancel,
-}
-
-const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
-
-/// Shared task state; every change is sent to the UI as a snapshot.
-struct Tracker {
-	snapshot: StdMutex<(TaskSnapshot, Instant)>,
-	sink: EventSink,
-}
-
-impl Tracker {
-	fn update(&self, change: impl FnOnce(&mut TaskSnapshot), force: bool) {
-		let mut guard = self.snapshot.lock().expect("tracker lock poisoned");
-		let (snapshot, last_sent) = &mut *guard;
-		change(snapshot);
-		if force || last_sent.elapsed() >= PROGRESS_INTERVAL {
-			*last_sent = Instant::now();
-			self.sink.emit(Event::TaskUpdated(snapshot.clone()));
-		}
-	}
-
-	fn stage(&self, stage: impl Into<String>) {
-		let stage = stage.into();
-		self.update(
-			|s| {
-				s.stage = stage;
-				s.progress = None;
-			},
-			true,
-		);
-	}
-
-	fn report(&self, update: Update) {
-		match update {
-			Update::Stage(stage) => self.stage(stage),
-			Update::Bytes { done, total } => {
-				let fraction = if total == 0 {
-					1.0
-				} else {
-					(done as f64 / total as f64).min(1.0) as f32
-				};
-				self.update(|s| s.progress = Some(fraction), done >= total);
-			}
-			Update::Warning(warning) => {
-				tracing::warn!("{warning}");
-				self.update(|s| s.warnings.push(warning), true);
-			}
-		}
-	}
-}
-
-/// Removes the extraction folder even when the task is aborted mid-way.
-struct TempDir(PathBuf);
-
-impl Drop for TempDir {
-	fn drop(&mut self) {
-		let path = std::mem::take(&mut self.0);
-		std::thread::spawn(move || {
-			if let Err(e) = std::fs::remove_dir_all(&path)
-				&& e.kind() != std::io::ErrorKind::NotFound
-			{
-				tracing::warn!("could not remove {}: {e}", path.display());
-			}
-		});
-	}
-}
-
-pub(super) struct TaskEntry {
-	pub abort: tokio::task::AbortHandle,
-	pub review: Option<oneshot::Sender<ReviewDecision>>,
-	pub serial: String,
-	pub title: String,
 }
 
 /// One installation at a time per headset: parallel package installs and
@@ -131,77 +32,78 @@ impl DeviceLocks {
 	}
 }
 
-pub(super) struct NewTask {
+/// Everything an installation needs besides the files themselves.
+#[derive(Clone)]
+pub(super) struct InstallContext {
 	pub id: TaskId,
 	pub device: Device,
-	pub source: PathBuf,
+	/// Scratch space for unpacking ZIPs.
 	pub work_dir: PathBuf,
 	pub locks: DeviceLocks,
 	pub sink: EventSink,
+	/// Name the task after the APK's label; downloads keep the catalog name.
+	pub title_from_files: bool,
 }
 
-pub(super) fn spawn(task: NewTask) -> TaskEntry {
-	let (review_tx, review_rx) = oneshot::channel();
-	let serial = task.device.serial().to_owned();
-	let title = task.source.file_name().map_or_else(
-		|| task.source.display().to_string(),
+fn file_title(path: &Path) -> String {
+	path.file_name().map_or_else(
+		|| path.display().to_string(),
 		|n| n.to_string_lossy().into_owned(),
+	)
+}
+
+/// Installs an APK, folder or ZIP the user picked.
+pub(super) fn spawn(ctx: InstallContext, source: PathBuf) -> TaskEntry {
+	let (review_tx, review_rx) = oneshot::channel();
+	let tracker = Tracker::new(
+		TaskSnapshot {
+			id: ctx.id,
+			kind: TaskKind::Install,
+			serial: Some(ctx.device.serial().to_owned()),
+			title: file_title(&source),
+			stage: "Queued".into(),
+			progress: None,
+			detail: None,
+			state: TaskState::Running,
+			warnings: Vec::new(),
+			output: None,
+		},
+		ctx.sink.clone(),
 	);
-	let tracker = Arc::new(Tracker {
-		snapshot: StdMutex::new((
-			TaskSnapshot {
-				id: task.id,
-				serial: serial.clone(),
-				title: title.clone(),
-				stage: "Queued".into(),
-				progress: None,
-				state: TaskState::Running,
-				warnings: Vec::new(),
-			},
-			Instant::now(),
-		)),
-		sink: task.sink.clone(),
-	});
-	tracker.update(|_| {}, true);
-
+	let task_tracker = tracker.clone();
 	let handle = tokio::spawn(async move {
-		let device = task.device.clone();
-		let result = run_task(task, &tracker, review_rx).await;
-		let state = match result {
-			Ok(()) => TaskState::Done,
-			Err(SideloadError::Cancelled) => TaskState::Cancelled,
-			Err(e) => {
-				tracing::error!("install failed: {e}");
-				TaskState::Failed(e.to_string())
-			}
-		};
-		let done = state == TaskState::Done;
-		tracker.update(
-			|s| {
-				s.state = state;
-				s.progress = None;
-				s.stage = if done {
-					"Installed".into()
-				} else {
-					s.stage.clone()
-				};
-			},
-			true,
-		);
-		if done {
-			super::devices::spawn_fetch_info(device, tracker.sink.clone());
-		}
+		let result = install_from(&ctx, &source, &task_tracker, review_rx).await;
+		finish_install(&ctx, &task_tracker, result);
 	});
-
 	TaskEntry {
-		abort: handle.abort_handle(),
+		abort: Some(handle.abort_handle()),
 		review: Some(review_tx),
-		serial,
-		title,
+		tracker,
+		release: None,
 	}
 }
 
-async fn blocking<T: Send + 'static>(
+pub(super) fn finish_install(
+	ctx: &InstallContext,
+	tracker: &Tracker,
+	result: Result<(), SideloadError>,
+) {
+	match result {
+		Ok(()) => {
+			tracker.finish(TaskState::Done, Some("Installed".into()), None);
+			super::devices::spawn_fetch_info(ctx.device.clone(), ctx.sink.clone());
+		}
+		Err(SideloadError::Cancelled) => {
+			tracker.finish(TaskState::Cancelled, Some("Cancelled".into()), None)
+		}
+		Err(e) => {
+			tracing::error!("install failed: {e}");
+			tracker.finish(TaskState::Failed(e.to_string()), None, None);
+		}
+	}
+}
+
+pub(super) async fn blocking<T: Send + 'static>(
 	f: impl FnOnce() -> Result<T, SideloadError> + Send + 'static,
 ) -> Result<T, SideloadError> {
 	tokio::task::spawn_blocking(f)
@@ -212,14 +114,17 @@ async fn blocking<T: Send + 'static>(
 		})?
 }
 
-async fn run_task(
-	task: NewTask,
+/// Plans and runs an installation from `source`, asking for an install.txt
+/// review through `review` when the script needs one.
+pub(super) async fn install_from(
+	ctx: &InstallContext,
+	source: &Path,
 	tracker: &Tracker,
 	review: oneshot::Receiver<ReviewDecision>,
 ) -> Result<(), SideloadError> {
 	tracker.stage("Reading files");
 	let source = {
-		let path = task.source.clone();
+		let path = source.to_path_buf();
 		blocking(move || Source::classify(&path)).await?
 	};
 
@@ -229,7 +134,7 @@ async fn run_task(
 		Source::Folder(path) => blocking(move || InstallPlan::from_folder(&path)).await?,
 		Source::Zip(path) => {
 			tracker.stage("Extracting");
-			let dest = task.work_dir.join(format!("task-{}", task.id));
+			let dest = ctx.work_dir.join(format!("task-{}", ctx.id));
 			_temp = Some(TempDir(dest.clone()));
 			blocking(move || {
 				extract_zip(&path, &dest)?;
@@ -238,8 +143,10 @@ async fn run_task(
 			.await?
 		}
 	};
-	let title = plan.title.clone();
-	tracker.update(|s| s.title = title, true);
+	if ctx.title_from_files {
+		let title = plan.title.clone();
+		tracker.update(|s| s.title = title, true);
+	}
 
 	let actions = match &plan.script {
 		None => None,
@@ -253,8 +160,8 @@ async fn run_task(
 					},
 					true,
 				);
-				task.sink.emit(Event::ScriptReview {
-					task: task.id,
+				ctx.sink.emit(Event::ScriptReview {
+					task: ctx.id,
 					title: plan.title.clone(),
 					analysis: analysis.clone(),
 				});
@@ -272,7 +179,7 @@ async fn run_task(
 		}
 	};
 
-	let lock = task.locks.get(task.device.serial());
+	let lock = ctx.locks.get(ctx.device.serial());
 	let _guard = match lock.try_lock() {
 		Ok(guard) => guard,
 		Err(_) => {
@@ -283,8 +190,8 @@ async fn run_task(
 
 	let report = |u| tracker.report(u);
 	match actions {
-		Some(actions) => run::run_script(&task.device, &actions, &report).await,
-		None => run::run_default(&task.device, &plan, &report).await,
+		Some(actions) => run::run_script(&ctx.device, &actions, &report).await,
+		None => run::run_default(&ctx.device, &plan, &report).await,
 	}
 }
 
@@ -296,7 +203,7 @@ async fn read_script(path: &Path, plan: &InstallPlan) -> Result<ScriptAnalysis, 
 
 #[cfg(test)]
 mod tests {
-	use std::time::Duration;
+	use std::time::{Duration, Instant};
 
 	use super::*;
 	use crate::adb::testing::FakeAdb;

@@ -9,8 +9,8 @@ pub mod settings;
 pub mod sideload;
 
 pub use engine::{
-	AdbStatus, CatalogStatus, Command, Engine, Event, ReviewDecision, TaskId, TaskSnapshot,
-	TaskState,
+	AdbStatus, CatalogStatus, Command, Engine, Event, ReviewDecision, TaskId, TaskKind,
+	TaskSnapshot, TaskState,
 };
 pub use error::{Error, Result};
 pub use format::format_bytes;

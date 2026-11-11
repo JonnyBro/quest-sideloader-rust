@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-use super::mirror::{Mirror, MirrorKind};
+use super::mirror::{Mirror, MirrorKind, release_hash};
 use super::{CatalogError, io_err};
 
 /// Receives `(bytes so far, total if known)`.
@@ -18,6 +18,8 @@ const RCLONE_ROOT: &str = "Quest Games";
 pub struct Fetcher {
 	http: reqwest::Client,
 	rclone: PathBuf,
+	throttle: std::sync::Arc<super::throttle::Throttle>,
+	rclone_parallel: std::sync::Arc<std::sync::atomic::AtomicU8>,
 }
 
 impl Fetcher {
@@ -31,7 +33,18 @@ impl Fetcher {
 		Ok(Self {
 			http,
 			rclone: rclone_path.unwrap_or_else(|| PathBuf::from("rclone")),
+			throttle: std::sync::Arc::new(super::throttle::Throttle::new()),
+			rclone_parallel: std::sync::Arc::new(std::sync::atomic::AtomicU8::new(1)),
 		})
+	}
+
+	/// Caps the combined speed of all downloads; `0` is unlimited. Clones of
+	/// this fetcher share the limit. `parallel` is how many downloads may run
+	/// at once, which rclone needs to split the limit.
+	pub fn set_bandwidth_limit(&self, bytes_per_sec: u64, parallel: u8) {
+		self.throttle.set(bytes_per_sec);
+		self.rclone_parallel
+			.store(parallel.max(1), std::sync::atomic::Ordering::Relaxed);
 	}
 
 	/// Downloads `remote_path` (relative to the mirror root) to `dest`. An
@@ -117,6 +130,7 @@ impl Fetcher {
 			.await
 			.map_err(|e| CatalogError::Http(e.to_string()))?
 		{
+			self.throttle.take(chunk.len() as u64).await;
 			file.write_all(&chunk).await.map_err(io_err(&part))?;
 			done += chunk.len() as u64;
 			progress(done, total);
@@ -141,18 +155,11 @@ impl Fetcher {
 		dest: &Path,
 		progress: FetchProgress<'_>,
 	) -> Result<(), CatalogError> {
-		let mut command = tokio::process::Command::new(&self.rclone);
-		// Through the environment rather than `--header`, so keys don't show up
-		// in other users' process lists.
-		if !headers.is_empty() {
-			command.env("RCLONE_HEADER", rclone_header_env(headers));
-		}
+		let mut command = self.rclone_command(config_file, headers);
 		command
 			.arg("copyto")
 			.arg(source)
 			.arg(dest)
-			.arg("--config")
-			.arg(config_file)
 			.args([
 				"--use-json-log",
 				"--stats",
@@ -161,22 +168,10 @@ impl Fetcher {
 				"NOTICE",
 			])
 			.args(["--retries", "3", "--low-level-retries", "10"])
-			.stdin(Stdio::null())
+			.args(self.rclone_bwlimit())
 			.stdout(Stdio::null())
-			.stderr(Stdio::piped())
-			.kill_on_drop(true);
-		#[cfg(windows)]
-		{
-			const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-			command.creation_flags(CREATE_NO_WINDOW);
-		}
-		let mut child = command.spawn().map_err(|e| {
-			if e.kind() == std::io::ErrorKind::NotFound {
-				CatalogError::RcloneNotFound(self.rclone.clone())
-			} else {
-				CatalogError::Rclone(e.to_string())
-			}
-		})?;
+			.stderr(Stdio::piped());
+		let mut child = command.spawn().map_err(|e| self.spawn_error(e))?;
 
 		let stderr = child.stderr.take().expect("stderr is piped");
 		let mut lines = BufReader::new(stderr).lines();
@@ -204,6 +199,200 @@ impl Fetcher {
 			))
 		}
 	}
+}
+
+impl Fetcher {
+	fn rclone_command(
+		&self,
+		config_file: &Path,
+		headers: &[super::mirror::Header],
+	) -> tokio::process::Command {
+		let mut command = tokio::process::Command::new(&self.rclone);
+		// Through the environment rather than `--header`, so keys don't show up
+		// in other users' process lists.
+		if !headers.is_empty() {
+			command.env("RCLONE_HEADER", rclone_header_env(headers));
+		}
+		command
+			.arg("--config")
+			.arg(config_file)
+			// Keep request bursts small; mirrors ask clients to be gentle.
+			.args(["--tpslimit", "2", "--tpslimit-burst", "4"])
+			.stdin(Stdio::null())
+			.kill_on_drop(true);
+		#[cfg(windows)]
+		{
+			const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+			command.creation_flags(CREATE_NO_WINDOW);
+		}
+		command
+	}
+
+	/// rclone can't share a limit between processes, so each one gets the full
+	/// limit divided by the most downloads that may run at once. The `B`
+	/// suffix keeps it in plain bytes, whatever unit the user picked.
+	fn rclone_bwlimit(&self) -> Vec<String> {
+		let parallel = u64::from(
+			self.rclone_parallel
+				.load(std::sync::atomic::Ordering::Relaxed)
+				.max(1),
+		);
+		match self.throttle.limit() {
+			0 => Vec::new(),
+			bytes => vec![
+				"--bwlimit".into(),
+				format!("{}B", (bytes / parallel).max(1)),
+			],
+		}
+	}
+
+	fn spawn_error(&self, e: std::io::Error) -> CatalogError {
+		if e.kind() == std::io::ErrorKind::NotFound {
+			CatalogError::RcloneNotFound(self.rclone.clone())
+		} else {
+			CatalogError::Rclone(e.to_string())
+		}
+	}
+
+	/// Files in a release's folder on the mirror.
+	pub async fn list_release(
+		&self,
+		mirror: &Mirror,
+		release_name: &str,
+	) -> Result<Vec<RemoteFile>, CatalogError> {
+		match &mirror.kind {
+			MirrorKind::Http { base_uri } => {
+				let url = join_url(base_uri, &format!("{}/", release_hash(release_name)))?;
+				let mut request = self.http.get(url.clone());
+				for header in &mirror.headers {
+					request = request.header(&header.name, &header.value);
+				}
+				let response = request
+					.send()
+					.await
+					.map_err(|e| CatalogError::Http(e.to_string()))?;
+				let status = response.status();
+				if !status.is_success() {
+					return Err(CatalogError::Status {
+						status: status.as_u16(),
+						url: redact(&url),
+					});
+				}
+				let html = response
+					.text()
+					.await
+					.map_err(|e| CatalogError::Http(e.to_string()))?;
+				Ok(parse_index(&url, &html))
+			}
+			MirrorKind::Rclone {
+				config_file,
+				remote,
+			} => {
+				let mut command = self.rclone_command(config_file, &mirror.headers);
+				command
+					.arg("lsjson")
+					.arg("--files-only")
+					.arg(format!("{remote}:/{RCLONE_ROOT}/{release_name}/"))
+					.stdout(Stdio::piped())
+					.stderr(Stdio::piped());
+				let output = command.output().await.map_err(|e| self.spawn_error(e))?;
+				if !output.status.success() {
+					let stderr = String::from_utf8_lossy(&output.stderr);
+					return Err(CatalogError::Rclone(
+						stderr
+							.lines()
+							.last()
+							.unwrap_or("lsjson failed")
+							.trim()
+							.to_owned(),
+					));
+				}
+				parse_lsjson(&output.stdout)
+			}
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteFile {
+	pub name: String,
+	pub size: Option<u64>,
+}
+
+/// Path of a release file relative to the mirror root, as `download_file` wants it.
+pub fn release_file_path(mirror: &Mirror, release_name: &str, file: &str) -> String {
+	match mirror.kind {
+		MirrorKind::Http { .. } => format!(
+			"{}/{}",
+			release_hash(release_name),
+			percent_encoding::utf8_percent_encode(file, PATH_SEGMENT)
+		),
+		MirrorKind::Rclone { .. } => format!("{release_name}/{file}"),
+	}
+}
+
+const PATH_SEGMENT: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
+	.remove(b'-')
+	.remove(b'.')
+	.remove(b'_')
+	.remove(b'~');
+
+/// Direct child files linked from an autoindex page (nginx, Apache, rclone serve).
+fn parse_index(listing: &reqwest::Url, html: &str) -> Vec<RemoteFile> {
+	let mut files = Vec::new();
+	let mut rest = html;
+	while let Some(pos) = rest.find("href=") {
+		rest = &rest[pos + 5..];
+		let Some(quote) = rest.chars().next().filter(|c| *c == '"' || *c == '\'') else {
+			continue;
+		};
+		let Some(end) = rest[1..].find(quote) else {
+			break;
+		};
+		let href = rest[1..=end].replace("&amp;", "&");
+		rest = &rest[end + 1..];
+
+		let Ok(url) = listing.join(&href) else {
+			continue;
+		};
+		if url.origin() != listing.origin() || url.query().is_some() {
+			continue;
+		}
+		let Some(name) = url.path().strip_prefix(listing.path()) else {
+			continue;
+		};
+		if name.is_empty() || name.contains('/') {
+			continue;
+		}
+		let name = percent_encoding::percent_decode_str(name)
+			.decode_utf8_lossy()
+			.into_owned();
+		if !files.iter().any(|f: &RemoteFile| f.name == name) {
+			files.push(RemoteFile { name, size: None });
+		}
+	}
+	files
+}
+
+fn parse_lsjson(stdout: &[u8]) -> Result<Vec<RemoteFile>, CatalogError> {
+	#[derive(serde::Deserialize)]
+	#[serde(rename_all = "PascalCase")]
+	struct Entry {
+		name: String,
+		size: i64,
+		#[serde(default)]
+		is_dir: bool,
+	}
+	let entries: Vec<Entry> = serde_json::from_slice(stdout)
+		.map_err(|e| CatalogError::Rclone(format!("unexpected lsjson output: {e}")))?;
+	Ok(entries
+		.into_iter()
+		.filter(|e| !e.is_dir)
+		.map(|e| RemoteFile {
+			name: e.name,
+			size: u64::try_from(e.size).ok(),
+		})
+		.collect())
 }
 
 /// rclone reads multi-value flags from the environment as one CSV line.
@@ -555,5 +744,158 @@ mod tests {
 			.await
 			.unwrap();
 		assert_eq!(std::fs::read(&dest).unwrap(), b"meta archive bytes");
+	}
+
+	#[test]
+	fn autoindex_listing() {
+		let listing = reqwest::Url::parse("https://m.example/files/0bee/").unwrap();
+		let html = r#"<html><body><h1>Index of /files/0bee/</h1>
+			<a href="../">../</a>
+			<a href="0bee.7z.001">0bee.7z.001</a> 01-Jan-2024 1073741824
+			<a href='0bee.7z.002'>0bee.7z.002</a>
+			<a href="/files/0bee/release%20notes.txt">release notes.txt</a>
+			<a href="sub/">sub/</a>
+			<a href="?C=M;O=A">Last modified</a>
+			<a href="https://evil.example/x.7z.003">x</a>
+			<a href="0bee.7z.001">duplicate</a>
+			</body></html>"#;
+		let names: Vec<_> = parse_index(&listing, html)
+			.into_iter()
+			.map(|f| f.name)
+			.collect();
+		assert_eq!(names, ["0bee.7z.001", "0bee.7z.002", "release notes.txt"]);
+	}
+
+	#[test]
+	fn lsjson_output() {
+		let json = br#"[{"Path":"a.7z.001","Name":"a.7z.001","Size":1048576,"IsDir":false},
+			{"Path":"d","Name":"d","Size":-1,"IsDir":true}]"#;
+		assert_eq!(
+			parse_lsjson(json).unwrap(),
+			[RemoteFile {
+				name: "a.7z.001".into(),
+				size: Some(1_048_576)
+			}]
+		);
+		assert!(parse_lsjson(b"oops").is_err());
+	}
+
+	#[test]
+	fn release_paths() {
+		let http = http_mirror("https://m/".into());
+		assert_eq!(
+			release_file_path(&http, "abc", "x y.7z.001"),
+			"0bee89b07a248e27c83fc3d5951213c1/x%20y.7z.001"
+		);
+		let rclone = Mirror {
+			kind: MirrorKind::Rclone {
+				config_file: "/c".into(),
+				remote: "r".into(),
+			},
+			..http
+		};
+		assert_eq!(
+			release_file_path(&rclone, "Game v1+2", "a.7z.001"),
+			"Game v1+2/a.7z.001"
+		);
+	}
+
+	#[tokio::test]
+	async fn lists_http_release_folder() {
+		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+		let addr = listener.local_addr().unwrap();
+		let (tx, rx) = tokio::sync::oneshot::channel();
+		tokio::spawn(async move {
+			let (mut s, _) = listener.accept().await.unwrap();
+			let mut buf = vec![0u8; 4096];
+			let n = s.read(&mut buf).await.unwrap();
+			let _ = tx.send(String::from_utf8_lossy(&buf[..n]).into_owned());
+			let body = r#"<a href="0bee.7z.001">x</a><a href="0bee.7z.002">y</a>"#;
+			let head = format!(
+				"HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+				body.len()
+			);
+			s.write_all(head.as_bytes()).await.unwrap();
+			s.write_all(body.as_bytes()).await.unwrap();
+		});
+		let files = Fetcher::new(None)
+			.unwrap()
+			.list_release(&http_mirror(format!("http://{addr}/files")), "abc")
+			.await
+			.unwrap();
+		assert_eq!(files.len(), 2);
+		let request = rx.await.unwrap();
+		assert!(
+			request.starts_with("GET /files/0bee89b07a248e27c83fc3d5951213c1/ "),
+			"{request}"
+		);
+		assert!(request.to_ascii_lowercase().contains("x-test: yes"));
+	}
+
+	#[tokio::test]
+	async fn lists_rclone_release_folder() {
+		if std::process::Command::new("rclone")
+			.arg("version")
+			.output()
+			.is_err()
+		{
+			eprintln!("rclone not installed, skipping");
+			return;
+		}
+		let dir = tempfile::tempdir().unwrap();
+		let release = dir.path().join("server/Quest Games/Game v1+2");
+		std::fs::create_dir_all(release.join("nested")).unwrap();
+		std::fs::write(release.join("h.7z.001"), b"12345").unwrap();
+		std::fs::write(release.join("h.7z.002"), b"67").unwrap();
+		let config = dir.path().join("rclone.conf");
+		std::fs::write(
+			&config,
+			format!(
+				"[vrp]\ntype = alias\nremote = {}\n",
+				dir.path().join("server").display()
+			),
+		)
+		.unwrap();
+		let mirror = Mirror {
+			kind: MirrorKind::Rclone {
+				config_file: config,
+				remote: "vrp".into(),
+			},
+			headers: Vec::new(),
+			..http_mirror("https://unused/".into())
+		};
+		let mut files = Fetcher::new(None)
+			.unwrap()
+			.list_release(&mirror, "Game v1+2")
+			.await
+			.unwrap();
+		files.sort_by(|a, b| a.name.cmp(&b.name));
+		assert_eq!(
+			files,
+			[
+				RemoteFile {
+					name: "h.7z.001".into(),
+					size: Some(5)
+				},
+				RemoteFile {
+					name: "h.7z.002".into(),
+					size: Some(2)
+				},
+			]
+		);
+	}
+
+	#[test]
+	fn rclone_limit_is_split_in_bytes() {
+		let fetcher = Fetcher::new(None).unwrap();
+		assert!(fetcher.rclone_bwlimit().is_empty());
+		fetcher.set_bandwidth_limit(3_000_000, 3);
+		assert_eq!(fetcher.rclone_bwlimit(), ["--bwlimit", "1000000B"]);
+		fetcher.clone().set_bandwidth_limit(1000, 0);
+		assert_eq!(
+			fetcher.rclone_bwlimit(),
+			["--bwlimit", "1000B"],
+			"clones share the limit"
+		);
 	}
 }

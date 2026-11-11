@@ -26,7 +26,12 @@ pub(super) struct Library {
 	root: PathBuf,
 	sink: EventSink,
 	job: Option<JoinHandle<()>>,
+	limit: (u64, u8),
+	last_manual_sync: Option<Instant>,
 }
+
+/// Manual syncs closer together than this are refused, to spare the mirror.
+const SYNC_COOLDOWN: Duration = Duration::from_secs(10 * 60);
 
 impl Library {
 	pub fn new(rclone_path: Option<PathBuf>, root: PathBuf, sink: EventSink) -> Self {
@@ -36,12 +41,26 @@ impl Library {
 			root,
 			sink,
 			job: None,
+			limit: (0, 1),
+			last_manual_sync: None,
 		}
+	}
+
+	pub fn fetcher(&self) -> &Fetcher {
+		&self.fetcher
+	}
+
+	pub fn set_bandwidth_limit(&mut self, bytes_per_sec: u64, parallel: u8) {
+		self.limit = (bytes_per_sec, parallel);
+		self.fetcher.set_bandwidth_limit(bytes_per_sec, parallel);
 	}
 
 	pub fn set_rclone_path(&mut self, path: Option<PathBuf>) {
 		match Fetcher::new(path) {
-			Ok(fetcher) => self.fetcher = fetcher,
+			Ok(fetcher) => {
+				fetcher.set_bandwidth_limit(self.limit.0, self.limit.1);
+				self.fetcher = fetcher;
+			}
 			Err(e) => self.sink.emit(Event::Error(e.to_string())),
 		}
 	}
@@ -103,6 +122,16 @@ impl Library {
 		if self.busy() {
 			return;
 		}
+		if let Some(last) = self.last_manual_sync
+			&& last.elapsed() < SYNC_COOLDOWN
+		{
+			let wait = (SYNC_COOLDOWN - last.elapsed()).as_secs().div_ceil(60);
+			self.sink.emit(Event::Notice(format!(
+				"The library was synced moments ago; try again in {wait} min"
+			)));
+			return;
+		}
+		self.last_manual_sync = Some(Instant::now());
 		let Some(mirror) = mirror else {
 			self.sink.emit(Event::Error(
 				"No mirror configured. Add one in Settings.".into(),

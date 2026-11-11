@@ -193,10 +193,14 @@ impl eframe::App for SideloaderApp {
 		egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
 
 		let mut commands = Vec::new();
-		if !self.tasks_view.is_empty() {
-			egui::Panel::bottom("tasks")
+		if self.tab != Tab::Downloads {
+			let mut open = false;
+			egui::Panel::bottom("tasks_summary")
 				.resizable(false)
-				.show(ui, |ui| self.tasks_view.show(ui, &mut commands));
+				.show(ui, |ui| open = self.tasks_view.summary(ui));
+			if open {
+				self.tab = Tab::Downloads;
+			}
 		}
 		egui::CentralPanel::default().show(ui, |ui| match self.tab {
 			Tab::Devices => self.devices_view.show(ui, &mut commands),
@@ -210,7 +214,12 @@ impl eframe::App for SideloaderApp {
 				);
 			}
 			Tab::Downloads => {
-				ui.centered_and_justified(|ui| ui.weak("Not implemented yet"));
+				let target = self
+					.devices_view
+					.install_target()
+					.map(|d| (d.serial.clone(), d.display_name()));
+				let target = target.as_ref().map(|(s, n)| (s.as_str(), n.as_str()));
+				self.tasks_view.show(ui, target, &mut commands);
 			}
 			Tab::Settings => {
 				let default_downloads = self.paths.default_downloads_dir();

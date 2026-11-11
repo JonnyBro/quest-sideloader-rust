@@ -197,11 +197,14 @@ impl LibraryView {
 			&& let Some(game) = catalog.games.get(index)
 		{
 			let status = installed.map(|apps| apps.status(game));
+			let target = installed.map(|apps| (apps.serial, apps.device_name.as_str()));
 			let mut close = false;
 			egui::Panel::right("game_details")
 				.resizable(true)
 				.default_size(320.0)
-				.show(ui, |ui| close = details(ui, &catalog, game, status));
+				.show(ui, |ui| {
+					close = details(ui, &catalog, game, status, target, commands)
+				});
 			if close {
 				self.selected = None;
 			}
@@ -401,7 +404,14 @@ fn thumbnail(ui: &mut egui::Ui, catalog: &Catalog, game: &Game, size: egui::Vec2
 	}
 }
 
-fn details(ui: &mut egui::Ui, catalog: &Catalog, game: &Game, status: Option<GameStatus>) -> bool {
+fn details(
+	ui: &mut egui::Ui,
+	catalog: &Catalog,
+	game: &Game,
+	status: Option<GameStatus>,
+	target: Option<(&str, &str)>,
+	commands: &mut Vec<Command>,
+) -> bool {
 	let mut close = false;
 	ui.horizontal(|ui| {
 		ui.heading(&game.name);
@@ -409,6 +419,33 @@ fn details(ui: &mut egui::Ui, catalog: &Catalog, game: &Game, status: Option<Gam
 			close = ui.small_button("✕").clicked();
 		});
 	});
+	ui.horizontal_wrapped(|ui| {
+		let label = match status {
+			Some(GameStatus::UpdateAvailable) => "Download and update",
+			Some(GameStatus::Installed) => "Download and reinstall",
+			_ => "Download and install",
+		};
+		let install = ui.add_enabled(target.is_some(), egui::Button::new(label));
+		let install = match target {
+			Some((_, name)) => install.on_hover_text(format!("Installs on {name}")),
+			None => install.on_disabled_hover_text("Connect a headset to install"),
+		};
+		if install.clicked()
+			&& let Some((serial, _)) = target
+		{
+			commands.push(Command::Download {
+				game: game.clone(),
+				serial: Some(serial.to_owned()),
+			});
+		}
+		if ui.button("Download only").clicked() {
+			commands.push(Command::Download {
+				game: game.clone(),
+				serial: None,
+			});
+		}
+	});
+	ui.add_space(4.0);
 	egui::ScrollArea::vertical().show(ui, |ui| {
 		let width = ui.available_width();
 		thumbnail(ui, catalog, game, egui::vec2(width, width * 0.56));

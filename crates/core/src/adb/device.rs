@@ -116,6 +116,16 @@ impl Device {
 		))
 	}
 
+	/// Free bytes on the filesystem holding `path`.
+	pub async fn free_space(&self, path: &str) -> Result<u64, AdbError> {
+		let out = self
+			.shell_ok(&format!("df -k {}", shell_words::quote(path)))
+			.await?;
+		parse_df(&out)
+			.map(|s| s.free_bytes)
+			.ok_or_else(|| AdbError::Protocol(format!("unexpected df output: {}", out.trim())))
+	}
+
 	pub async fn is_dir(&self, remote: &str) -> Result<bool, AdbError> {
 		let out = self
 			.shell(&format!("test -d {}", shell_words::quote(remote)))

@@ -5,10 +5,11 @@ mod fetch;
 mod list;
 mod mirror;
 mod store;
+mod throttle;
 
 use std::path::PathBuf;
 
-pub use fetch::{FetchProgress, Fetcher};
+pub use fetch::{FetchProgress, Fetcher, RemoteFile, release_file_path};
 pub use list::{BadHeader, Game, parse_game_list};
 pub use mirror::{Header, Mirror, MirrorKind, rclone_remotes, release_hash};
 pub use store::{Catalog, SyncStage, sync};
