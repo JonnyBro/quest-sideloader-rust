@@ -192,7 +192,7 @@ impl LibraryView {
 		let Some(catalog) = self.catalog.clone() else {
 			ui.centered_and_justified(|ui| {
 				ui.weak(match (mirror_name, &self.status) {
-					(None, _) => "No mirror yet. Add one in Settings → Mirrors.",
+					(None, _) => "No mirror yet. Add one in Settings -> Mirrors.",
 					(Some(_), CatalogStatus::Syncing { .. }) => "Downloading the game list…",
 					(Some(_), CatalogStatus::Failed(_)) => {
 						"Could not load the game list. Check the mirror settings and press Sync."
@@ -512,7 +512,7 @@ fn size_text(game: &Game) -> String {
 		.unwrap_or_default()
 }
 
-/// `2024-11-02 10:15 UTC` → `2024-11-02`.
+/// `2024-11-02 10:15 UTC` -> `2024-11-02`.
 fn short_date(value: &str) -> &str {
 	value.split_whitespace().next().unwrap_or(value)
 }

@@ -15,7 +15,7 @@ Desktop sideloader for Meta Quest headsets, written in Rust with egui.
 
 ## Library mirrors
 
-The library is optional. Add a mirror in Settings → Mirrors:
+The library is optional. Add a mirror in Settings -> Mirrors:
 
 - a VRP-style server config, `{"baseUri": "https://.../", "password": "<base64>"}`;
 - an rclone config with a remote that has a `Quest Games` folder (needs `rclone`).
