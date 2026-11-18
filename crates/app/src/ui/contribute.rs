@@ -1,3 +1,4 @@
+use rust_i18n::t;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -60,7 +61,7 @@ impl ContributeView {
 		installed: &InstalledApps<'_>,
 		ignored: &HashSet<String>,
 	) {
-		if catalog.upload_config().is_none() {
+		if catalog.upload_target().is_none() {
 			return;
 		}
 		let requested = self.requested.clone();
@@ -73,11 +74,8 @@ impl ContributeView {
 			return;
 		}
 		ui.horizontal(|ui| {
-			ui.label(format!(
-				"{count} app(s) on {} are missing from the library or newer than its version.",
-				installed.device_name
-			));
-			if ui.button("Review and share…").clicked() {
+			ui.label(t!("con.banner", n = count, device = installed.device_name));
+			if ui.button(t!("con.review")).clicked() {
 				self.open = true;
 			}
 		});
@@ -101,24 +99,18 @@ impl ContributeView {
 		let mut send = None;
 		let mut ignore = None;
 
-		egui::Window::new("Share app versions with the library")
+		egui::Window::new(t!("con.title"))
+			.id(egui::Id::unique("contribute_window"))
 			.open(&mut open)
 			.collapsible(false)
 			.default_width(560.0)
 			.show(ctx, |ui| {
-				ui.label(format!(
-					"These apps on {device_name} are not in the library yet, or are newer than its copy. \
-					 Uploading one helps everyone using this mirror."
-				));
+				ui.label(t!("con.intro", device = device_name));
 				ui.add_space(4.0);
-				ui.weak(
-					"An upload sends the app's APK and OBB files, the headset model, and an anonymous \
-					 headset id (a SHA-256 hash of its serial number) to the mirror. Nothing is uploaded \
-					 until you press Upload, and the headset itself is not changed.",
-				);
+				ui.weak(t!("con.privacy"));
 				ui.separator();
 				if candidates.is_empty() {
-					ui.weak("Nothing left to share.");
+					ui.weak(t!("con.nothing"));
 					return;
 				}
 				egui::ScrollArea::vertical()
@@ -135,25 +127,24 @@ impl ContributeView {
 										ui.small(&candidate.package);
 									});
 									ui.label(match &candidate.reason {
-										Reason::NotInLibrary => format!(
-											"v{} · not in the library",
-											candidate.version_code
+										Reason::NotInLibrary => t!(
+											"con.not_in_library",
+											version = candidate.version_code
 										),
-										Reason::Newer { library_version } => {
-											format!(
-												"v{} · library has v{library_version}",
-												candidate.version_code
-											)
-										}
+										Reason::Newer { library_version } => t!(
+											"con.newer",
+											version = candidate.version_code,
+											library = library_version
+										),
 									});
 									ui.horizontal(|ui| {
 										if self.requested.contains(&candidate.package) {
-											ui.weak("sent to the queue");
+											ui.weak(t!("con.queued"));
 										} else {
-											if ui.button("Upload").clicked() {
+											if ui.button(t!("con.upload")).clicked() {
 												send = Some(candidate.clone());
 											}
-											if ui.small_button("Don't ask again").clicked() {
+											if ui.small_button(t!("con.ignore")).clicked() {
 												ignore = Some(candidate.package.clone());
 											}
 										}

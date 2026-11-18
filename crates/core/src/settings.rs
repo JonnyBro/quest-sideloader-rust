@@ -57,6 +57,16 @@ pub enum Theme {
 	Light,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Language {
+	/// The system language when it is Russian, English otherwise.
+	#[default]
+	System,
+	English,
+	Russian,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -64,8 +74,11 @@ pub struct Settings {
 	pub max_concurrent_downloads: u8,
 	pub download_limit: SpeedLimit,
 	pub theme: Theme,
+	pub language: Language,
 	/// Keep unpacked releases after installing them, for reinstalling later.
 	pub keep_downloads: bool,
+	/// Desktop notifications when tasks end while the window isn't focused.
+	pub notifications: bool,
 	/// `None` means `adb` from `PATH`.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub adb_path: Option<PathBuf>,
@@ -74,7 +87,10 @@ pub struct Settings {
 	pub rclone_path: Option<PathBuf>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub active_mirror: Option<String>,
-	#[serde(skip_serializing_if = "Vec::is_empty")]
+	#[serde(
+		skip_serializing_if = "Vec::is_empty",
+		deserialize_with = "skip_unknown_mirrors"
+	)]
 	pub mirrors: Vec<Mirror>,
 	/// Packages the user doesn't want to be asked to upload again.
 	#[serde(skip_serializing_if = "Vec::is_empty")]
@@ -102,6 +118,15 @@ impl Settings {
 		};
 		let mut settings: Self =
 			toml::from_str(&text).map_err(|source| Error::SettingsParse { path, source })?;
+		if let Some(root) = paths.portable_root() {
+			settings.map_paths(|p| {
+				if p.is_relative() && !p.as_os_str().is_empty() {
+					root.join(p)
+				} else {
+					p.to_path_buf()
+				}
+			});
+		}
 		if settings.downloads_dir.as_os_str().is_empty() {
 			settings.downloads_dir = paths.default_downloads_dir();
 		}
@@ -110,7 +135,14 @@ impl Settings {
 	}
 
 	pub fn save(&self, paths: &AppPaths) -> Result<()> {
-		let text = toml::to_string_pretty(self)?;
+		let text = match paths.portable_root() {
+			Some(root) => {
+				let mut relative = self.clone();
+				relative.map_paths(|p| p.strip_prefix(root).unwrap_or(p).to_path_buf());
+				toml::to_string_pretty(&relative)?
+			}
+			None => toml::to_string_pretty(self)?,
+		};
 		write_atomically(&paths.settings_file(), text.as_bytes())
 	}
 
@@ -135,6 +167,22 @@ impl Settings {
 		}
 	}
 
+	/// Every file path the settings hold.
+	fn map_paths(&mut self, f: impl Fn(&Path) -> PathBuf) {
+		self.downloads_dir = f(&self.downloads_dir);
+		for path in [&mut self.adb_path, &mut self.rclone_path]
+			.into_iter()
+			.flatten()
+		{
+			*path = f(path);
+		}
+		for mirror in &mut self.mirrors {
+			if let crate::catalog::MirrorKind::Rclone { config_file, .. } = &mut mirror.kind {
+				*config_file = f(config_file);
+			}
+		}
+	}
+
 	pub fn active_mirror(&self) -> Option<&Mirror> {
 		let id = self.active_mirror.as_ref()?;
 		self.mirrors.iter().find(|m| &m.id == id)
@@ -148,7 +196,9 @@ impl Default for Settings {
 			max_concurrent_downloads: 2,
 			download_limit: SpeedLimit::default(),
 			theme: Theme::default(),
+			language: Language::default(),
 			keep_downloads: false,
+			notifications: true,
 			adb_path: None,
 			rclone_path: None,
 			active_mirror: None,
@@ -158,18 +208,42 @@ impl Default for Settings {
 	}
 }
 
+/// Mirrors of a kind this version doesn't know (or that are broken) are
+/// dropped with a warning instead of making the whole file unreadable.
+fn skip_unknown_mirrors<'de, D>(deserializer: D) -> std::result::Result<Vec<Mirror>, D::Error>
+where
+	D: serde::Deserializer<'de>,
+{
+	let raw = Vec::<toml::Value>::deserialize(deserializer)?;
+	Ok(raw
+		.into_iter()
+		.filter_map(|value| match value.try_into::<Mirror>() {
+			Ok(mirror) => Some(mirror),
+			Err(e) => {
+				tracing::warn!("skipping a mirror in the settings: {e}");
+				None
+			}
+		})
+		.collect())
+}
+
 fn write_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
 	if let Some(parent) = path.parent() {
 		std::fs::create_dir_all(parent).at(parent)?;
 	}
 	let tmp = path.with_extension("toml.tmp");
+	// Mirror passwords and API keys live here.
+	write_private(&tmp, bytes).at(&tmp)?;
+	std::fs::rename(&tmp, path).at(path)
+}
+
+/// Writes a file only this user can read (on Unix), for credentials.
+pub fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 	let mut options = std::fs::OpenOptions::new();
 	options.write(true).create(true).truncate(true);
-	// Mirror passwords and API keys live here.
 	#[cfg(unix)]
 	std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-	std::io::Write::write_all(&mut options.open(&tmp).at(&tmp)?, bytes).at(&tmp)?;
-	std::fs::rename(&tmp, path).at(path)
+	std::io::Write::write_all(&mut options.open(path)?, bytes)
 }
 
 #[cfg(test)]
@@ -187,6 +261,50 @@ mod tests {
 	}
 
 	#[test]
+	fn portable_paths_follow_the_folder() {
+		let dir = tempfile::tempdir().unwrap();
+		let old = dir.path().join("E/app/userdata");
+		let paths = AppPaths::portable(&old);
+		let mut settings = Settings::defaults_for(&paths);
+		settings.adb_path = Some(paths.platform_tools_dir().join("adb"));
+		settings.rclone_path = Some("/usr/bin/rclone".into());
+		settings.save(&paths).unwrap();
+
+		let text = std::fs::read_to_string(paths.settings_file()).unwrap();
+		assert!(!text.contains(&*old.to_string_lossy()), "{text}");
+
+		let new = dir.path().join("F/app/userdata");
+		std::fs::create_dir_all(new.parent().unwrap()).unwrap();
+		std::fs::rename(&old, &new).unwrap();
+		let moved = AppPaths::portable(&new);
+		let loaded = Settings::load(&moved).unwrap();
+		assert_eq!(loaded.downloads_dir, moved.default_downloads_dir());
+		assert_eq!(
+			loaded.adb_path,
+			Some(moved.platform_tools_dir().join("adb"))
+		);
+		assert_eq!(loaded.rclone_path, Some("/usr/bin/rclone".into()));
+	}
+
+	#[test]
+	fn unknown_mirror_kinds_are_skipped() {
+		let dir = tempfile::tempdir().unwrap();
+		let paths = AppPaths::under(dir.path());
+		std::fs::create_dir_all(paths.settings_file().parent().unwrap()).unwrap();
+		std::fs::write(
+			paths.settings_file(),
+			"active_mirror = \"gone\"\n\n\
+			 [[mirrors]]\nid = \"gone\"\nname = \"Old\"\ntype = \"something-else\"\npassword = \"\"\n\n\
+			 [[mirrors]]\nid = \"m1\"\nname = \"Main\"\ntype = \"http\"\nbase_uri = \"https://e.org/\"\npassword = \"aGk=\"\n",
+		)
+		.unwrap();
+		let settings = Settings::load(&paths).unwrap();
+		assert_eq!(settings.mirrors.len(), 1);
+		assert_eq!(settings.mirrors[0].id, "m1");
+		assert_eq!(settings.active_mirror.as_deref(), Some("m1"));
+	}
+
+	#[test]
 	fn roundtrip() {
 		let dir = tempfile::tempdir().unwrap();
 		let paths = AppPaths::under(dir.path());
@@ -198,7 +316,9 @@ mod tests {
 				unit: SpeedUnit::KB,
 			},
 			theme: Theme::Dark,
+			language: Language::Russian,
 			keep_downloads: true,
+			notifications: false,
 			adb_path: Some("/opt/platform-tools/adb".into()),
 			rclone_path: None,
 			active_mirror: Some("m1".into()),

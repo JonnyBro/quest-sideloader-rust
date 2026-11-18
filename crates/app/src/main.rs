@@ -1,21 +1,23 @@
 // Release builds on Windows would otherwise open a console next to the window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+rust_i18n::i18n!("locales", fallback = "en");
+
 mod app;
+mod logbuf;
+mod notify;
 mod ui;
 
 use quest_sideloader_core::{AppPaths, Settings};
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 fn main() -> eframe::Result {
-	let paths = match AppPaths::from_platform().and_then(|p| p.ensure_exist().map(|()| p)) {
+	let paths = match AppPaths::detect().and_then(|p| p.ensure_exist().map(|()| p)) {
 		Ok(paths) => paths,
-		Err(e) => {
-			eprintln!("fatal: {e}");
-			std::process::exit(1);
-		}
+		Err(e) => fatal(&e.to_string()),
 	};
-	let _log_guard = init_logging(&paths);
+	let log_buffer = logbuf::LogBuffer::default();
+	let _log_guard = init_logging(&paths, log_buffer.clone());
 
 	let (settings, load_error) = match Settings::load(&paths) {
 		Ok(settings) => (settings, None),
@@ -27,7 +29,11 @@ fn main() -> eframe::Result {
 
 	let options = eframe::NativeOptions {
 		viewport: egui::ViewportBuilder::default()
-			.with_title("Quest Sideloader")
+			.with_title(if paths.portable_root().is_some() {
+				"Quest Sideloader (portable)"
+			} else {
+				"Quest Sideloader"
+			})
 			.with_inner_size([1100.0, 720.0])
 			.with_min_inner_size([800.0, 520.0]),
 		..Default::default()
@@ -37,16 +43,35 @@ fn main() -> eframe::Result {
 		"quest-sideloader",
 		options,
 		Box::new(move |cc| {
-			let app = app::SideloaderApp::new(cc, paths, settings, load_error)?;
+			let app = app::SideloaderApp::new(cc, paths, settings, load_error, log_buffer)?;
 			Ok(Box::new(app))
 		}),
 	)
 }
 
-fn init_logging(paths: &AppPaths) -> Option<tracing_appender::non_blocking::WorkerGuard> {
-	let filter = EnvFilter::try_from_default_env()
-		.unwrap_or_else(|_| EnvFilter::new("info,wgpu_hal=warn,wgpu_core=warn,egui_wgpu=warn"));
+/// Release builds on Windows have no console, so the error also goes to a dialog.
+fn fatal(message: &str) -> ! {
+	eprintln!("fatal: {message}");
+	rfd::MessageDialog::new()
+		.set_level(rfd::MessageLevel::Error)
+		.set_title("Quest Sideloader")
+		.set_description(message)
+		.show();
+	std::process::exit(1);
+}
+
+fn init_logging(
+	paths: &AppPaths,
+	buffer: logbuf::LogBuffer,
+) -> Option<tracing_appender::non_blocking::WorkerGuard> {
+	let default = if cfg!(debug_assertions) {
+		"info,quest_sideloader=debug,quest_sideloader_core=debug,wgpu_hal=warn,wgpu_core=warn,egui_wgpu=warn"
+	} else {
+		"info,wgpu_hal=warn,wgpu_core=warn,egui_wgpu=warn"
+	};
+	let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default));
 	let stderr = fmt::layer().with_writer(std::io::stderr);
+	let in_app = fmt::layer().with_ansi(false).with_writer(buffer);
 
 	match tracing_appender::rolling::Builder::new()
 		.rotation(tracing_appender::rolling::Rotation::DAILY)
@@ -61,6 +86,7 @@ fn init_logging(paths: &AppPaths) -> Option<tracing_appender::non_blocking::Work
 			tracing_subscriber::registry()
 				.with(filter)
 				.with(stderr)
+				.with(in_app)
 				.with(file)
 				.init();
 			Some(guard)
@@ -69,6 +95,7 @@ fn init_logging(paths: &AppPaths) -> Option<tracing_appender::non_blocking::Work
 			tracing_subscriber::registry()
 				.with(filter)
 				.with(stderr)
+				.with(in_app)
 				.init();
 			tracing::warn!("file logging disabled: {e}");
 			None

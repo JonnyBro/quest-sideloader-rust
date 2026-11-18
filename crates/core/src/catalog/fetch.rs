@@ -1,5 +1,6 @@
 //! Downloading files from a mirror, over HTTP or through rclone.
 
+use rust_i18n::t;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
@@ -67,12 +68,10 @@ impl Fetcher {
 				self.http_download(url, &mirror.headers, dest, progress)
 					.await
 			}
-			MirrorKind::Rclone {
-				config_file,
-				remote,
-			} => {
-				let source = format!("{remote}:/{RCLONE_ROOT}/{remote_path}");
-				self.rclone_copyto(config_file, &mirror.headers, &source, dest, progress)
+			_ => {
+				let (access, base) = rclone_location(mirror)?;
+				let source = format!("{base}/{remote_path}");
+				self.rclone_copyto(&access, &mirror.headers, &source, dest, progress)
 					.await
 			}
 		}
@@ -95,11 +94,19 @@ impl Fetcher {
 		if resume_from > 0 {
 			request = request.header(reqwest::header::RANGE, format!("bytes={resume_from}-"));
 		}
-		let mut response = request
-			.send()
-			.await
-			.map_err(|e| CatalogError::Http(e.to_string()))?;
+		tracing::debug!(
+			url = %redact(&url),
+			headers = %header_names(headers),
+			resume_from,
+			dest = %dest.display(),
+			"GET (download)"
+		);
+		let mut response = request.send().await.map_err(|e| {
+			tracing::debug!(url = %redact(&url), error = %e, "request failed");
+			CatalogError::Http(e.to_string())
+		})?;
 		let status = response.status();
+		tracing::debug!(url = %redact(&url), status = status.as_u16(), length = ?response.content_length(), "response");
 		if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE && resume_from > 0 {
 			// The partial file is already complete (or stale); start over.
 			tokio::fs::remove_file(&part).await.map_err(io_err(&part))?;
@@ -140,22 +147,22 @@ impl Fetcher {
 		if let Some(total) = total
 			&& done != total
 		{
-			return Err(CatalogError::Http(format!(
-				"download ended early ({done} of {total} bytes)"
-			)));
+			return Err(CatalogError::Http(
+				t!("cat.ended_early", done = done, total = total).into_owned(),
+			));
 		}
 		tokio::fs::rename(&part, dest).await.map_err(io_err(dest))
 	}
 
 	async fn rclone_copyto(
 		&self,
-		config_file: &Path,
+		access: &RcloneAccess<'_>,
 		headers: &[super::mirror::Header],
 		source: &str,
 		dest: &Path,
 		progress: FetchProgress<'_>,
 	) -> Result<(), CatalogError> {
-		let mut command = self.rclone_command(config_file, headers);
+		let mut command = self.rclone_command(access, headers);
 		command
 			.arg("copyto")
 			.arg(source)
@@ -165,19 +172,22 @@ impl Fetcher {
 		self.run_rclone(command, progress).await
 	}
 
-	/// Uploads one file into the root of `remote` defined in `config_file`.
+	/// Uploads one file into `dir` (empty for the root) of `remote`, sending
+	/// `headers` along.
 	pub async fn rclone_upload(
 		&self,
-		config_file: &Path,
+		access: &RcloneAccess<'_>,
 		remote: &str,
+		dir: &str,
+		headers: &[super::mirror::Header],
 		file: &Path,
 		progress: FetchProgress<'_>,
 	) -> Result<(), CatalogError> {
-		let mut command = self.rclone_command(config_file, &[]);
+		let mut command = self.rclone_command(access, headers);
 		command
 			.arg("copy")
 			.arg(file)
-			.arg(format!("{remote}:"))
+			.arg(format!("{remote}:{}", dir.trim_matches('/')))
 			.args(["--checkers", "1", "--retries", "2", "--inplace"]);
 		self.run_rclone(command, progress).await
 	}
@@ -198,7 +208,13 @@ impl Fetcher {
 			])
 			.stdout(Stdio::null())
 			.stderr(Stdio::piped());
-		let mut child = command.spawn().map_err(|e| self.spawn_error(e))?;
+		if cfg!(debug_assertions) {
+			command.arg("-v");
+		}
+		tracing::debug!(command = %describe_command(&command), "running rclone");
+		let mut child = command
+			.spawn()
+			.map_err(|e| Self::spawn_error(&command, e))?;
 
 		let stderr = child.stderr.take().expect("stderr is piped");
 		let mut lines = BufReader::new(stderr).lines();
@@ -210,28 +226,32 @@ impl Fetcher {
 		{
 			match parse_rclone_log(&line) {
 				Some(RcloneLog::Stats { bytes, total }) => progress(bytes, total),
-				Some(RcloneLog::Error(message)) => last_error = Some(message),
-				None => {}
+				Some(RcloneLog::Error(message)) => {
+					tracing::debug!(%message, "rclone error");
+					last_error = Some(message);
+				}
+				None => tracing::debug!(line = %rclone_log_text(&line), "rclone"),
 			}
 		}
 		let status = child
 			.wait()
 			.await
 			.map_err(|e| CatalogError::Rclone(e.to_string()))?;
+		tracing::debug!(%status, "rclone finished");
 		if status.success() {
 			Ok(())
 		} else {
-			Err(CatalogError::Rclone(
-				last_error.unwrap_or_else(|| format!("rclone exited with {status}")),
-			))
+			Err(CatalogError::Rclone(last_error.unwrap_or_else(|| {
+				t!("cat.rclone_exit", status = status).into_owned()
+			})))
 		}
 	}
 }
 
 impl Fetcher {
-	fn rclone_command(
+	pub(crate) fn rclone_command(
 		&self,
-		config_file: &Path,
+		access: &RcloneAccess<'_>,
 		headers: &[super::mirror::Header],
 	) -> tokio::process::Command {
 		let mut command = tokio::process::Command::new(&self.rclone);
@@ -242,7 +262,9 @@ impl Fetcher {
 		}
 		command
 			.arg("--config")
-			.arg(config_file)
+			.arg(access.config_file)
+			// Never stop to ask for a config password on a terminal.
+			.arg("--ask-password=false")
 			// Keep request bursts small; mirrors ask clients to be gentle.
 			.args(["--tpslimit", "2", "--tpslimit-burst", "4"])
 			.stdin(Stdio::null())
@@ -273,9 +295,9 @@ impl Fetcher {
 		}
 	}
 
-	fn spawn_error(&self, e: std::io::Error) -> CatalogError {
+	fn spawn_error(command: &tokio::process::Command, e: std::io::Error) -> CatalogError {
 		if e.kind() == std::io::ErrorKind::NotFound {
-			CatalogError::RcloneNotFound(self.rclone.clone())
+			CatalogError::RcloneNotFound(PathBuf::from(command.as_std().get_program()))
 		} else {
 			CatalogError::Rclone(e.to_string())
 		}
@@ -311,18 +333,19 @@ impl Fetcher {
 					.map_err(|e| CatalogError::Http(e.to_string()))?;
 				Ok(parse_index(&url, &html))
 			}
-			MirrorKind::Rclone {
-				config_file,
-				remote,
-			} => {
-				let mut command = self.rclone_command(config_file, &mirror.headers);
+			_ => {
+				let (access, base) = rclone_location(mirror)?;
+				let mut command = self.rclone_command(&access, &mirror.headers);
 				command
 					.arg("lsjson")
 					.arg("--files-only")
-					.arg(format!("{remote}:/{RCLONE_ROOT}/{release_name}/"))
+					.arg(format!("{base}/{release_name}/"))
 					.stdout(Stdio::piped())
 					.stderr(Stdio::piped());
-				let output = command.output().await.map_err(|e| self.spawn_error(e))?;
+				let output = command
+					.output()
+					.await
+					.map_err(|e| Self::spawn_error(&command, e))?;
 				if !output.status.success() {
 					let stderr = String::from_utf8_lossy(&output.stderr);
 					return Err(CatalogError::Rclone(
@@ -354,7 +377,28 @@ pub fn release_file_path(mirror: &Mirror, release_name: &str, file: &str) -> Str
 			release_hash(release_name),
 			percent_encoding::utf8_percent_encode(file, PATH_SEGMENT)
 		),
-		MirrorKind::Rclone { .. } => format!("{release_name}/{file}"),
+		_ => format!("{release_name}/{file}"),
+	}
+}
+
+/// How to run rclone for one mirror.
+#[derive(Debug, Clone, Copy)]
+pub struct RcloneAccess<'a> {
+	pub config_file: &'a Path,
+}
+
+/// rclone access and the `remote:folder` prefix of an rclone-backed mirror.
+fn rclone_location(mirror: &Mirror) -> Result<(RcloneAccess<'_>, String), CatalogError> {
+	match &mirror.kind {
+		// VRP mirrors have always been addressed from the remote's root.
+		MirrorKind::Rclone {
+			config_file,
+			remote,
+		} => Ok((
+			RcloneAccess { config_file },
+			format!("{remote}:/{RCLONE_ROOT}"),
+		)),
+		MirrorKind::Http { .. } => Err(CatalogError::Config(t!("cat.sync_first").into_owned())),
 	}
 }
 
@@ -401,23 +445,38 @@ fn parse_index(listing: &reqwest::Url, html: &str) -> Vec<RemoteFile> {
 	files
 }
 
+/// Some rclone builds leave fields out or spell them differently, so every
+/// field is optional and the path falls back to the name.
 fn parse_lsjson(stdout: &[u8]) -> Result<Vec<RemoteFile>, CatalogError> {
 	#[derive(serde::Deserialize)]
-	#[serde(rename_all = "PascalCase")]
 	struct Entry {
-		name: String,
-		size: i64,
-		#[serde(default)]
+		/// Relative to the listed folder, so it includes subfolders when recursive.
+		#[serde(default, alias = "path")]
+		#[serde(rename = "Path")]
+		path: Option<String>,
+		#[serde(default, alias = "name")]
+		#[serde(rename = "Name")]
+		name: Option<String>,
+		#[serde(default, alias = "size")]
+		#[serde(rename = "Size")]
+		size: Option<i64>,
+		#[serde(default, alias = "isDir", alias = "is_dir")]
+		#[serde(rename = "IsDir")]
 		is_dir: bool,
 	}
-	let entries: Vec<Entry> = serde_json::from_slice(stdout)
-		.map_err(|e| CatalogError::Rclone(format!("unexpected lsjson output: {e}")))?;
+	let entries: Vec<Entry> = serde_json::from_slice(stdout).map_err(|e| {
+		let start = String::from_utf8_lossy(&stdout[..stdout.len().min(400)]).into_owned();
+		tracing::debug!(output = %start, "unreadable lsjson output");
+		CatalogError::Rclone(format!("unexpected lsjson output: {e}"))
+	})?;
 	Ok(entries
 		.into_iter()
 		.filter(|e| !e.is_dir)
-		.map(|e| RemoteFile {
-			name: e.name,
-			size: u64::try_from(e.size).ok(),
+		.filter_map(|e| {
+			Some(RemoteFile {
+				name: e.path.or(e.name)?,
+				size: e.size.and_then(|s| u64::try_from(s).ok()),
+			})
 		})
 		.collect())
 }
@@ -452,7 +511,16 @@ fn join_url(base: &str, path: &str) -> Result<reqwest::Url, CatalogError> {
 	};
 	reqwest::Url::parse(&base)
 		.and_then(|b| b.join(path))
-		.map_err(|e| CatalogError::Config(format!("invalid mirror URL: {e}")))
+		.map_err(|e| CatalogError::Config(t!("cat.bad_mirror_url", error = e).into_owned()))
+}
+
+/// Header names only; values are often keys.
+pub(crate) fn header_names(headers: &[super::mirror::Header]) -> String {
+	headers
+		.iter()
+		.map(|h| h.name.as_str())
+		.collect::<Vec<_>>()
+		.join(", ")
 }
 
 /// Mirror URLs can carry credentials; keep them out of error messages.
@@ -468,6 +536,47 @@ fn redact(url: &reqwest::Url) -> String {
 enum RcloneLog {
 	Stats { bytes: u64, total: Option<u64> },
 	Error(String),
+}
+
+/// The level and message of a JSON log line, or the line as it is.
+fn rclone_log_text(line: &str) -> String {
+	let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+		return line.trim().to_owned();
+	};
+	let level = value.get("level").and_then(|v| v.as_str()).unwrap_or("?");
+	let msg = value
+		.get("msg")
+		.and_then(|v| v.as_str())
+		.unwrap_or_default()
+		.trim();
+	let object = value.get("object").and_then(|v| v.as_str());
+	match object {
+		Some(object) => format!("{level}: {object}: {msg}"),
+		None => format!("{level}: {msg}"),
+	}
+}
+
+/// Program and arguments for the log. Header values travel in the
+/// environment and are listed by name only.
+fn describe_command(command: &tokio::process::Command) -> String {
+	let std = command.as_std();
+	let mut text = std.get_program().to_string_lossy().into_owned();
+	for arg in std.get_args() {
+		text.push(' ');
+		let arg = arg.to_string_lossy();
+		if arg.contains(' ') {
+			text.push_str(&format!("{arg:?}"));
+		} else {
+			text.push_str(&arg);
+		}
+	}
+	if std
+		.get_envs()
+		.any(|(k, v)| k == "RCLONE_HEADER" && v.is_some())
+	{
+		text.push_str(" [with RCLONE_HEADER]");
+	}
+	text
 }
 
 fn parse_rclone_log(line: &str) -> Option<RcloneLog> {
@@ -953,12 +1062,41 @@ mod tests {
 		std::fs::write(&file, b"zip bytes").unwrap();
 		Fetcher::new(None)
 			.unwrap()
-			.rclone_upload(&config, "RSL-gameuploads", &file, &|_, _| {})
+			.rclone_upload(
+				&RcloneAccess {
+					config_file: &config,
+				},
+				"RSL-gameuploads",
+				"",
+				&[],
+				&file,
+				&|_, _| {},
+			)
 			.await
 			.unwrap();
 		assert_eq!(
 			std::fs::read(inbox.join("Game v1 com.x.y 1 Quest 3S.zip")).unwrap(),
 			b"zip bytes"
+		);
+	}
+
+	#[test]
+	fn lsjson_without_path() {
+		let json = br#"[{"Name":"a.7z.001","Size":5,"IsDir":false,"ModTime":"x"},
+			{"Name":"sub","IsDir":true},
+			{"path":"c/d.obb","size":7}]"#;
+		assert_eq!(
+			parse_lsjson(json).unwrap(),
+			[
+				RemoteFile {
+					name: "a.7z.001".into(),
+					size: Some(5)
+				},
+				RemoteFile {
+					name: "c/d.obb".into(),
+					size: Some(7)
+				},
+			]
 		);
 	}
 }

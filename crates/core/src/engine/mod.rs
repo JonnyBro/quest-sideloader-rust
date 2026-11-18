@@ -4,10 +4,12 @@
 mod contribute;
 mod devices;
 mod downloads;
+mod headset;
 mod install;
 mod library;
 mod task;
 
+use rust_i18n::t;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -25,11 +27,59 @@ use crate::sideload::script::ScriptAnalysis;
 
 pub use install::ReviewDecision;
 pub use library::CatalogStatus;
-pub use task::{TaskId, TaskKind, TaskSnapshot, TaskState};
+pub use task::{SignatureConflict, TaskId, TaskKind, TaskSnapshot, TaskState};
 
 #[derive(Debug)]
 pub enum Command {
 	SaveSettings(Settings),
+	/// Read the details and per-app storage the headset tab shows.
+	RefreshHeadset(String),
+	LaunchApp {
+		serial: String,
+		package: String,
+	},
+	StopApp {
+		serial: String,
+		package: String,
+	},
+	Uninstall {
+		serial: String,
+		app: AppInfo,
+		back_up: bool,
+		remove_obb: bool,
+	},
+	BackUpSaves {
+		serial: String,
+		app: AppInfo,
+	},
+	RestoreBackup {
+		serial: String,
+		backup: crate::saves::Backup,
+	},
+	DeleteBackup(crate::saves::Backup),
+	ListBackups,
+	/// Answered with [`Event::Downloads`].
+	ListDownloads,
+	/// Delete a release folder from the downloads folder by name.
+	DeleteDownload(String),
+	/// After a signature mismatch: back up saves, uninstall, install again, restore.
+	ReinstallKeepingSaves {
+		serial: String,
+		app: AppInfo,
+		source: PathBuf,
+	},
+	Reboot {
+		serial: String,
+		mode: crate::adb::RebootMode,
+	},
+	/// Turn on wireless ADB and connect to the headset over Wi-Fi.
+	EnableWireless(String),
+	Screenshot(String),
+	SetTweak {
+		serial: String,
+		tweak: crate::adb::Tweak,
+		value: String,
+	},
 	RefreshDevice(String),
 	/// `host` or `host:port`.
 	ConnectWireless(String),
@@ -66,13 +116,40 @@ pub enum Command {
 	},
 	/// Download the active mirror's metadata again.
 	SyncCatalog,
+	/// Download adb from Google into the data folder and use it. Only send
+	/// this after the user agreed to the Android SDK terms.
+	InstallAdb,
+	/// Download rclone from rclone.org into the data folder and use it.
+	InstallRclone,
+}
+
+/// An app on the headset, as the UI knows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppInfo {
+	pub package: String,
+	pub name: String,
+	pub version_code: Option<u64>,
+}
+
+impl From<AppInfo> for headset::AppRef {
+	fn from(app: AppInfo) -> Self {
+		Self {
+			package: app.package,
+			name: app.name,
+			version_code: app.version_code,
+		}
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AdbStatus {
 	Starting,
-	Running { version: u32 },
+	Running {
+		version: u32,
+	},
 	Unavailable(String),
+	/// The adb binary isn't there; it can be installed with [`Command::InstallAdb`].
+	Missing(String),
 }
 
 #[derive(Debug)]
@@ -96,6 +173,24 @@ pub enum Event {
 		title: String,
 		analysis: ScriptAnalysis,
 	},
+	HeadsetDetails {
+		serial: String,
+		details: std::result::Result<
+			(
+				crate::adb::DeviceDetails,
+				HashMap<String, crate::adb::AppUsage>,
+			),
+			String,
+		>,
+	},
+	Backups(Vec<crate::saves::Backup>),
+	/// Something changed the stored backups; ask again with [`Command::ListBackups`].
+	BackupsChanged,
+	/// A sync failed because there is no rclone; it can be installed with
+	/// [`Command::InstallRclone`].
+	RcloneMissing,
+	/// Release folders in the downloads folder.
+	Downloads(Vec<crate::downloaded::DownloadedRelease>),
 	Notice(String),
 	Error(String),
 }
@@ -200,6 +295,8 @@ struct State {
 	library: library::Library,
 	queue: downloads::Queue,
 	upload_lock: Arc<tokio::sync::Mutex<()>>,
+	/// Reports a tool that finished downloading.
+	tool_installed: mpsc::UnboundedSender<Tool>,
 }
 
 impl State {
@@ -237,18 +334,17 @@ impl State {
 
 	fn enqueue_download(&mut self, game: Game, serial: Option<String>) {
 		let Some(mirror) = self.settings.active_mirror().cloned() else {
-			self.sink.emit(Event::Error(
-				"No mirror configured. Add one in Settings.".into(),
-			));
+			self.sink
+				.emit(Event::Error(t!("lib.no_mirror").into_owned()));
 			return;
 		};
 		let unfinished = |t: &&task::TaskEntry| {
 			t.release.is_some() && t.abort.as_ref().is_none_or(|a| !a.is_finished())
 		};
 		if self.tasks.values().filter(unfinished).count() >= MAX_DOWNLOAD_JOBS {
-			self.sink.emit(Event::Notice(format!(
-				"The download queue is full ({MAX_DOWNLOAD_JOBS}); wait for a download to finish"
-			)));
+			self.sink.emit(Event::Notice(
+				t!("eng.queue_full", max = MAX_DOWNLOAD_JOBS).into_owned(),
+			));
 			return;
 		}
 		let active = self
@@ -257,10 +353,9 @@ impl State {
 			.filter(unfinished)
 			.any(|t| t.release.as_deref() == Some(game.release_name.as_str()));
 		if active {
-			self.sink.emit(Event::Notice(format!(
-				"{} is already in the queue",
-				game.name
-			)));
+			self.sink.emit(Event::Notice(
+				t!("eng.already_queued", name = game.name).into_owned(),
+			));
 			return;
 		}
 		let id = self.new_task_id();
@@ -278,10 +373,9 @@ impl State {
 	}
 
 	fn start_contribution(&mut self, serial: String, package: String, name: String) {
-		let Some(upload_config) = self.library.current().and_then(|c| c.upload_config()) else {
-			self.sink.emit(Event::Error(
-				"This mirror doesn't accept uploads (its metadata has no upload config)".into(),
-			));
+		let Some(target) = self.library.current().and_then(|c| c.upload_target()) else {
+			self.sink
+				.emit(Event::Error(t!("eng.no_uploads").into_owned()));
 			return;
 		};
 		let id = self.new_task_id();
@@ -290,7 +384,7 @@ impl State {
 			device: self.adb.device(serial),
 			package,
 			name,
-			upload_config,
+			target,
 			work_dir: self
 				.paths
 				.cache_dir()
@@ -329,9 +423,79 @@ impl State {
 			abort.abort();
 		}
 		if queued || running {
-			task.tracker
-				.finish(TaskState::Cancelled, Some("Cancelled".into()), None);
+			task.tracker.finish(
+				TaskState::Cancelled,
+				Some(t!("task.cancelled").into_owned()),
+				None,
+			);
 		}
+	}
+
+	/// Only the kind of `tool` matters here; its path is filled in once the
+	/// download finishes.
+	fn install_tool(&mut self, tool: Tool) {
+		let id = self.new_task_id();
+		let (kind, title, stage) = match tool {
+			Tool::Adb(_) => (TaskKind::AdbSetup, t!("pt.title"), t!("pt.downloading")),
+			Tool::Rclone(_) => (TaskKind::RcloneSetup, t!("rc.title"), t!("rc.downloading")),
+		};
+		let tracker = task::Tracker::new(
+			TaskSnapshot {
+				id,
+				kind,
+				serial: None,
+				title: title.into_owned(),
+				stage: stage.into_owned(),
+				progress: None,
+				detail: None,
+				state: TaskState::Running,
+				warnings: Vec::new(),
+				output: None,
+				conflict: None,
+			},
+			self.sink.clone(),
+		);
+		let (paths, done, t) = (
+			self.paths.clone(),
+			self.tool_installed.clone(),
+			tracker.clone(),
+		);
+		let handle = tokio::spawn(async move {
+			let progress = |n, total| t.bytes(n, total);
+			let result = match tool {
+				Tool::Adb(_) => {
+					crate::platform_tools::install(&paths.platform_tools_dir(), &progress)
+						.await
+						.map(Tool::Adb)
+				}
+				Tool::Rclone(_) => crate::rclone_tool::install(&paths.rclone_bin_dir(), &progress)
+					.await
+					.map(Tool::Rclone),
+			};
+			match result {
+				Ok(tool) => {
+					let stage = match tool {
+						Tool::Adb(_) => t!("pt.done"),
+						Tool::Rclone(_) => t!("rc.done"),
+					};
+					t.finish(TaskState::Done, Some(stage.into_owned()), None);
+					let _ = done.send(tool);
+				}
+				Err(e) => {
+					tracing::error!("tool install failed: {e}");
+					t.finish(TaskState::Failed(e), None, None);
+				}
+			}
+		});
+		self.tasks.insert(
+			id,
+			task::TaskEntry {
+				abort: Some(handle.abort_handle()),
+				review: None,
+				tracker,
+				release: None,
+			},
+		);
 	}
 
 	fn restart_tracker(&mut self) {
@@ -380,6 +544,30 @@ impl State {
 	}
 }
 
+/// A program the app can download for the user.
+#[derive(Debug)]
+enum Tool {
+	Adb(PathBuf),
+	Rclone(PathBuf),
+}
+
+/// Runs a short headset command and reports it in the status bar.
+fn quick(
+	sink: &EventSink,
+	done: String,
+	fut: impl std::future::Future<Output = std::result::Result<(), crate::adb::AdbError>>
+	+ Send
+	+ 'static,
+) {
+	let sink = sink.clone();
+	tokio::spawn(async move {
+		match fut.await {
+			Ok(()) => sink.emit(Event::Notice(done)),
+			Err(e) => sink.emit(Event::Error(e.to_string())),
+		}
+	});
+}
+
 async fn run(
 	paths: AppPaths,
 	settings: Settings,
@@ -401,6 +589,7 @@ async fn run(
 	);
 	library.activate(settings.active_mirror().cloned());
 	let (slot_tx, mut slot_rx) = mpsc::unbounded_channel();
+	let (tool_tx, mut tool_rx) = mpsc::unbounded_channel::<Tool>();
 	let mut state = State {
 		paths,
 		settings,
@@ -414,6 +603,7 @@ async fn run(
 		library,
 		queue: downloads::Queue::new(slot_tx),
 		upload_lock: Arc::default(),
+		tool_installed: tool_tx,
 	};
 
 	loop {
@@ -427,9 +617,24 @@ async fn run(
 				state.start_downloads();
 				continue;
 			}
+			Some(tool) = tool_rx.recv() => {
+				let mut settings = state.settings.clone();
+				match &tool {
+					Tool::Adb(path) => settings.adb_path = Some(path.clone()),
+					Tool::Rclone(path) => settings.rclone_path = Some(path.clone()),
+				}
+				state.save_settings(settings).await;
+				if matches!(tool, Tool::Rclone(_)) {
+					// Syncs only if the catalog is missing or stale.
+					state.library.activate(state.settings.active_mirror().cloned());
+				}
+				continue;
+			}
 		};
 		match command {
 			Command::SaveSettings(settings) => state.save_settings(settings).await,
+			Command::InstallAdb => state.install_tool(Tool::Adb(PathBuf::new())),
+			Command::InstallRclone => state.install_tool(Tool::Rclone(PathBuf::new())),
 			Command::RefreshDevice(serial) => {
 				devices::spawn_fetch_info(state.adb.device(serial), state.sink.clone());
 			}
@@ -444,6 +649,202 @@ async fn run(
 			Command::CancelTask(task) => state.cancel(task),
 			Command::Download { game, serial } => state.enqueue_download(game, serial),
 			Command::MoveDownload { task, delta } => state.queue.move_by(task, delta),
+			Command::RefreshHeadset(serial) => {
+				let (device, sink) = (state.adb.device(serial.clone()), state.sink.clone());
+				tokio::spawn(async move {
+					let (details, usage) = tokio::join!(device.details(), device.app_usage());
+					let details = match (details, usage) {
+						(Ok(d), Ok(u)) => Ok((d, u)),
+						(Err(e), _) | (_, Err(e)) => Err(e.to_string()),
+					};
+					sink.emit(Event::HeadsetDetails { serial, details });
+				});
+			}
+			Command::LaunchApp { serial, package } => {
+				let device = state.adb.device(serial);
+				quick(
+					&state.sink,
+					t!("eng.started", package = package).into_owned(),
+					async move { device.launch(&package).await },
+				);
+			}
+			Command::StopApp { serial, package } => {
+				let device = state.adb.device(serial);
+				quick(
+					&state.sink,
+					t!("eng.stopped", package = package).into_owned(),
+					async move { device.force_stop(&package).await },
+				);
+			}
+			Command::Uninstall {
+				serial,
+				app,
+				back_up,
+				remove_obb,
+			} => {
+				let id = state.new_task_id();
+				let entry = headset::spawn_uninstall(
+					id,
+					state.adb.device(serial),
+					state.paths.backups_dir(),
+					app.into(),
+					headset::UninstallOptions {
+						back_up,
+						remove_obb,
+					},
+					state.sink.clone(),
+				);
+				state.tasks.insert(id, entry);
+			}
+			Command::BackUpSaves { serial, app } => {
+				let id = state.new_task_id();
+				let entry = headset::spawn_backup(
+					id,
+					state.adb.device(serial),
+					state.paths.backups_dir(),
+					app.into(),
+					state.sink.clone(),
+				);
+				state.tasks.insert(id, entry);
+			}
+			Command::RestoreBackup { serial, backup } => {
+				let id = state.new_task_id();
+				let entry = headset::spawn_restore(
+					id,
+					state.adb.device(serial),
+					backup,
+					state.sink.clone(),
+				);
+				state.tasks.insert(id, entry);
+			}
+			Command::DeleteBackup(backup) => {
+				let sink = state.sink.clone();
+				tokio::task::spawn_blocking(move || match crate::saves::delete(&backup) {
+					Ok(()) => sink.emit(Event::BackupsChanged),
+					Err(e) => sink.emit(Event::Error(e.to_string())),
+				});
+			}
+			Command::ListBackups => {
+				let (root, sink) = (state.paths.backups_dir(), state.sink.clone());
+				tokio::task::spawn_blocking(move || {
+					sink.emit(Event::Backups(crate::saves::list(&root)))
+				});
+			}
+			Command::ListDownloads => {
+				let (root, sink) = (state.settings.downloads_dir.clone(), state.sink.clone());
+				tokio::task::spawn_blocking(move || {
+					sink.emit(Event::Downloads(crate::downloaded::list(&root)))
+				});
+			}
+			Command::DeleteDownload(name) => {
+				let (root, sink) = (state.settings.downloads_dir.clone(), state.sink.clone());
+				tokio::task::spawn_blocking(move || {
+					if let Err(e) = crate::downloaded::delete(&root, &name) {
+						sink.emit(Event::Error(
+							t!("eng.delete_failed", name = name, error = e).into_owned(),
+						));
+					}
+					sink.emit(Event::Downloads(crate::downloaded::list(&root)));
+				});
+			}
+			Command::ReinstallKeepingSaves {
+				serial,
+				app,
+				source,
+			} => {
+				let id = state.new_task_id();
+				let ctx = install::InstallContext {
+					id,
+					device: state.adb.device(serial),
+					work_dir: state.paths.cache_dir().join("sideload"),
+					locks: state.device_locks.clone(),
+					sink: state.sink.clone(),
+					title_from_files: false,
+				};
+				let entry = headset::spawn_reinstall(
+					ctx,
+					state.paths.backups_dir(),
+					app.into(),
+					source,
+					state.sink.clone(),
+				);
+				state.tasks.insert(id, entry);
+			}
+			Command::Reboot { serial, mode } => {
+				let device = state.adb.device(serial);
+				quick(&state.sink, t!("eng.restarting").into_owned(), async move {
+					device.reboot(mode).await
+				});
+			}
+			Command::EnableWireless(serial) => {
+				let (server, sink) = (state.adb.clone(), state.sink.clone());
+				tokio::spawn(async move {
+					let device = server.device(serial);
+					let result = async {
+						let ip = device.wifi_ip().await?.ok_or_else(|| {
+							crate::adb::AdbError::Server(t!("eng.no_wifi").into_owned())
+						})?;
+						device.enable_tcpip(5555).await?;
+						// adbd restarts in TCP mode before it accepts connections.
+						tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+						server.connect_wireless(&format!("{ip}:5555")).await
+					}
+					.await;
+					match result {
+						Ok(message) => sink.emit(Event::Notice(message)),
+						Err(e) => sink.emit(Event::Error(
+							t!("eng.wireless_failed", error = e).into_owned(),
+						)),
+					}
+				});
+			}
+			Command::Screenshot(serial) => {
+				let (device, sink, dir) = (
+					state.adb.device(serial.clone()),
+					state.sink.clone(),
+					state.paths.screenshots_dir(),
+				);
+				tokio::spawn(async move {
+					let result = async {
+						let png = device.screenshot().await.map_err(|e| e.to_string())?;
+						let stamp = std::time::SystemTime::now()
+							.duration_since(std::time::UNIX_EPOCH)
+							.map_or(0, |d| d.as_secs());
+						tokio::fs::create_dir_all(&dir)
+							.await
+							.map_err(|e| e.to_string())?;
+						let path = dir.join(format!("quest-{stamp}.png"));
+						tokio::fs::write(&path, png)
+							.await
+							.map_err(|e| e.to_string())?;
+						Ok::<_, String>(path)
+					}
+					.await;
+					match result {
+						Ok(path) => sink.emit(Event::Notice(
+							t!("eng.screenshot_saved", path = path.display()).into_owned(),
+						)),
+						Err(e) => sink.emit(Event::Error(
+							t!("eng.screenshot_failed", error = e).into_owned(),
+						)),
+					}
+				});
+			}
+			Command::SetTweak {
+				serial,
+				tweak,
+				value,
+			} => {
+				let device = state.adb.device(serial);
+				let done = if value.is_empty() {
+					t!("eng.tweak_reset", property = tweak.property()).into_owned()
+				} else {
+					t!("eng.tweak_set", property = tweak.property(), value = value).into_owned()
+				};
+				quick(&state.sink, done, async move {
+					device.set_tweak(tweak, &value).await
+				});
+			}
 			Command::IgnoreContribution(package) => {
 				let mut settings = state.settings.clone();
 				if !settings.contribute_ignored.contains(&package) {
@@ -514,7 +915,7 @@ mod tests {
 		let unavailable = loop {
 			assert!(Instant::now() < deadline, "no AdbStatus::Unavailable event");
 			if let Some(msg) = engine.poll_events().find_map(|e| match e {
-				Event::AdbStatus(AdbStatus::Unavailable(msg)) => Some(msg),
+				Event::AdbStatus(AdbStatus::Missing(msg)) => Some(msg),
 				_ => None,
 			}) {
 				break msg;

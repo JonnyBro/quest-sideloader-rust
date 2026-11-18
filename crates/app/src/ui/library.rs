@@ -1,3 +1,4 @@
+use rust_i18n::t;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -71,6 +72,7 @@ pub struct LibraryView {
 	rows: Vec<usize>,
 	rows_key: Option<RowsKey>,
 	contribute: super::contribute::ContributeView,
+	names: HashMap<String, String>,
 }
 
 impl LibraryView {
@@ -87,10 +89,25 @@ impl LibraryView {
 			rows: Vec::new(),
 			rows_key: None,
 			contribute: super::contribute::ContributeView::new(),
+			names: HashMap::new(),
 		}
 	}
 
+	/// Game names by package, for showing installed apps by name.
+	pub fn names(&self) -> &HashMap<String, String> {
+		&self.names
+	}
+
 	pub fn on_catalog(&mut self, catalog: Option<Arc<Catalog>>) {
+		self.names = catalog
+			.as_ref()
+			.map(|c| {
+				c.games
+					.iter()
+					.map(|g| (g.package.clone(), g.name.clone()))
+					.collect()
+			})
+			.unwrap_or_default();
 		self.lowercase_names = catalog
 			.as_ref()
 			.map(|c| c.games.iter().map(|g| g.name.to_lowercase()).collect())
@@ -192,12 +209,10 @@ impl LibraryView {
 		let Some(catalog) = self.catalog.clone() else {
 			ui.centered_and_justified(|ui| {
 				ui.weak(match (mirror_name, &self.status) {
-					(None, _) => "No mirror yet. Add one in Settings -> Mirrors.",
-					(Some(_), CatalogStatus::Syncing { .. }) => "Downloading the game list…",
-					(Some(_), CatalogStatus::Failed(_)) => {
-						"Could not load the game list. Check the mirror settings and press Sync."
-					}
-					(Some(_), CatalogStatus::Idle) => "The game list is empty. Press Sync.",
+					(None, _) => t!("lib.no_mirror"),
+					(Some(_), CatalogStatus::Syncing { .. }) => t!("lib.downloading_list"),
+					(Some(_), CatalogStatus::Failed(_)) => t!("lib.load_failed"),
+					(Some(_), CatalogStatus::Idle) => t!("lib.empty"),
 				});
 			});
 			return;
@@ -234,17 +249,17 @@ impl LibraryView {
 		ui.horizontal(|ui| {
 			ui.add(
 				egui::TextEdit::singleline(&mut self.search)
-					.hint_text("Search games or packages")
+					.hint_text(t!("lib.search"))
 					.desired_width(240.0),
 			);
-			ui.selectable_value(&mut self.filter, Filter::All, "All");
+			ui.selectable_value(&mut self.filter, Filter::All, t!("lib.all"));
 			let enabled = installed.is_some();
 			ui.add_enabled_ui(enabled, |ui| {
-				ui.selectable_value(&mut self.filter, Filter::Installed, "Installed");
-				ui.selectable_value(&mut self.filter, Filter::Updates, "Updates");
+				ui.selectable_value(&mut self.filter, Filter::Installed, t!("lib.installed"));
+				ui.selectable_value(&mut self.filter, Filter::Updates, t!("lib.updates"));
 			})
 			.response
-			.on_disabled_hover_text("Connect a headset to compare with its apps");
+			.on_disabled_hover_text(t!("lib.connect_compare"));
 			if !enabled && self.filter != Filter::All {
 				self.filter = Filter::All;
 			}
@@ -252,17 +267,17 @@ impl LibraryView {
 			ui.separator();
 			egui::ComboBox::from_id_salt("library_sort")
 				.selected_text(match self.sort {
-					Sort::Name => "Name",
-					Sort::Updated => "Last updated",
-					Sort::Size => "Size",
-					Sort::Popularity => "Popularity",
+					Sort::Name => t!("lib.sort_name"),
+					Sort::Updated => t!("lib.sort_updated"),
+					Sort::Size => t!("lib.sort_size"),
+					Sort::Popularity => t!("lib.sort_popularity"),
 				})
 				.show_ui(ui, |ui| {
 					for (sort, label, descending) in [
-						(Sort::Name, "Name", false),
-						(Sort::Updated, "Last updated", true),
-						(Sort::Size, "Size", true),
-						(Sort::Popularity, "Popularity", true),
+						(Sort::Name, t!("lib.sort_name"), false),
+						(Sort::Updated, t!("lib.sort_updated"), true),
+						(Sort::Size, t!("lib.sort_size"), true),
+						(Sort::Popularity, t!("lib.sort_popularity"), true),
 					] {
 						if ui.selectable_label(self.sort == sort, label).clicked() {
 							self.sort = sort;
@@ -271,7 +286,7 @@ impl LibraryView {
 					}
 				});
 			let arrow = if self.descending { "⬇" } else { "⬆" };
-			if ui.button(arrow).on_hover_text("Reverse order").clicked() {
+			if ui.button(arrow).on_hover_text(t!("lib.reverse")).clicked() {
 				self.descending = !self.descending;
 			}
 
@@ -279,7 +294,7 @@ impl LibraryView {
 				let syncing = matches!(self.status, CatalogStatus::Syncing { .. });
 				if mirror_name.is_some()
 					&& ui
-						.add_enabled(!syncing, egui::Button::new("Sync"))
+						.add_enabled(!syncing, egui::Button::new(t!("lib.sync")))
 						.clicked()
 				{
 					commands.push(Command::SyncCatalog);
@@ -301,15 +316,15 @@ impl LibraryView {
 						ui.label(stage);
 					}
 					CatalogStatus::Failed(e) => {
-						ui.colored_label(ui.visuals().error_fg_color, "Sync failed")
+						ui.colored_label(ui.visuals().error_fg_color, t!("lib.sync_failed"))
 							.on_hover_text(e);
 					}
 					CatalogStatus::Idle => {
 						if let Some(catalog) = &self.catalog {
-							ui.weak(format!(
-								"{} games · synced {}",
-								catalog.games.len(),
-								ago(catalog.synced_at)
+							ui.weak(t!(
+								"lib.synced",
+								n = catalog.games.len(),
+								ago = ago(catalog.synced_at)
 							));
 						}
 					}
@@ -318,7 +333,7 @@ impl LibraryView {
 					ui.label(name);
 				}
 				if let Some(apps) = installed {
-					ui.weak(format!("Comparing with {} ·", apps.device_name));
+					ui.weak(t!("lib.comparing", device = apps.device_name));
 				}
 			});
 		});
@@ -334,7 +349,7 @@ impl LibraryView {
 		installed: Option<&InstalledApps<'_>>,
 	) {
 		if self.rows.is_empty() {
-			ui.centered_and_justified(|ui| ui.weak("Nothing matches the filter."));
+			ui.centered_and_justified(|ui| ui.weak(t!("lib.no_match")));
 			return;
 		}
 		let row_height = 44.0;
@@ -350,7 +365,14 @@ impl LibraryView {
 			.column(Column::auto().at_least(120.0))
 			.column(Column::auto().at_least(100.0))
 			.header(22.0, |mut header| {
-				for title in ["", "Game", "Version", "Size", "Updated", "Status"] {
+				for title in [
+					"".into(),
+					t!("lib.col_game"),
+					t!("lib.col_version"),
+					t!("lib.col_size"),
+					t!("lib.col_updated"),
+					t!("lib.col_status"),
+				] {
 					header.col(|ui| {
 						ui.strong(title);
 					});
@@ -432,14 +454,14 @@ fn details(
 	});
 	ui.horizontal_wrapped(|ui| {
 		let label = match status {
-			Some(GameStatus::UpdateAvailable) => "Download and update",
-			Some(GameStatus::Installed) => "Download and reinstall",
-			_ => "Download and install",
+			Some(GameStatus::UpdateAvailable) => t!("lib.download_update"),
+			Some(GameStatus::Installed) => t!("lib.download_reinstall"),
+			_ => t!("lib.download_install"),
 		};
 		let install = ui.add_enabled(target.is_some(), egui::Button::new(label));
 		let install = match target {
-			Some((_, name)) => install.on_hover_text(format!("Installs on {name}")),
-			None => install.on_disabled_hover_text("Connect a headset to install"),
+			Some((_, name)) => install.on_hover_text(t!("lib.installs_on", name = name)),
+			None => install.on_disabled_hover_text(t!("lib.connect_install")),
 		};
 		if install.clicked()
 			&& let Some((serial, _)) = target
@@ -449,7 +471,7 @@ fn details(
 				serial: Some(serial.to_owned()),
 			});
 		}
-		if ui.button("Download only").clicked() {
+		if ui.button(t!("lib.download_only")).clicked() {
 			commands.push(Command::Download {
 				game: game.clone(),
 				serial: None,
@@ -466,28 +488,28 @@ fn details(
 			.spacing([12.0, 4.0])
 			.show(ui, |ui| {
 				for (label, value) in [
-					("Release", game.release_name.clone()),
-					("Package", game.package.clone()),
+					(t!("lib.release"), game.release_name.clone()),
+					(t!("lib.package"), game.package.clone()),
 					(
-						"Version",
+						t!("lib.col_version"),
 						game.version_code.map(|v| v.to_string()).unwrap_or_default(),
 					),
-					("Size", size_text(game)),
-					("Updated", game.last_updated.clone()),
+					(t!("lib.col_size"), size_text(game)),
+					(t!("lib.col_updated"), game.last_updated.clone()),
 				] {
 					ui.label(label);
 					ui.add(egui::Label::new(value).wrap());
 					ui.end_row();
 				}
 				if let Some(status) = status {
-					ui.label("On headset");
+					ui.label(t!("lib.on_headset"));
 					status_label(ui, status);
 					ui.end_row();
 				}
 			});
 		if let Some(note) = catalog.note(&game.release_name) {
 			ui.add_space(8.0);
-			ui.strong("Note");
+			ui.strong(t!("lib.note"));
 			ui.label(note);
 		}
 	});
@@ -498,10 +520,16 @@ fn status_label(ui: &mut egui::Ui, status: GameStatus) {
 	match status {
 		GameStatus::NotInstalled => {}
 		GameStatus::Installed => {
-			ui.colored_label(egui::Color32::from_rgb(90, 180, 110), "Installed");
+			ui.colored_label(
+				egui::Color32::from_rgb(90, 180, 110),
+				t!("lib.status_installed"),
+			);
 		}
 		GameStatus::UpdateAvailable => {
-			ui.colored_label(egui::Color32::from_rgb(230, 170, 60), "Update available");
+			ui.colored_label(
+				egui::Color32::from_rgb(230, 170, 60),
+				t!("lib.status_update"),
+			);
 		}
 	}
 }
@@ -522,10 +550,10 @@ fn ago(time: SystemTime) -> String {
 		.duration_since(time)
 		.map_or(0, |d| d.as_secs());
 	match secs {
-		0..60 => "just now".into(),
-		60..3600 => format!("{} min ago", secs / 60),
-		3600..86_400 => format!("{} h ago", secs / 3600),
-		_ => format!("{} days ago", secs / 86_400),
+		0..60 => t!("lib.just_now").into_owned(),
+		60..3600 => t!("lib.mins_ago", n = secs / 60).into_owned(),
+		3600..86_400 => t!("lib.hours_ago", n = secs / 3600).into_owned(),
+		_ => t!("lib.days_ago", n = secs / 86_400).into_owned(),
 	}
 }
 

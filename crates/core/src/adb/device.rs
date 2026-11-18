@@ -1,3 +1,4 @@
+use rust_i18n::t;
 use std::path::Path;
 use std::time::Duration;
 
@@ -41,7 +42,7 @@ impl Device {
 		&self.serial
 	}
 
-	async fn open(&self, service: &str) -> Result<TcpStream, AdbError> {
+	pub(crate) async fn open(&self, service: &str) -> Result<TcpStream, AdbError> {
 		let mut stream = self.server.connect().await?;
 		send_request_checked(&mut stream, &format!("host:transport:{}", self.serial)).await?;
 		send_request_checked(&mut stream, service).await?;
@@ -86,7 +87,7 @@ impl Device {
 			.map_err(|_| AdbError::Timeout)?
 	}
 
-	async fn shell_ok(&self, command: &str) -> Result<String, AdbError> {
+	pub(crate) async fn shell_ok(&self, command: &str) -> Result<String, AdbError> {
 		let out = self.shell(command).await?;
 		if out.success() {
 			Ok(out.stdout)
@@ -96,11 +97,13 @@ impl Device {
 			} else {
 				out.stderr.trim()
 			};
-			Err(AdbError::Server(format!("`{command}` failed: {detail}")))
+			Err(AdbError::Server(
+				t!("adb.command_failed", command = command, detail = detail).into_owned(),
+			))
 		}
 	}
 
-	async fn getprop(&self, name: &str) -> Result<String, AdbError> {
+	pub(crate) async fn getprop(&self, name: &str) -> Result<String, AdbError> {
 		Ok(self
 			.shell_ok(&format!("getprop {name}"))
 			.await?
@@ -175,7 +178,9 @@ impl Device {
 			.find(|p| p.ends_with("/base.apk"))
 			.or_else(|| out.lines().find_map(|l| l.trim().strip_prefix("package:")))
 			.map(str::to_owned)
-			.ok_or_else(|| AdbError::Server(format!("{package} is not installed")))
+			.ok_or_else(|| {
+				AdbError::Server(t!("adb.not_installed", package = package).into_owned())
+			})
 	}
 
 	/// Pushes a file, or every file of a directory, to `remote`. Missing remote

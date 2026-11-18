@@ -1,3 +1,4 @@
+use rust_i18n::t;
 use std::collections::HashMap;
 
 use quest_sideloader_core::adb::{DeviceEntry, DeviceInfo, DeviceState};
@@ -64,6 +65,13 @@ impl DevicesView {
 
 	/// Where dropped files go: the selected headset if it's online, otherwise
 	/// the only online one.
+	pub fn info(&self, serial: &str) -> Option<&DeviceInfo> {
+		match self.info.get(serial) {
+			Some(InfoState::Loaded(info)) => Some(info),
+			_ => None,
+		}
+	}
+
 	pub fn install_target(&self) -> Option<&DeviceEntry> {
 		let online = |d: &&DeviceEntry| d.state == DeviceState::Online;
 		self.selected
@@ -106,22 +114,20 @@ impl DevicesView {
 		self.info.insert(serial, state);
 	}
 
-	pub fn show(&mut self, ui: &mut egui::Ui, commands: &mut Vec<Command>) {
-		self.toolbar(ui, commands);
+	/// Returns true when the user asks to set up adb.
+	pub fn show(&mut self, ui: &mut egui::Ui, commands: &mut Vec<Command>) -> bool {
+		let setup = self.toolbar(ui, commands);
 		ui.separator();
 
 		if self.devices.is_empty() {
 			ui.centered_and_justified(|ui| {
 				ui.weak(match &self.adb_status {
-					AdbStatus::Unavailable(_) => {
-						"ADB is not available. Check the adb path in Settings."
-					}
-					_ => {
-						"No devices. Connect the headset with a USB cable and enable developer mode."
-					}
+					AdbStatus::Unavailable(_) => t!("dev.adb_unavailable_hint"),
+					AdbStatus::Missing(_) => t!("dev.adb_missing_hint"),
+					_ => t!("dev.none"),
 				});
 			});
-			return;
+			return setup;
 		}
 
 		egui::Panel::left("device_list")
@@ -130,38 +136,52 @@ impl DevicesView {
 			.show(ui, |ui| self.device_list(ui));
 
 		egui::CentralPanel::default().show(ui, |ui| self.details(ui, commands));
+		setup
 	}
 
-	fn toolbar(&mut self, ui: &mut egui::Ui, commands: &mut Vec<Command>) {
+	fn toolbar(&mut self, ui: &mut egui::Ui, commands: &mut Vec<Command>) -> bool {
+		let mut setup = false;
 		ui.horizontal(|ui| {
 			match &self.adb_status {
 				AdbStatus::Starting => {
 					ui.spinner();
-					ui.label("Starting ADB…");
+					ui.label(t!("dev.starting"));
 				}
 				AdbStatus::Running { version } => {
-					ui.label(format!("ADB server running (protocol {version})"));
+					ui.label(t!("dev.running", version = version));
 				}
 				AdbStatus::Unavailable(e) => {
-					ui.colored_label(ui.visuals().error_fg_color, format!("ADB unavailable: {e}"));
+					ui.colored_label(
+						ui.visuals().error_fg_color,
+						t!("dev.unavailable", error = e),
+					);
+				}
+				AdbStatus::Missing(e) => {
+					ui.colored_label(
+						ui.visuals().error_fg_color,
+						t!("dev.unavailable", error = e),
+					);
+					setup = ui.button(t!("dev.set_up_adb")).clicked();
 				}
 			}
 
 			ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
 				let address = self.wireless_address.trim().to_owned();
-				let connect = ui.add_enabled(!address.is_empty(), egui::Button::new("Connect"));
+				let connect =
+					ui.add_enabled(!address.is_empty(), egui::Button::new(t!("dev.connect")));
 				let field = ui.add(
 					egui::TextEdit::singleline(&mut self.wireless_address)
 						.hint_text("192.168.1.50:5555")
 						.desired_width(160.0),
 				);
 				let submitted = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-				ui.label("Wi-Fi:");
+				ui.label(t!("dev.wifi"));
 				if (connect.clicked() || submitted) && !address.is_empty() {
 					commands.push(Command::ConnectWireless(address));
 				}
 			});
 		});
+		setup
 	}
 
 	fn device_list(&mut self, ui: &mut egui::Ui) {
@@ -191,20 +211,20 @@ impl DevicesView {
 			.as_ref()
 			.and_then(|s| self.devices.iter().find(|d| &d.serial == s))
 		else {
-			ui.weak("Select a device");
+			ui.weak(t!("dev.select"));
 			return;
 		};
 
 		ui.horizontal(|ui| {
 			ui.heading(device.display_name());
 			ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-				if device.is_wireless() && ui.button("Disconnect").clicked() {
+				if device.is_wireless() && ui.button(t!("dev.disconnect")).clicked() {
 					commands.push(Command::DisconnectWireless(device.serial.clone()));
 				}
 				let loading = matches!(self.info.get(&device.serial), Some(InfoState::Loading));
 				if device.state == DeviceState::Online
 					&& ui
-						.add_enabled(!loading, egui::Button::new("Refresh"))
+						.add_enabled(!loading, egui::Button::new(t!("common.refresh")))
 						.clicked()
 				{
 					self.info.insert(device.serial.clone(), InfoState::Loading);
@@ -217,9 +237,9 @@ impl DevicesView {
 
 		if device.state == DeviceState::Online {
 			ui.horizontal(|ui| {
-				if ui.button("Install APK or ZIP…").clicked()
+				if ui.button(t!("dev.install_file")).clicked()
 					&& let Some(file) = rfd::FileDialog::new()
-						.add_filter("APK or ZIP", &["apk", "zip"])
+						.add_filter(t!("dev.apk_or_zip"), &["apk", "zip"])
 						.pick_file()
 				{
 					commands.push(Command::Install {
@@ -227,7 +247,7 @@ impl DevicesView {
 						path: file,
 					});
 				}
-				if ui.button("Install folder…").clicked()
+				if ui.button(t!("dev.install_folder")).clicked()
 					&& let Some(folder) = rfd::FileDialog::new().pick_folder()
 				{
 					commands.push(Command::Install {
@@ -235,7 +255,7 @@ impl DevicesView {
 						path: folder,
 					});
 				}
-				ui.weak("or drop files onto the window");
+				ui.weak(t!("dev.or_drop"));
 			});
 			ui.add_space(8.0);
 		}
@@ -249,7 +269,7 @@ impl DevicesView {
 			None | Some(InfoState::Loading) => {
 				ui.horizontal(|ui| {
 					ui.spinner();
-					ui.label("Reading device info…");
+					ui.label(t!("dev.reading"));
 				});
 			}
 			Some(InfoState::Failed(e)) => {
@@ -266,31 +286,24 @@ impl DevicesView {
 
 fn state_label(state: &DeviceState) -> String {
 	match state {
-		DeviceState::Online => "connected".into(),
-		DeviceState::Offline => "offline".into(),
-		DeviceState::Unauthorized => "unauthorized".into(),
-		DeviceState::Authorizing => "authorizing".into(),
-		DeviceState::Connecting => "connecting".into(),
-		DeviceState::NoPermissions => "no USB access".into(),
+		DeviceState::Online => t!("dev.state_online").into(),
+		DeviceState::Offline => t!("dev.state_offline").into(),
+		DeviceState::Unauthorized => t!("dev.state_unauthorized").into(),
+		DeviceState::Authorizing => t!("dev.state_authorizing").into(),
+		DeviceState::Connecting => t!("dev.state_connecting").into(),
+		DeviceState::NoPermissions => t!("dev.state_no_permissions").into(),
 		DeviceState::Other(s) => s.clone(),
 	}
 }
 
-fn state_hint(state: &DeviceState) -> Option<&'static str> {
+fn state_hint(state: &DeviceState) -> Option<std::borrow::Cow<'static, str>> {
 	match state {
 		DeviceState::Online => None,
-		DeviceState::Unauthorized => {
-			Some("Put on the headset and allow USB debugging for this computer.")
-		}
-		DeviceState::Authorizing | DeviceState::Connecting => Some("Waiting for the device…"),
-		DeviceState::Offline => {
-			Some("The device is offline. Reconnect the cable or restart the headset.")
-		}
-		DeviceState::NoPermissions => Some(
-			"This user has no access to the USB device. Install udev rules for Android devices \
-			 (for example the android-udev package) and replug the headset.",
-		),
-		DeviceState::Other(_) => Some("The device is in an unsupported state."),
+		DeviceState::Unauthorized => Some(t!("dev.hint_unauthorized")),
+		DeviceState::Authorizing | DeviceState::Connecting => Some(t!("dev.hint_waiting")),
+		DeviceState::Offline => Some(t!("dev.hint_offline")),
+		DeviceState::NoPermissions => Some(t!("dev.hint_no_permissions")),
+		DeviceState::Other(_) => Some(t!("dev.hint_other")),
 	}
 }
 
@@ -299,26 +312,30 @@ fn info_grid(ui: &mut egui::Ui, info: &DeviceInfo) {
 		.num_columns(2)
 		.spacing([16.0, 6.0])
 		.show(ui, |ui| {
-			ui.label("Model");
+			ui.label(t!("dev.model"));
 			ui.label(&info.model);
 			ui.end_row();
 
-			ui.label("Android");
+			ui.label(t!("dev.android"));
 			ui.label(&info.android_version);
 			ui.end_row();
 
-			ui.label("Battery");
+			ui.label(t!("dev.battery"));
 			match info.battery {
 				Some(b) => ui.label(format!(
 					"{}%{}",
 					b.level,
-					if b.charging { ", charging" } else { "" }
+					if b.charging {
+						t!("dev.charging")
+					} else {
+						"".into()
+					}
 				)),
-				None => ui.weak("unknown"),
+				None => ui.weak(t!("dev.unknown")),
 			};
 			ui.end_row();
 
-			ui.label("Storage");
+			ui.label(t!("dev.storage"));
 			match info.storage {
 				Some(s) => {
 					let used = s.total_bytes.saturating_sub(s.free_bytes);
@@ -330,15 +347,15 @@ fn info_grid(ui: &mut egui::Ui, info: &DeviceInfo) {
 					ui.add(
 						egui::ProgressBar::new(fraction)
 							.desired_width(260.0)
-							.text(format!(
-								"{} free of {}",
-								format_bytes(s.free_bytes),
-								format_bytes(s.total_bytes)
+							.text(t!(
+								"dev.free_of",
+								free = format_bytes(s.free_bytes),
+								total = format_bytes(s.total_bytes)
 							)),
 					);
 				}
 				None => {
-					ui.weak("unknown");
+					ui.weak(t!("dev.unknown"));
 				}
 			}
 			ui.end_row();
@@ -347,10 +364,10 @@ fn info_grid(ui: &mut egui::Ui, info: &DeviceInfo) {
 
 fn packages(ui: &mut egui::Ui, info: &DeviceInfo, filter: &mut String) {
 	ui.horizontal(|ui| {
-		ui.strong(format!("Installed apps ({})", info.packages.len()));
+		ui.strong(t!("dev.installed_apps", n = info.packages.len()));
 		ui.add(
 			egui::TextEdit::singleline(filter)
-				.hint_text("Filter")
+				.hint_text(t!("dev.filter"))
 				.desired_width(200.0),
 		);
 	});

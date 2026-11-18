@@ -1,0 +1,550 @@
+_version: 2
+err.no_platform_dirs:
+  en: "could not determine platform directories"
+  ru: "не удалось определить системные папки"
+err.io:
+  en: "I/O error at %{path}: %{source}"
+  ru: "ошибка ввода-вывода (%{path}): %{source}"
+task.queued:
+  en: "Queued"
+  ru: "В очереди"
+task.queued_pos:
+  en: "Queued · #%{pos}"
+  ru: "В очереди · №%{pos}"
+task.cancelled:
+  en: "Cancelled"
+  ru: "Отменено"
+task.starting:
+  en: "Starting"
+  ru: "Запуск"
+task.downloaded:
+  en: "Downloaded"
+  ru: "Скачано"
+task.installed:
+  en: "Installed"
+  ru: "Установлено"
+task.rate_left:
+  en: "%{speed} · %{left} left"
+  ru: "%{speed} · осталось %{left}"
+time.secs:
+  en: "%{n} s"
+  ru: "%{n} с"
+time.mins:
+  en: "%{n} min"
+  ru: "%{n} мин"
+time.hours_mins:
+  en: "%{h} h %{m} min"
+  ru: "%{h} ч %{m} мин"
+dl.no_space:
+  en: "not enough free space in %{dir}: need about %{need}, have %{have}"
+  ru: "не хватает места в %{dir}: нужно около %{need}, свободно %{have}"
+dl.remove_failed:
+  en: "installed, but the downloaded files could not be removed: %{error}"
+  ru: "установлено, но скачанные файлы не удалось удалить: %{error}"
+dl.listing:
+  en: "Listing files"
+  ru: "Получение списка файлов"
+dl.no_archive:
+  en: "the mirror has no archive for %{release}"
+  ru: "на зеркале нет архива для %{release}"
+dl.downloading_n:
+  en: "Downloading %{n} file(s)"
+  ru: "Загрузка файлов: %{n}"
+dl.downloading_file:
+  en: "Downloading %{name}"
+  ru: "Загрузка %{name}"
+dl.retrying:
+  en: "%{stage}: connection problem, retrying in %{delay} s"
+  ru: "%{stage}: проблема со связью, повтор через %{delay} с"
+dl.unpacking:
+  en: "Unpacking"
+  ru: "Распаковка"
+dl.no_archive_local:
+  en: "downloaded files contain no archive"
+  ru: "среди скачанных файлов нет архива"
+dl.no_space_headset:
+  en: "not enough space on the headset: need %{need}, have %{have}"
+  ru: "не хватает места на шлеме: нужно %{need}, свободно %{have}"
+up.done:
+  en: "Uploaded, thank you"
+  ru: "Отправлено, спасибо"
+up.looking_up:
+  en: "Looking up the app on the headset"
+  ru: "Поиск приложения на шлеме"
+up.no_space:
+  en: "not enough free space to prepare the upload: need about %{need}, have %{have}"
+  ru: "не хватает места для подготовки отправки: нужно около %{need}, свободно %{have}"
+up.copying:
+  en: "Copying from the headset (%{size})"
+  ru: "Копирование со шлема (%{size})"
+up.wrong_apk:
+  en: "the headset returned an APK for %{got}, not %{package}"
+  ru: "шлем вернул APK для %{got}, а не для %{package}"
+up.no_version:
+  en: "the APK has no version code"
+  ru: "в APK нет кода версии"
+up.packing:
+  en: "Packing"
+  ru: "Упаковка"
+up.waiting:
+  en: "Waiting for another upload to finish"
+  ru: "Ожидание окончания другой отправки"
+up.uploading:
+  en: "Uploading to the mirror"
+  ru: "Отправка на зеркало"
+hs.back_up_title:
+  en: "Back up %{name}"
+  ru: "Бэкап %{name}"
+hs.copying_from:
+  en: "Copying saves from the headset"
+  ru: "Копирование сохранений со шлема"
+hs.backed_up:
+  en: "Backed up %{n} file(s)"
+  ru: "Сохранено файлов: %{n}"
+hs.restore_title:
+  en: "Restore %{name}"
+  ru: "Восстановление %{name}"
+hs.copying_to:
+  en: "Copying saves to the headset"
+  ru: "Копирование сохранений на шлем"
+hs.restored:
+  en: "Saves restored"
+  ru: "Сохранения восстановлены"
+hs.backing_up:
+  en: "Backing up saves"
+  ru: "Бэкап сохранений"
+hs.backup_failed:
+  en: "couldn't back up the saves, so nothing was removed: %{error}"
+  ru: "не удалось сделать бэкап сохранений, поэтому ничего не удалено: %{error}"
+hs.uninstall_title:
+  en: "Uninstall %{name}"
+  ru: "Удаление %{name}"
+hs.uninstalling:
+  en: "Uninstalling"
+  ru: "Удаление"
+hs.removing_obb:
+  en: "Removing OBB files"
+  ru: "Удаление OBB-файлов"
+hs.uninstalled_backed_up:
+  en: "Uninstalled; saves backed up (%{n} file(s))"
+  ru: "Удалено; сохранения в бэкапе (файлов: %{n})"
+hs.uninstalled:
+  en: "Uninstalled"
+  ru: "Удалено"
+hs.reinstall_title:
+  en: "Reinstall %{name}"
+  ru: "Переустановка %{name}"
+hs.uninstalling_old:
+  en: "Uninstalling the old version"
+  ru: "Удаление старой версии"
+hs.saves_kept:
+  en: " Your saves are kept in %{dir}."
+  ru: " Сохранения остались в %{dir}."
+hs.new_not_installed:
+  en: "the new version didn't install: %{error}.%{kept}"
+  ru: "новая версия не установилась: %{error}.%{kept}"
+hs.restoring:
+  en: "Restoring saves"
+  ru: "Восстановление сохранений"
+hs.restore_failed:
+  en: "installed, but restoring saves failed: %{error}.%{kept}"
+  ru: "установлено, но восстановить сохранения не удалось: %{error}.%{kept}"
+hs.reinstalled_saves:
+  en: "Reinstalled with saves"
+  ru: "Переустановлено с сохранениями"
+hs.reinstalled:
+  en: "Reinstalled"
+  ru: "Переустановлено"
+inst.reading:
+  en: "Reading files"
+  ru: "Чтение файлов"
+inst.extracting:
+  en: "Extracting"
+  ru: "Распаковка"
+inst.review:
+  en: "Waiting for install.txt review"
+  ru: "Ожидание проверки install.txt"
+inst.waiting:
+  en: "Waiting for another installation on this headset"
+  ru: "Ожидание другой установки на этот шлем"
+inst.unpacking:
+  en: "Unpacking %{name}"
+  ru: "Распаковка %{name}"
+inst.data_password:
+  en: "it is password-protected; unpack it yourself and install the folder again"
+  ru: "архив защищён паролем; распакуйте его сами и установите папку заново"
+lib.cooldown:
+  en: "The library was synced moments ago; try again in %{wait} min"
+  ru: "Библиотека только что синхронизирована; попробуйте через %{wait} мин"
+lib.no_mirror:
+  en: "No mirror configured. Add one in Settings."
+  ru: "Зеркало не настроено. Добавьте его в Настройках."
+lib.downloading_meta:
+  en: "Downloading metadata (%{size})"
+  ru: "Загрузка метаданных (%{size})"
+lib.unpacking_meta:
+  en: "Unpacking metadata"
+  ru: "Распаковка метаданных"
+lib.connecting:
+  en: "Connecting to %{name}"
+  ru: "Подключение к %{name}"
+lib.refused:
+  en: "%{error}. The mirror refused access; check its URL and headers (API key)."
+  ru: "%{error}. Зеркало отказало в доступе; проверьте его адрес и заголовки (API-ключ)."
+eng.queue_full:
+  en: "The download queue is full (%{max}); wait for a download to finish"
+  ru: "Очередь загрузок заполнена (%{max}); дождитесь окончания одной из загрузок"
+eng.already_queued:
+  en: "%{name} is already in the queue"
+  ru: "%{name} уже в очереди"
+eng.no_uploads:
+  en: "This mirror doesn't accept uploads (its metadata has no upload config)"
+  ru: "Это зеркало не принимает отправку (в его метаданных нет upload config)"
+eng.started:
+  en: "Started %{package}"
+  ru: "Запущено %{package}"
+eng.stopped:
+  en: "Stopped %{package}"
+  ru: "Остановлено %{package}"
+eng.delete_failed:
+  en: "Could not delete %{name}: %{error}"
+  ru: "Не удалось удалить %{name}: %{error}"
+eng.restarting:
+  en: "The headset is restarting"
+  ru: "Шлем перезагружается"
+eng.no_wifi:
+  en: "the headset isn't on Wi-Fi"
+  ru: "шлем не подключён к Wi-Fi"
+eng.wireless_failed:
+  en: "wireless ADB: %{error}"
+  ru: "беспроводной ADB: %{error}"
+eng.screenshot_saved:
+  en: "Screenshot saved to %{path}"
+  ru: "Скриншот сохранён в %{path}"
+eng.screenshot_failed:
+  en: "screenshot: %{error}"
+  ru: "скриншот: %{error}"
+eng.tweak_reset:
+  en: "%{property} reset"
+  ru: "%{property} сброшено"
+eng.tweak_set:
+  en: "%{property} set to %{value}"
+  ru: "%{property} теперь %{value}"
+dev.connect_failed:
+  en: "connect %{address}: %{error}"
+  ru: "подключение к %{address}: %{error}"
+dev.disconnect_failed:
+  en: "disconnect %{address}: %{error}"
+  ru: "отключение от %{address}: %{error}"
+err.settings_parse:
+  en: "invalid settings file %{path}: %{source}"
+  ru: "файл настроек %{path} повреждён: %{source}"
+err.settings_serialize:
+  en: "failed to serialize settings: %{error}"
+  ru: "не удалось сохранить настройки: %{error}"
+err.runtime:
+  en: "failed to start async runtime: %{error}"
+  ru: "не удалось запустить асинхронную среду: %{error}"
+err.sl_apk:
+  en: "cannot read APK %{path}: %{message}"
+  ru: "не удалось прочитать APK %{path}: %{message}"
+err.sl_zip:
+  en: "cannot extract %{path}: %{message}"
+  ru: "не удалось распаковать %{path}: %{message}"
+err.sl_nothing:
+  en: "nothing to install in %{path}: no APK, OBB folder or install.txt found"
+  ru: "в %{path} нечего устанавливать: нет APK, папки OBB или install.txt"
+err.sl_unsupported:
+  en: "unsupported file %{path}: drop an .apk, a .zip or a folder"
+  ru: "неподдерживаемый файл %{path}: перетащите .apk, .zip или папку"
+err.sl_script:
+  en: "install.txt line %{line}: %{message}"
+  ru: "install.txt, строка %{line}: %{message}"
+err.sl_cancelled:
+  en: "installation was cancelled"
+  ru: "установка отменена"
+err.cat_http:
+  en: "network error: %{error}"
+  ru: "ошибка сети: %{error}"
+err.cat_status:
+  en: "mirror answered %{status} for %{url}"
+  ru: "зеркало ответило %{status} на %{url}"
+err.rclone_not_found:
+  en: "rclone binary not found at %{path}"
+  ru: "rclone не найден: %{path}"
+err.no_game_list:
+  en: "the mirror's metadata has no game list"
+  ru: "в метаданных зеркала нет списка игр"
+err.bad_header:
+  en: "the game list has no header with Game Name, Release Name and Package Name columns"
+  ru: "в списке игр нет заголовка со столбцами Game Name, Release Name и Package Name"
+err.no_saves:
+  en: "%{app} has no saves on the headset"
+  ru: "у %{app} нет сохранений на шлеме"
+err.not_installed:
+  en: "install %{app} before restoring its saves"
+  ru: "установите %{app}, прежде чем восстанавливать сохранения"
+err.private_restore:
+  en: "the app didn't accept its private data back: %{error}"
+  ru: "приложение не приняло обратно свои приватные данные: %{error}"
+err.adb_not_found:
+  en: "adb binary not found at %{path}"
+  ru: "adb не найден: %{path}"
+err.adb_start:
+  en: "could not start adb server: %{error}"
+  ru: "не удалось запустить сервер adb: %{error}"
+err.adb_unreachable:
+  en: "adb server is not reachable: %{error}"
+  ru: "сервер adb недоступен: %{error}"
+err.adb_protocol:
+  en: "adb protocol error: %{error}"
+  ru: "ошибка протокола adb: %{error}"
+err.adb_io:
+  en: "adb connection error: %{error}"
+  ru: "ошибка соединения с adb: %{error}"
+err.adb_timeout:
+  en: "adb request timed out"
+  ru: "adb не ответил вовремя"
+err.adb_local_io:
+  en: "cannot read %{path}: %{source}"
+  ru: "не удалось прочитать %{path}: %{source}"
+err.adb_push:
+  en: "push to %{remote} failed: %{message}"
+  ru: "не удалось записать %{remote}: %{message}"
+err.adb_pull:
+  en: "pull of %{remote} failed: %{message}"
+  ru: "не удалось скачать %{remote}: %{message}"
+err.adb_install:
+  en: "installation failed: %{error}"
+  ru: "установка не удалась: %{error}"
+err.wrong_password:
+  en: "wrong archive password"
+  ru: "неверный пароль архива"
+err.corrupt:
+  en: "archive is damaged or unsupported: %{error}"
+  ru: "архив повреждён или не поддерживается: %{error}"
+err.unsafe_path:
+  en: "archive entry %{entry} points outside the destination folder"
+  ru: "запись архива %{entry} указывает за пределы папки назначения"
+err.extract_cancelled:
+  en: "extraction was cancelled"
+  ru: "распаковка отменена"
+err.cancelled:
+  en: "cancelled"
+  ru: "отменено"
+run.installing:
+  en: "Installing %{name}"
+  ru: "Установка %{name}"
+run.copying_obb:
+  en: "Copying OBB %{package}"
+  ru: "Копирование OBB %{package}"
+run.missing:
+  en: "%{path} does not exist"
+  ru: "%{path} не существует"
+run.step:
+  en: "Step %{n}/%{total}"
+  ru: "Шаг %{n}/%{total}"
+run.step_installing:
+  en: "%{step}: installing %{name}"
+  ru: "%{step}: установка %{name}"
+run.step_copying:
+  en: "%{step}: copying %{name}"
+  ru: "%{step}: копирование %{name}"
+run.step_uninstalling:
+  en: "%{step}: uninstalling %{package}"
+  ru: "%{step}: удаление %{package}"
+run.uninstall_failed:
+  en: "line %{line}: uninstall failed: %{detail}"
+  ru: "строка %{line}: удаление не удалось: %{detail}"
+run.command_failed:
+  en: "line %{line}: `%{command}` failed: %{detail}"
+  ru: "строка %{line}: `%{command}` завершилась с ошибкой: %{detail}"
+scr.unbalanced:
+  en: "cannot parse the line (unbalanced quotes)"
+  ru: "не удалось разобрать строку (незакрытые кавычки)"
+scr.not_adb:
+  en: "not an adb command, skipped: %{program}"
+  ru: "не команда adb, пропущено: %{program}"
+scr.no_command:
+  en: "adb without a command"
+  ru: "adb без команды"
+scr.unsupported:
+  en: "`adb %{command}` is not supported in install scripts"
+  ru: "`adb %{command}` не поддерживается в скриптах установки"
+scr.install_one:
+  en: "install expects exactly one APK"
+  ru: "install ожидает ровно один APK"
+scr.install_flag:
+  en: "unknown install flag %{flag}"
+  ru: "неизвестный флаг install: %{flag}"
+scr.push_args:
+  en: "push expects a local path and a device path"
+  ru: "push ожидает локальный путь и путь на устройстве"
+scr.dotdot:
+  en: "device path %{path} contains `..`"
+  ru: "путь на устройстве %{path} содержит `..`"
+scr.no_package_target:
+  en: "the game's package name is unknown, so the target can't be checked"
+  ru: "имя пакета игры неизвестно, поэтому путь назначения не проверить"
+scr.writes_outside:
+  en: "writes to %{path}, outside this game's folders"
+  ru: "пишет в %{path}, за пределами папок этой игры"
+scr.uninstall_one:
+  en: "uninstall expects exactly one package"
+  ru: "uninstall ожидает ровно один пакет"
+scr.removes_saves:
+  en: "removes the installed game together with its saves"
+  ru: "удаляет установленную игру вместе с сохранениями"
+scr.removes_other:
+  en: "removes another app: %{package}"
+  ru: "удаляет другое приложение: %{package}"
+scr.interactive:
+  en: "interactive shell is not supported"
+  ru: "интерактивный shell не поддерживается"
+scr.multiline:
+  en: "multi-line shell command"
+  ru: "многострочная команда shell"
+scr.chains:
+  en: "chains several commands or redirects output"
+  ru: "объединяет несколько команд или перенаправляет вывод"
+scr.unparsable_shell:
+  en: "cannot parse the shell command"
+  ru: "не удалось разобрать команду shell"
+scr.empty_shell:
+  en: "empty shell command"
+  ru: "пустая команда shell"
+scr.unknown_shell:
+  en: "unrecognized shell command `%{program}`"
+  ru: "неизвестная команда shell `%{program}`"
+scr.permissions_other:
+  en: "changes permissions of another app: %{package}"
+  ru: "меняет разрешения другого приложения: %{package}"
+scr.pm:
+  en: "package manager command"
+  ru: "команда менеджера пакетов"
+scr.no_package_paths:
+  en: "the game's package name is unknown, so paths can't be checked"
+  ru: "имя пакета игры неизвестно, поэтому пути не проверить"
+scr.deletes_outside:
+  en: "deletes %{path}, outside this game's folders"
+  ru: "удаляет %{path}, за пределами папок этой игры"
+scr.touches_outside:
+  en: "touches %{path}, outside this game's folders"
+  ru: "изменяет %{path}, за пределами папок этой игры"
+scr.reads_outside:
+  en: "reads %{path}, outside the release folder"
+  ru: "читает %{path}, за пределами папки релиза"
+cat.ended_early:
+  en: "download ended early (%{done} of %{total} bytes)"
+  ru: "загрузка оборвалась (%{done} из %{total} байт)"
+cat.rclone_exit:
+  en: "rclone exited with %{status}"
+  ru: "rclone завершился с кодом %{status}"
+cat.sync_first:
+  en: "this mirror has to be synced before files can be fetched from it"
+  ru: "это зеркало нужно синхронизировать, прежде чем скачивать с него файлы"
+cat.bad_mirror_url:
+  en: "invalid mirror URL: %{error}"
+  ru: "неверный адрес зеркала: %{error}"
+mir.bad_base64:
+  en: "the password is not valid base64"
+  ru: "пароль не в формате base64"
+mir.not_text:
+  en: "the decoded password is not text"
+  ru: "пароль после декодирования не является текстом"
+mir.bad_server_config:
+  en: "invalid server config: %{error}"
+  ru: "неверный конфиг сервера: %{error}"
+mir.needs_name:
+  en: "the mirror needs a name"
+  ru: "у зеркала должно быть имя"
+mir.bad_base_uri:
+  en: "invalid base URI: %{error}"
+  ru: "неверный base URI: %{error}"
+mir.base_uri_scheme:
+  en: "base URI must start with http:// or https://"
+  ru: "base URI должен начинаться с http:// или https://"
+mir.choose_remote:
+  en: "choose an rclone remote"
+  ru: "выберите rclone remote"
+mir.bad_header_name:
+  en: "invalid header name %{name}"
+  ru: "неверное имя заголовка %{name}"
+mir.bad_header_value:
+  en: "invalid value for header %{name}"
+  ru: "неверное значение заголовка %{name}"
+adb.not_launchable:
+  en: "%{package} has no launchable activity"
+  ru: "у %{package} нет запускаемой activity"
+adb.uninstall_failed:
+  en: "uninstall of %{package} failed: %{detail}"
+  ru: "удаление %{package} не удалось: %{detail}"
+adb.no_screenshot:
+  en: "screencap didn't return an image: %{detail}"
+  ru: "screencap не вернул изображение: %{detail}"
+adb.not_installed:
+  en: "%{package} is not installed"
+  ru: "%{package} не установлен"
+arc.first_volume:
+  en: "first volume %{name} is missing"
+  ru: "нет первого тома %{name}"
+inst.signature:
+  en: "%{package} is installed with a different signature. Reinstalling removes the installed app first; its saves can be backed up and restored."
+  ru: "%{package} установлен с другой подписью. Переустановка сначала удалит установленное приложение; перед этим можно сделать бэкап сохранений, а потом восстановить их."
+adb.command_failed:
+  en: "`%{command}` failed: %{detail}"
+  ru: "`%{command}` завершилась с ошибкой: %{detail}"
+dld.not_release:
+  en: "not a release folder: %{name}"
+  ru: "это не папка релиза: %{name}"
+pt.unsupported:
+  en: "Google doesn't publish adb for this system; install it yourself"
+  ru: "Google не выпускает adb для этой системы; установите его сами"
+pt.no_adb:
+  en: "the downloaded package has no adb in it"
+  ru: "в скачанном пакете нет adb"
+pt.title:
+  en: "ADB (Android SDK Platform-Tools)"
+  ru: "ADB (Android SDK Platform-Tools)"
+pt.downloading:
+  en: "Downloading from Google"
+  ru: "Загрузка с сайта Google"
+pt.done:
+  en: "Installed; the app now uses this adb"
+  ru: "Установлено, приложение теперь использует этот adb"
+rc.unsupported:
+  en: "rclone.org has no build for this system; install rclone yourself"
+  ru: "на rclone.org нет сборки для этой системы; установите rclone сами"
+rc.bad_version:
+  en: "couldn't read the current rclone version from rclone.org"
+  ru: "не удалось узнать текущую версию rclone на rclone.org"
+rc.no_sum:
+  en: "rclone.org lists no checksum for %{file}"
+  ru: "на rclone.org нет контрольной суммы для %{file}"
+rc.bad_sum:
+  en: "%{file} doesn't match its checksum on rclone.org, so the app deleted it"
+  ru: "%{file} не совпадает с контрольной суммой на rclone.org, поэтому приложение его удалило"
+rc.title:
+  en: "rclone"
+  ru: "rclone"
+rc.downloading:
+  en: "Downloading from rclone.org"
+  ru: "Загрузка с rclone.org"
+rc.done:
+  en: "Installed; the app now uses this rclone"
+  ru: "Установлено, приложение теперь использует этот rclone"
+rcfg.local_remote:
+  en: "the mirror's rclone config makes \"%{name}\" a local folder"
+  ru: "rclone-конфиг зеркала делает \"%{name}\" локальной папкой"
+rcfg.runs_program:
+  en: "the mirror's rclone config sets \"%{key}\", which would run a program"
+  ru: "rclone-конфиг зеркала задаёт \"%{key}\", что запустило бы программу"
+rcfg.bad_wrapper:
+  en: "the mirror's rclone remote \"%{name}\" (%{kind}) wraps \"%{target}\", which isn't another remote of the mirror"
+  ru: "remote \"%{name}\" (%{kind}) зеркала оборачивает \"%{target}\", а это не другой remote зеркала"
+rc.zip_unreadable:
+  en: "the rclone zip is unreadable: %{error}"
+  ru: "zip с rclone не читается: %{error}"
+rc.zip_no_rclone:
+  en: "the rclone zip has no rclone program in it"
+  ru: "в zip нет программы rclone"

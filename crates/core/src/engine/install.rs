@@ -1,10 +1,13 @@
+use rust_i18n::t;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex as StdMutex};
 
 use tokio::sync::{Mutex, oneshot};
 
-use super::task::{TaskEntry, TaskKind, TaskSnapshot, TaskState, TempDir, Tracker};
+use super::task::{
+	SignatureConflict, TaskEntry, TaskKind, TaskSnapshot, TaskState, TempDir, Tracker,
+};
 use super::{Event, EventSink};
 use crate::adb::Device;
 use crate::sideload::run;
@@ -61,12 +64,13 @@ pub(super) fn spawn(ctx: InstallContext, source: PathBuf) -> TaskEntry {
 			kind: TaskKind::Install,
 			serial: Some(ctx.device.serial().to_owned()),
 			title: file_title(&source),
-			stage: "Queued".into(),
+			stage: t!("task.queued").into_owned(),
 			progress: None,
 			detail: None,
 			state: TaskState::Running,
 			warnings: Vec::new(),
 			output: None,
+			conflict: None,
 		},
 		ctx.sink.clone(),
 	);
@@ -90,12 +94,18 @@ pub(super) fn finish_install(
 ) {
 	match result {
 		Ok(()) => {
-			tracker.finish(TaskState::Done, Some("Installed".into()), None);
+			tracker.finish(
+				TaskState::Done,
+				Some(t!("task.installed").into_owned()),
+				None,
+			);
 			super::devices::spawn_fetch_info(ctx.device.clone(), ctx.sink.clone());
 		}
-		Err(SideloadError::Cancelled) => {
-			tracker.finish(TaskState::Cancelled, Some("Cancelled".into()), None)
-		}
+		Err(SideloadError::Cancelled) => tracker.finish(
+			TaskState::Cancelled,
+			Some(t!("task.cancelled").into_owned()),
+			None,
+		),
 		Err(e) => {
 			tracing::error!("install failed: {e}");
 			tracker.finish(TaskState::Failed(e.to_string()), None, None);
@@ -122,7 +132,8 @@ pub(super) async fn install_from(
 	tracker: &Tracker,
 	review: oneshot::Receiver<ReviewDecision>,
 ) -> Result<(), SideloadError> {
-	tracker.stage("Reading files");
+	tracker.stage(t!("inst.reading"));
+	let source_path = source.to_path_buf();
 	let source = {
 		let path = source.to_path_buf();
 		blocking(move || Source::classify(&path)).await?
@@ -133,7 +144,7 @@ pub(super) async fn install_from(
 		Source::Apk(path) => blocking(move || InstallPlan::from_apk(&path)).await?,
 		Source::Folder(path) => blocking(move || InstallPlan::from_folder(&path)).await?,
 		Source::Zip(path) => {
-			tracker.stage("Extracting");
+			tracker.stage(t!("inst.extracting"));
 			let dest = ctx.work_dir.join(format!("task-{}", ctx.id));
 			_temp = Some(TempDir(dest.clone()));
 			blocking(move || {
@@ -156,7 +167,7 @@ pub(super) async fn install_from(
 				tracker.update(
 					|s| {
 						s.state = TaskState::AwaitingReview;
-						s.stage = "Waiting for install.txt review".into();
+						s.stage = t!("inst.review").into_owned();
 					},
 					true,
 				);
@@ -179,20 +190,91 @@ pub(super) async fn install_from(
 		}
 	};
 
+	if plan.script.is_some() {
+		unpack_side_archives(&plan.root, tracker).await?;
+	}
+
 	let lock = ctx.locks.get(ctx.device.serial());
 	let _guard = match lock.try_lock() {
 		Ok(guard) => guard,
 		Err(_) => {
-			tracker.stage("Waiting for another installation on this headset");
+			tracker.stage(t!("inst.waiting"));
 			lock.lock().await
 		}
 	};
 
 	let report = |u| tracker.report(u);
-	match actions {
+	let result = match actions {
 		Some(actions) => run::run_script(&ctx.device, &actions, &report).await,
 		None => run::run_default(&ctx.device, &plan, &report).await,
+	};
+	match result {
+		Err(SideloadError::Adb(crate::adb::AdbError::InstallFailed(message)))
+			if message.contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE") =>
+		{
+			let package = plan.package().unwrap_or_default().to_owned();
+			let conflict = SignatureConflict {
+				package: package.clone(),
+				source: source_path,
+			};
+			tracker.update(|s| s.conflict = Some(conflict), true);
+			Err(SideloadError::Adb(crate::adb::AdbError::InstallFailed(
+				t!("inst.signature", package = package).into_owned(),
+			)))
+		}
+		other => other,
 	}
+}
+
+/// Releases with an install.txt may keep their payload in a `.7z` next to it
+/// (`_data.7z`); the script expects it unpacked. Downloads from a mirror are
+/// unpacked already; this covers folders installed by hand. The archives
+/// stay, so the folder can be installed again.
+async fn unpack_side_archives(root: &Path, tracker: &Tracker) -> Result<(), SideloadError> {
+	let root = root.to_path_buf();
+	let archives = {
+		let root = root.clone();
+		blocking(move || {
+			let entries = std::fs::read_dir(&root).map_err(io_err(&root))?;
+			Ok(entries
+				.filter_map(|e| e.ok())
+				.map(|e| e.path())
+				.filter(|p| {
+					p.is_file() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("7z"))
+				})
+				.collect::<Vec<_>>())
+		})
+		.await?
+	};
+	for archive in archives {
+		let name = archive
+			.file_name()
+			.unwrap_or_default()
+			.to_string_lossy()
+			.into_owned();
+		tracker.stage(t!("inst.unpacking", name = name));
+		let progress = |done: u64, total: u64| tracker.bytes(done, Some(total));
+		let never = std::sync::atomic::AtomicBool::new(false);
+		let result = tokio::task::block_in_place(|| {
+			crate::archive::extract_7z(
+				std::slice::from_ref(&archive),
+				&root,
+				None,
+				&progress,
+				&never,
+			)
+		});
+		result.map_err(|e| SideloadError::Zip {
+			path: archive.clone(),
+			message: match e {
+				crate::archive::ArchiveError::WrongPassword => {
+					t!("inst.data_password").into_owned()
+				}
+				other => other.to_string(),
+			},
+		})?;
+	}
+	Ok(())
 }
 
 async fn read_script(path: &Path, plan: &InstallPlan) -> Result<ScriptAnalysis, SideloadError> {
@@ -382,5 +464,36 @@ mod tests {
 		});
 		assert_eq!(finished_state(&s.engine, id), TaskState::Done);
 		assert_eq!(s.fake.recorded.lock().unwrap().pushed.len(), 1);
+	}
+
+	#[test]
+	fn side_archive_is_unpacked_before_the_script() {
+		let s = setup("adb push extra.bin /sdcard/Android/data/com.example.game/files/extra.bin\n");
+		let packed = s.release.parent().unwrap().join("packed");
+		std::fs::create_dir_all(&packed).unwrap();
+		std::fs::write(packed.join("extra.bin"), b"payload").unwrap();
+		sevenz_rust2::compress_to_path(&packed, s.release.join("_data.7z")).unwrap();
+
+		s.engine.send(Command::Install {
+			serial: "SER1".into(),
+			path: s.release.clone(),
+		});
+		let id = wait_for(&s.engine, |e| match e {
+			Event::TaskUpdated(t) => Some(t.id),
+			_ => None,
+		});
+		assert_eq!(finished_state(&s.engine, id), TaskState::Done);
+		let rec = s.fake.recorded.lock().unwrap();
+		assert_eq!(
+			rec.pushed,
+			[(
+				"/sdcard/Android/data/com.example.game/files/extra.bin".to_owned(),
+				b"payload".to_vec()
+			)]
+		);
+		assert!(
+			s.release.join("_data.7z").is_file(),
+			"the user's archive stays"
+		);
 	}
 }

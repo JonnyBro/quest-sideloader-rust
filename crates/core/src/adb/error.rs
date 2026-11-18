@@ -2,40 +2,40 @@ use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AdbError {
-	#[error("adb binary not found at {0}")]
+	#[error("{}", rust_i18n::t!("err.adb_not_found", path = .0.display()))]
 	BinaryNotFound(PathBuf),
 
-	#[error("could not start adb server: {0}")]
+	#[error("{}", rust_i18n::t!("err.adb_start", error = .0))]
 	StartFailed(String),
 
-	#[error("adb server is not reachable: {0}")]
+	#[error("{}", rust_i18n::t!("err.adb_unreachable", error = .0))]
 	Unreachable(#[source] std::io::Error),
 
 	#[error("adb: {0}")]
 	Server(String),
 
-	#[error("adb protocol error: {0}")]
+	#[error("{}", rust_i18n::t!("err.adb_protocol", error = .0))]
 	Protocol(String),
 
-	#[error("adb connection error: {0}")]
+	#[error("{}", rust_i18n::t!("err.adb_io", error = .0))]
 	Io(#[from] std::io::Error),
 
-	#[error("adb request timed out")]
+	#[error("{}", rust_i18n::t!("err.adb_timeout"))]
 	Timeout,
 
-	#[error("cannot read {path}: {source}")]
+	#[error("{}", rust_i18n::t!("err.adb_local_io", path = .path.display(), source = .source))]
 	LocalIo {
 		path: PathBuf,
 		#[source]
 		source: std::io::Error,
 	},
 
-	#[error("push to {remote} failed: {message}")]
+	#[error("{}", rust_i18n::t!("err.adb_push", remote = .remote, message = .message))]
 	PushFailed { remote: String, message: String },
 
-	#[error("pull of {remote} failed: {message}")]
+	#[error("{}", rust_i18n::t!("err.adb_pull", remote = .remote, message = .message))]
 	PullFailed { remote: String, message: String },
 
-	#[error("installation failed: {0}")]
+	#[error("{}", rust_i18n::t!("err.adb_install", error = .0))]
 	InstallFailed(String),
 }

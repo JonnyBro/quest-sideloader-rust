@@ -1,6 +1,7 @@
 //! What the UI sees of a background job: installs and downloads report
 //! through a [`Tracker`] that turns progress into [`TaskSnapshot`] events.
 
+use rust_i18n::t;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -20,6 +21,21 @@ pub enum TaskKind {
 	Download,
 	/// Sending an app version from the headset to the mirror.
 	Upload,
+	Backup,
+	Restore,
+	Uninstall,
+	/// Downloading adb (Android SDK Platform-Tools).
+	AdbSetup,
+	/// Downloading rclone.
+	RcloneSetup,
+}
+
+/// The headset has the app signed with another key, so it must be
+/// uninstalled before this build installs; `source` can be installed again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignatureConflict {
+	pub package: String,
+	pub source: PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -54,6 +70,8 @@ pub struct TaskSnapshot {
 	pub warnings: Vec<String>,
 	/// Folder with the unpacked release, kept after a download-only job.
 	pub output: Option<PathBuf>,
+	/// Set when the install failed because of a signature mismatch.
+	pub conflict: Option<SignatureConflict>,
 }
 
 const SEND_INTERVAL: Duration = Duration::from_millis(100);
@@ -189,21 +207,21 @@ impl Tracker {
 fn describe_rate(bytes_per_sec: f64, remaining: Option<u64>) -> String {
 	let speed = format!("{}/s", format_bytes(bytes_per_sec as u64));
 	match remaining {
-		Some(left) if bytes_per_sec >= 1.0 => {
-			format!(
-				"{speed} · {} left",
-				format_duration((left as f64 / bytes_per_sec) as u64)
-			)
-		}
+		Some(left) if bytes_per_sec >= 1.0 => t!(
+			"task.rate_left",
+			speed = speed,
+			left = format_duration((left as f64 / bytes_per_sec) as u64)
+		)
+		.into_owned(),
 		_ => speed,
 	}
 }
 
 fn format_duration(secs: u64) -> String {
 	match secs {
-		0..60 => format!("{secs} s"),
-		60..3600 => format!("{} min", secs.div_ceil(60)),
-		_ => format!("{} h {} min", secs / 3600, (secs % 3600) / 60),
+		0..60 => t!("time.secs", n = secs).into_owned(),
+		60..3600 => t!("time.mins", n = secs.div_ceil(60)).into_owned(),
+		_ => t!("time.hours_mins", h = secs / 3600, m = (secs % 3600) / 60).into_owned(),
 	}
 }
 

@@ -43,7 +43,7 @@ impl Columns {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("the game list has no header with Game Name, Release Name and Package Name columns")]
+#[error("{}", rust_i18n::t!("err.bad_header"))]
 pub struct BadHeader;
 
 pub fn parse_game_list(text: &str) -> Result<Vec<Game>, BadHeader> {

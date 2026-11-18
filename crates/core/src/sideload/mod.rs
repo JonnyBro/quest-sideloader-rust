@@ -22,22 +22,22 @@ pub enum SideloadError {
 		source: std::io::Error,
 	},
 
-	#[error("cannot read APK {path}: {message}")]
+	#[error("{}", rust_i18n::t!("err.sl_apk", path = .path.display(), message = .message))]
 	Apk { path: PathBuf, message: String },
 
-	#[error("cannot extract {path}: {message}")]
+	#[error("{}", rust_i18n::t!("err.sl_zip", path = .path.display(), message = .message))]
 	Zip { path: PathBuf, message: String },
 
-	#[error("nothing to install in {0}: no APK, OBB folder or install.txt found")]
+	#[error("{}", rust_i18n::t!("err.sl_nothing", path = .0.display()))]
 	NothingToInstall(PathBuf),
 
-	#[error("unsupported file {0}: drop an .apk, a .zip or a folder")]
+	#[error("{}", rust_i18n::t!("err.sl_unsupported", path = .0.display()))]
 	Unsupported(PathBuf),
 
-	#[error("install.txt line {line}: {message}")]
+	#[error("{}", rust_i18n::t!("err.sl_script", line = .line, message = .message))]
 	Script { line: usize, message: String },
 
-	#[error("installation was cancelled")]
+	#[error("{}", rust_i18n::t!("err.sl_cancelled"))]
 	Cancelled,
 
 	#[error(transparent)]

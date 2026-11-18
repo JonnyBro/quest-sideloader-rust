@@ -4,15 +4,18 @@
 mod fetch;
 mod list;
 mod mirror;
+mod rclone_config;
 mod store;
 mod throttle;
 
 use std::path::PathBuf;
 
-pub use fetch::{FetchProgress, Fetcher, RemoteFile, release_file_path};
+pub(crate) use fetch::header_names;
+pub use fetch::{FetchProgress, Fetcher, RcloneAccess, RemoteFile, release_file_path};
 pub use list::{BadHeader, Game, parse_game_list};
 pub use mirror::{Header, Mirror, MirrorKind, rclone_remotes, release_hash};
-pub use store::{Catalog, SyncStage, sync};
+pub use rclone_config::check_mirror_rclone_config;
+pub use store::{Catalog, SyncStage, UploadTarget, sync};
 
 use crate::archive::ArchiveError;
 
@@ -21,13 +24,13 @@ pub enum CatalogError {
 	#[error("{0}")]
 	Config(String),
 
-	#[error("network error: {0}")]
+	#[error("{}", rust_i18n::t!("err.cat_http", error = .0))]
 	Http(String),
 
-	#[error("mirror answered {status} for {url}")]
+	#[error("{}", rust_i18n::t!("err.cat_status", status = .status, url = .url))]
 	Status { status: u16, url: String },
 
-	#[error("rclone binary not found at {0}")]
+	#[error("{}", rust_i18n::t!("err.rclone_not_found", path = .0.display()))]
 	RcloneNotFound(PathBuf),
 
 	#[error("rclone: {0}")]
@@ -43,7 +46,7 @@ pub enum CatalogError {
 	#[error(transparent)]
 	Archive(#[from] ArchiveError),
 
-	#[error("the mirror's metadata has no game list")]
+	#[error("{}", rust_i18n::t!("err.no_game_list"))]
 	NoGameList,
 
 	#[error(transparent)]

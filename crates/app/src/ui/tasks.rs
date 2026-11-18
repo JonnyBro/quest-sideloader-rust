@@ -1,4 +1,5 @@
 use quest_sideloader_core::{Command, TaskId, TaskKind, TaskSnapshot, TaskState};
+use rust_i18n::t;
 
 pub struct TasksView {
 	tasks: Vec<TaskSnapshot>,
@@ -9,12 +10,20 @@ impl TasksView {
 		Self { tasks: Vec::new() }
 	}
 
-	pub fn on_update(&mut self, snapshot: TaskSnapshot) {
+	/// Returns true when this update is the one that finished the task.
+	pub fn on_update(&mut self, snapshot: TaskSnapshot) -> bool {
+		let finishing = snapshot.state.is_finished();
 		match self.tasks.iter_mut().find(|t| t.id == snapshot.id) {
 			// A late progress update must not resurrect a task that was cancelled.
-			Some(existing) if existing.state.is_finished() => {}
-			Some(existing) => *existing = snapshot,
-			None => self.tasks.push(snapshot),
+			Some(existing) if existing.state.is_finished() => false,
+			Some(existing) => {
+				*existing = snapshot;
+				finishing
+			}
+			None => {
+				self.tasks.push(snapshot);
+				finishing
+			}
 		}
 	}
 
@@ -46,7 +55,7 @@ impl TasksView {
 			let text = format!("{}: {}", current.title, current.stage);
 			clicked |= ui.link(text).clicked();
 			if active.len() > 1 {
-				ui.weak(format!("+{} more", active.len() - 1));
+				ui.weak(t!("tasks.more", n = active.len() - 1));
 			}
 		});
 		clicked
@@ -61,9 +70,9 @@ impl TasksView {
 	) {
 		let mut dismiss: Vec<TaskId> = Vec::new();
 		ui.horizontal(|ui| {
-			ui.heading("Downloads and installations");
+			ui.heading(t!("tasks.heading"));
 			if self.tasks.iter().any(|t| t.state.is_finished())
-				&& ui.button("Clear finished").clicked()
+				&& ui.button(t!("tasks.clear")).clicked()
 			{
 				dismiss.extend(
 					self.tasks
@@ -76,9 +85,7 @@ impl TasksView {
 		ui.separator();
 		if self.tasks.is_empty() {
 			ui.centered_and_justified(|ui| {
-				ui.weak(
-					"Nothing here yet. Download games from the Library, or drop files onto the window.",
-				);
+				ui.weak(t!("tasks.empty"));
 			});
 			return;
 		}
@@ -115,22 +122,33 @@ fn task_row(
 	ui.horizontal(|ui| {
 		ui.label(egui::RichText::new(&task.title).strong());
 		ui.weak(match (task.kind, &task.serial) {
-			(TaskKind::Download, Some(serial)) => format!("download and install · {serial}"),
-			(TaskKind::Download, None) => "download only".to_owned(),
-			(TaskKind::Install, Some(serial)) => format!("install · {serial}"),
-			(TaskKind::Install, None) => "install".to_owned(),
-			(TaskKind::Upload, Some(serial)) => format!("upload to the library · {serial}"),
-			(TaskKind::Upload, None) => "upload to the library".to_owned(),
+			(TaskKind::Download, Some(serial)) => {
+				t!("tasks.kind_download_install", serial = serial)
+			}
+			(TaskKind::Download, None) => t!("tasks.kind_download"),
+			(TaskKind::Install, Some(serial)) => t!("tasks.kind_install_on", serial = serial),
+			(TaskKind::Install, None) => t!("tasks.kind_install"),
+			(TaskKind::Upload, Some(serial)) => t!("tasks.kind_upload_on", serial = serial),
+			(TaskKind::Upload, None) => t!("tasks.kind_upload"),
+			(TaskKind::Backup, _) => t!("tasks.kind_backup"),
+			(TaskKind::Restore, _) => t!("tasks.kind_restore"),
+			(TaskKind::Uninstall, _) => t!("tasks.kind_uninstall"),
+			(TaskKind::AdbSetup, _) => t!("tasks.kind_adb"),
+			(TaskKind::RcloneSetup, _) => t!("tasks.kind_rclone"),
 		});
 		ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
 			if task.state.is_finished() {
-				if ui.small_button("✕").on_hover_text("Dismiss").clicked() {
+				if ui
+					.small_button("✕")
+					.on_hover_text(t!("tasks.dismiss"))
+					.clicked()
+				{
 					dismiss.push(task.id);
 				}
 				if let (Some(path), Some((serial, name))) = (&task.output, install_target)
 					&& ui
-						.small_button("Install")
-						.on_hover_text(format!("Install on {name}"))
+						.small_button(t!("common.install"))
+						.on_hover_text(t!("common.install_on", name = name))
 						.clicked()
 				{
 					commands.push(Command::Install {
@@ -140,13 +158,13 @@ fn task_row(
 				}
 				return;
 			}
-			if ui.small_button("Cancel").clicked() {
+			if ui.small_button(t!("common.cancel")).clicked() {
 				commands.push(Command::CancelTask(task.id));
 			}
 			if let Some(position) = queued.iter().position(|id| *id == task.id) {
 				if ui
 					.add_enabled(position + 1 < queued.len(), egui::Button::new("⏷").small())
-					.on_hover_text("Later")
+					.on_hover_text(t!("tasks.later"))
 					.clicked()
 				{
 					commands.push(Command::MoveDownload {
@@ -156,7 +174,7 @@ fn task_row(
 				}
 				if ui
 					.add_enabled(position > 0, egui::Button::new("⏶").small())
-					.on_hover_text("Sooner")
+					.on_hover_text(t!("tasks.sooner"))
 					.clicked()
 				{
 					commands.push(Command::MoveDownload {
@@ -201,15 +219,31 @@ fn task_row(
 			});
 		}
 		TaskState::Cancelled => {
-			ui.weak("Cancelled");
+			ui.weak(t!("tasks.cancelled"));
 		}
 		TaskState::Failed(error) => {
 			ui.colored_label(ui.visuals().error_fg_color, error);
+			if let (Some(conflict), Some(serial)) = (&task.conflict, &task.serial)
+				&& ui
+					.button(t!("tasks.reinstall"))
+					.on_hover_text(t!("tasks.reinstall_hint"))
+					.clicked()
+			{
+				commands.push(Command::ReinstallKeepingSaves {
+					serial: serial.clone(),
+					app: quest_sideloader_core::AppInfo {
+						package: conflict.package.clone(),
+						name: task.title.clone(),
+						version_code: None,
+					},
+					source: conflict.source.clone(),
+				});
+			}
 		}
 	}
 
 	if !task.warnings.is_empty() {
-		egui::CollapsingHeader::new(format!("{} warning(s)", task.warnings.len()))
+		egui::CollapsingHeader::new(t!("tasks.warnings", n = task.warnings.len()))
 			.id_salt(("task_warnings", task.id))
 			.show(ui, |ui| {
 				for warning in &task.warnings {

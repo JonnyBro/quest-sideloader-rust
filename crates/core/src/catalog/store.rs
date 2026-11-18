@@ -8,7 +8,7 @@ use std::time::SystemTime;
 
 use super::fetch::{FetchProgress, Fetcher};
 use super::list::{Game, parse_game_list};
-use super::mirror::Mirror;
+use super::mirror::{Mirror, rclone_remotes};
 use super::{CatalogError, io_err};
 use crate::archive::extract_7z;
 
@@ -21,6 +21,18 @@ pub struct Catalog {
 	thumbnails: HashSet<String>,
 	blacklist: HashSet<String>,
 }
+
+/// Where contributed app versions are uploaded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UploadTarget {
+	pub config_file: PathBuf,
+	pub remote: String,
+	/// Folder on the remote; empty for its root.
+	pub dir: String,
+}
+
+/// The remote name VRP mirrors use in their `upload.config`.
+const VRP_UPLOAD_REMOTE: &str = "RSL-gameuploads";
 
 impl Catalog {
 	pub fn thumbnail(&self, package: &str) -> Option<PathBuf> {
@@ -46,10 +58,25 @@ impl Catalog {
 		(!text.is_empty()).then_some(text)
 	}
 
-	/// rclone config the mirror publishes for contributing new app versions.
-	pub fn upload_config(&self) -> Option<PathBuf> {
-		let path = self.meta_dir.join(".meta/upload.config");
-		path.is_file().then_some(path)
+	/// Where the mirror accepts new app versions, if it does.
+	pub fn upload_target(&self) -> Option<UploadTarget> {
+		let config_file = self.meta_dir.join(".meta/upload.config");
+		let text = std::fs::read_to_string(&config_file).ok()?;
+		if let Err(e) = super::check_mirror_rclone_config(&text) {
+			tracing::warn!("ignoring the mirror's upload config: {e}");
+			return None;
+		}
+		let remotes = rclone_remotes(&text);
+		let remote = remotes
+			.iter()
+			.find(|r| r.as_str() == VRP_UPLOAD_REMOTE)
+			.or(remotes.first())?
+			.clone();
+		Some(UploadTarget {
+			config_file,
+			remote,
+			dir: String::new(),
+		})
 	}
 
 	/// Packages the mirror doesn't want offered for upload.
@@ -135,10 +162,9 @@ pub async fn sync(
 	fetcher
 		.download_file(mirror, "meta.7z", &archive, progress)
 		.await?;
+	tracing::debug!(size = ?std::fs::metadata(&archive).map(|m| m.len()).ok(), "meta.7z downloaded, unpacking");
 
 	let staging = mirror_dir.join("staging");
-	let current = mirror_dir.join("current");
-	let previous = mirror_dir.join("previous");
 	let mirror_id = mirror.id.clone();
 	let root = root.to_path_buf();
 
@@ -152,19 +178,30 @@ pub async fn sync(
 			&|done, total| stage(SyncStage::Extracting { done, total }),
 			&never,
 		)?;
-		find_game_list(&staging)?;
-
-		remove_dir_if_exists(&previous)?;
-		if current.exists() {
-			std::fs::rename(&current, &previous).map_err(io_err(&current))?;
-		}
-		std::fs::rename(&staging, &current).map_err(io_err(&staging))?;
-		remove_dir_if_exists(&previous)?;
 		let _ = std::fs::remove_file(&archive);
-		Catalog::load(&root, &mirror_id)?.ok_or(CatalogError::NoGameList)
+		replace_current(&root, &mirror_id)
 	};
 	// Borrowed `stage` can't cross into spawn_blocking, so run on this thread.
 	tokio::task::block_in_place(unpack)
+}
+
+/// Checks `<mirror>/staging` and swaps it in for `<mirror>/current`.
+fn replace_current(root: &Path, mirror_id: &str) -> Result<Catalog, CatalogError> {
+	let mirror_dir = root.join(mirror_id);
+	let staging = mirror_dir.join("staging");
+	let current = mirror_dir.join("current");
+	let previous = mirror_dir.join("previous");
+	let list = find_game_list(&staging)?;
+	let text = std::fs::read(&list).map_err(io_err(&list))?;
+	parse_game_list(&String::from_utf8_lossy(&text))?;
+
+	remove_dir_if_exists(&previous)?;
+	if current.exists() {
+		std::fs::rename(&current, &previous).map_err(io_err(&current))?;
+	}
+	std::fs::rename(&staging, &current).map_err(io_err(&staging))?;
+	remove_dir_if_exists(&previous)?;
+	Catalog::load(root, mirror_id)?.ok_or(CatalogError::NoGameList)
 }
 
 fn remove_dir_if_exists(path: &Path) -> Result<(), CatalogError> {
@@ -226,7 +263,9 @@ mod tests {
 		assert!(catalog.is_blacklisted("com.discord"));
 		assert!(catalog.is_blacklisted("com.x.y"));
 		assert!(!catalog.is_blacklisted("com.a.game"));
-		assert!(catalog.upload_config().is_some());
+		let target = catalog.upload_target().unwrap();
+		assert_eq!(target.remote, "RSL-gameuploads");
+		assert_eq!(target.dir, "");
 	}
 
 	fn packed_meta(dir: &Path, password: &str) -> Vec<u8> {

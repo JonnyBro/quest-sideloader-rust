@@ -1,6 +1,7 @@
+use rust_i18n::t;
 use std::sync::Arc;
 
-use quest_sideloader_core::settings::Theme;
+use quest_sideloader_core::settings::{Language, Theme};
 use quest_sideloader_core::{AppPaths, Command, Engine, Event, Settings};
 
 use crate::ui;
@@ -8,20 +9,31 @@ use crate::ui;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
 	Devices,
+	Headset,
 	Library,
 	Downloads,
+	Tasks,
 	Settings,
 }
 
 impl Tab {
-	const ALL: [Tab; 4] = [Tab::Devices, Tab::Library, Tab::Downloads, Tab::Settings];
+	const ALL: [Tab; 6] = [
+		Tab::Devices,
+		Tab::Headset,
+		Tab::Library,
+		Tab::Downloads,
+		Tab::Tasks,
+		Tab::Settings,
+	];
 
-	fn label(self) -> &'static str {
+	fn label(self) -> std::borrow::Cow<'static, str> {
 		match self {
-			Tab::Devices => "Devices",
-			Tab::Library => "Library",
-			Tab::Downloads => "Downloads",
-			Tab::Settings => "Settings",
+			Tab::Devices => t!("tab.devices"),
+			Tab::Headset => t!("tab.headset"),
+			Tab::Library => t!("tab.library"),
+			Tab::Downloads => t!("tab.downloads"),
+			Tab::Tasks => t!("tab.tasks"),
+			Tab::Settings => t!("tab.settings"),
 		}
 	}
 }
@@ -38,6 +50,11 @@ pub struct SideloaderApp {
 	status: Option<Status>,
 	devices_view: ui::devices::DevicesView,
 	tasks_view: ui::tasks::TasksView,
+	downloads_view: ui::downloads::DownloadsView,
+	headset_view: ui::headset::HeadsetView,
+	logs_view: ui::logs::LogsView,
+	adb_setup: ui::tool_setup::AdbSetup,
+	rclone_setup: ui::tool_setup::RcloneSetup,
 	review_dialog: ui::review::ReviewDialog,
 	library_view: ui::library::LibraryView,
 	settings_view: ui::settings::SettingsView,
@@ -49,6 +66,7 @@ impl SideloaderApp {
 		paths: AppPaths,
 		settings: Settings,
 		load_error: Option<String>,
+		log_buffer: crate::logbuf::LogBuffer,
 	) -> Result<Self, quest_sideloader_core::Error> {
 		let ctx = cc.egui_ctx.clone();
 		let engine = Engine::start(
@@ -57,19 +75,23 @@ impl SideloaderApp {
 			Arc::new(move || ctx.request_repaint()),
 		)?;
 		apply_theme(&cc.egui_ctx, settings.theme);
+		apply_language(settings.language);
 		egui_extras::install_image_loaders(&cc.egui_ctx);
 
+		let logs_dir = paths.logs_dir();
 		Ok(Self {
 			engine,
 			paths,
 			tab: Tab::Devices,
-			status: load_error.map(|e| {
-				Status::Error(format!(
-					"{e}. Using defaults; saving will overwrite the file."
-				))
-			}),
+			status: load_error
+				.map(|e| Status::Error(t!("app.settings_load_error", error = e).into_owned())),
 			devices_view: ui::devices::DevicesView::new(),
 			tasks_view: ui::tasks::TasksView::new(),
+			downloads_view: ui::downloads::DownloadsView::new(),
+			headset_view: ui::headset::HeadsetView::new(),
+			logs_view: ui::logs::LogsView::new(log_buffer, logs_dir),
+			adb_setup: ui::tool_setup::AdbSetup::default(),
+			rclone_setup: ui::tool_setup::RcloneSetup::default(),
 			review_dialog: ui::review::ReviewDialog::new(),
 			library_view: ui::library::LibraryView::new(),
 			settings_view: ui::settings::SettingsView::new(settings),
@@ -80,23 +102,58 @@ impl SideloaderApp {
 		match event {
 			Event::SettingsSaved(settings) => {
 				apply_theme(ctx, settings.theme);
+				apply_language(settings.language);
+				self.downloads_view.invalidate();
 				self.settings_view.saved(settings, &self.paths.rclone_dir());
-				self.status = Some(Status::Info("Settings saved".into()));
+				self.status = Some(Status::Info(t!("app.settings_saved").into_owned()));
 			}
 			Event::SettingsSaveFailed(message) => {
 				self.settings_view.save_failed();
 				self.status = Some(Status::Error(message));
 			}
-			Event::AdbStatus(status) => self.devices_view.on_adb_status(status),
+			Event::AdbStatus(status) => {
+				if matches!(status, quest_sideloader_core::AdbStatus::Missing(_)) {
+					self.adb_setup.on_missing();
+				}
+				self.devices_view.on_adb_status(status);
+			}
 			Event::DevicesChanged(devices) => self.devices_view.on_devices_changed(devices),
 			Event::DeviceInfo { serial, info } => self.devices_view.on_info(serial, info),
 			Event::CatalogLoaded(catalog) => self.library_view.on_catalog(catalog),
 			Event::CatalogStatus(status) => self.library_view.on_status(status),
+			Event::HeadsetDetails { serial, details } => {
+				self.headset_view.on_details(serial, details)
+			}
+			Event::Backups(backups) => self.headset_view.on_backups(backups),
+			Event::BackupsChanged => self.engine.send(Command::ListBackups),
+			Event::Downloads(releases) => self.downloads_view.on_list(releases),
+			Event::RcloneMissing => self.rclone_setup.on_missing(),
 			Event::TaskUpdated(snapshot) => {
+				if snapshot.state == quest_sideloader_core::TaskState::Done {
+					self.headset_view.invalidate();
+					// Installs can remove the release folder afterwards.
+					self.downloads_view.invalidate();
+				}
 				if snapshot.state.is_finished() {
 					self.review_dialog.forget(snapshot.id);
 				}
-				self.tasks_view.on_update(snapshot);
+				let in_background = !ctx.input(|i| i.viewport().focused.unwrap_or(true));
+				let notify = self.settings_view.notifications() && in_background;
+				let summary = match &snapshot.state {
+					quest_sideloader_core::TaskState::Done => {
+						Some((snapshot.title.clone(), snapshot.stage.clone()))
+					}
+					quest_sideloader_core::TaskState::Failed(e) => Some((
+						t!("app.task_failed", title = snapshot.title).into_owned(),
+						e.chars().take(200).collect(),
+					)),
+					_ => None,
+				};
+				if self.tasks_view.on_update(snapshot)
+					&& notify && let Some((title, body)) = summary
+				{
+					crate::notify::send(title, body);
+				}
 			}
 			Event::ScriptReview {
 				task,
@@ -132,8 +189,8 @@ impl SideloaderApp {
 
 		if hovering {
 			let text = match &target {
-				Some((_, name)) => format!("Drop to install on {name}"),
-				None => "Connect a headset (or select one) to install".to_owned(),
+				Some((_, name)) => t!("app.drop_to_install", name = name).into_owned(),
+				None => t!("app.drop_no_headset").into_owned(),
 			};
 			drop_overlay(ctx, &text);
 		}
@@ -141,9 +198,7 @@ impl SideloaderApp {
 			return;
 		}
 		let Some((serial, _)) = target else {
-			self.status = Some(Status::Error(
-				"No headset to install on: connect one or select it in Devices".into(),
-			));
+			self.status = Some(Status::Error(t!("app.no_headset").into_owned()));
 			return;
 		};
 		for path in dropped {
@@ -155,17 +210,23 @@ impl SideloaderApp {
 	}
 
 	fn status_bar(&mut self, ui: &mut egui::Ui) {
-		let Some(status) = &self.status else {
-			ui.weak("Ready");
-			return;
-		};
 		let mut dismiss = false;
 		ui.horizontal(|ui| {
-			match status {
-				Status::Info(text) => ui.label(text),
-				Status::Error(text) => ui.colored_label(ui.visuals().error_fg_color, text),
-			};
-			dismiss = ui.small_button("✕").clicked();
+			match &self.status {
+				None => {
+					ui.weak(t!("app.ready"));
+				}
+				Some(status) => {
+					match status {
+						Status::Info(text) => ui.label(text),
+						Status::Error(text) => ui.colored_label(ui.visuals().error_fg_color, text),
+					};
+					dismiss = ui.small_button("✕").clicked();
+				}
+			}
+			ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+				self.logs_view.button(ui);
+			});
 		});
 		if dismiss {
 			self.status = None;
@@ -193,17 +254,33 @@ impl eframe::App for SideloaderApp {
 		egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
 
 		let mut commands = Vec::new();
-		if self.tab != Tab::Downloads {
+		if self.tab != Tab::Tasks {
 			let mut open = false;
 			egui::Panel::bottom("tasks_summary")
 				.resizable(false)
 				.show(ui, |ui| open = self.tasks_view.summary(ui));
 			if open {
-				self.tab = Tab::Downloads;
+				self.tab = Tab::Tasks;
 			}
 		}
 		egui::CentralPanel::default().show(ui, |ui| match self.tab {
-			Tab::Devices => self.devices_view.show(ui, &mut commands),
+			Tab::Devices => {
+				if self.devices_view.show(ui, &mut commands) {
+					self.adb_setup.reopen();
+				}
+			}
+			Tab::Headset => {
+				let target = self
+					.devices_view
+					.install_target()
+					.map(|d| ui::headset::Target {
+						serial: &d.serial,
+						name: d.display_name(),
+						info: self.devices_view.info(&d.serial),
+						names: self.library_view.names(),
+					});
+				self.headset_view.show(ui, target, &mut commands);
+			}
 			Tab::Library => {
 				let installed = self.devices_view.installed_apps();
 				let ignored = self.settings_view.contribute_ignored();
@@ -216,6 +293,19 @@ impl eframe::App for SideloaderApp {
 				);
 			}
 			Tab::Downloads => {
+				let target = self
+					.devices_view
+					.install_target()
+					.map(|d| (d.serial.clone(), d.display_name()));
+				let target = target.as_ref().map(|(s, n)| (s.as_str(), n.as_str()));
+				self.downloads_view.show(
+					ui,
+					self.settings_view.downloads_dir(),
+					target,
+					&mut commands,
+				);
+			}
+			Tab::Tasks => {
 				let target = self
 					.devices_view
 					.install_target()
@@ -235,6 +325,9 @@ impl eframe::App for SideloaderApp {
 		});
 		let ctx = ui.ctx().clone();
 		self.review_dialog.show(&ctx, &mut commands);
+		self.logs_view.window(&ctx);
+		self.adb_setup.show(&ctx, &mut commands);
+		self.rclone_setup.show(&ctx, &mut commands);
 		self.handle_file_drop(&ctx, &mut commands);
 
 		for command in commands {
@@ -265,4 +358,14 @@ fn apply_theme(ctx: &egui::Context, theme: Theme) {
 		Theme::Dark => egui::ThemePreference::Dark,
 		Theme::Light => egui::ThemePreference::Light,
 	});
+}
+
+fn apply_language(language: Language) {
+	let russian = match language {
+		Language::Russian => true,
+		Language::English => false,
+		Language::System => sys_locale::get_locale().is_some_and(|l| l.starts_with("ru")),
+	};
+	// Shared by the core crate too: rust-i18n keeps one global locale.
+	rust_i18n::set_locale(if russian { "ru" } else { "en" });
 }

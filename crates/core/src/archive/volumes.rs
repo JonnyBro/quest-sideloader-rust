@@ -1,3 +1,4 @@
+use rust_i18n::t;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -114,7 +115,7 @@ pub fn find_volumes(any: &Path) -> io::Result<Vec<PathBuf>> {
 	if volumes.is_empty() {
 		return Err(io::Error::new(
 			io::ErrorKind::NotFound,
-			format!("first volume {stem}.{:0width$} is missing", 1),
+			t!("arc.first_volume", name = format!("{stem}.{:0width$}", 1)).into_owned(),
 		));
 	}
 	Ok(volumes)

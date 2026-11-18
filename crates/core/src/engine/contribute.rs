@@ -1,7 +1,8 @@
 //! Uploading an app version from the headset to the mirror. Reading from the
 //! headset only: the APK and OBB are pulled, nothing on the device changes.
 
-use std::path::{Path, PathBuf};
+use rust_i18n::t;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
@@ -9,13 +10,10 @@ use tokio::sync::Mutex;
 use super::EventSink;
 use super::task::{TaskEntry, TaskId, TaskKind, TaskSnapshot, TaskState, TempDir, Tracker};
 use crate::adb::Device;
-use crate::catalog::{Fetcher, rclone_remotes};
+use crate::catalog::{Fetcher, RcloneAccess, UploadTarget};
 use crate::contribute::{archive_name, hwid, pack};
 use crate::format_bytes;
 use crate::sideload::read_apk_meta;
-
-/// The remote name mirrors use in their `upload.config`.
-const UPLOAD_REMOTE: &str = "RSL-gameuploads";
 
 pub(super) struct Upload {
 	pub id: TaskId,
@@ -23,7 +21,7 @@ pub(super) struct Upload {
 	pub package: String,
 	/// Shown until the APK's own label is known.
 	pub name: String,
-	pub upload_config: PathBuf,
+	pub target: UploadTarget,
 	pub work_dir: PathBuf,
 	pub fetcher: Fetcher,
 	/// Uploads go one at a time.
@@ -38,12 +36,13 @@ pub(super) fn spawn(upload: Upload) -> TaskEntry {
 			kind: TaskKind::Upload,
 			serial: Some(upload.device.serial().to_owned()),
 			title: upload.name.clone(),
-			stage: "Queued".into(),
+			stage: t!("task.queued").into_owned(),
 			progress: None,
 			detail: None,
 			state: TaskState::Running,
 			warnings: Vec::new(),
 			output: None,
+			conflict: None,
 		},
 		upload.sink.clone(),
 	);
@@ -51,9 +50,7 @@ pub(super) fn spawn(upload: Upload) -> TaskEntry {
 	let handle = tokio::spawn(async move {
 		let _cleanup = TempDir(upload.work_dir.clone());
 		match run(&upload, &task_tracker).await {
-			Ok(()) => {
-				task_tracker.finish(TaskState::Done, Some("Uploaded, thank you".into()), None)
-			}
+			Ok(()) => task_tracker.finish(TaskState::Done, Some(t!("up.done").into_owned()), None),
 			Err(e) => {
 				tracing::error!("upload of {} failed: {e}", upload.package);
 				task_tracker.finish(TaskState::Failed(e), None, None);
@@ -68,24 +65,11 @@ pub(super) fn spawn(upload: Upload) -> TaskEntry {
 	}
 }
 
-fn remote_name(config: &Path) -> Result<String, String> {
-	let text =
-		std::fs::read_to_string(config).map_err(|e| format!("cannot read upload config: {e}"))?;
-	let remotes = rclone_remotes(&text);
-	remotes
-		.iter()
-		.find(|r| r.as_str() == UPLOAD_REMOTE)
-		.or(remotes.first())
-		.cloned()
-		.ok_or_else(|| "the mirror's upload config has no remote".to_owned())
-}
-
 async fn run(upload: &Upload, tracker: &Tracker) -> Result<(), String> {
 	let device = &upload.device;
 	let package = &upload.package;
-	let remote = remote_name(&upload.upload_config)?;
 
-	tracker.stage("Looking up the app on the headset");
+	tracker.stage(t!("up.looking_up"));
 	let apk_remote = device.apk_path(package).await.map_err(|e| e.to_string())?;
 	let apk_dir = apk_remote.rsplit_once('/').map_or("/", |(dir, _)| dir);
 	let apk_size = device
@@ -127,17 +111,15 @@ async fn run(upload: &Upload, tracker: &Tracker) -> Result<(), String> {
 	// The pulled files and their zip exist side by side.
 	let available = fs4::available_space(&package_dir).map_err(|e| e.to_string())?;
 	if available < total.saturating_mul(2) {
-		return Err(format!(
-			"not enough free space to prepare the upload: need about {}, have {}",
-			format_bytes(total.saturating_mul(2)),
-			format_bytes(available)
-		));
+		return Err(t!(
+			"up.no_space",
+			need = format_bytes(total.saturating_mul(2)),
+			have = format_bytes(available)
+		)
+		.into_owned());
 	}
 
-	tracker.stage(format!(
-		"Copying from the headset ({})",
-		format_bytes(total)
-	));
+	tracker.stage(t!("up.copying", size = format_bytes(total)));
 	let done = std::sync::atomic::AtomicU64::new(0);
 	let progress = |n: u64| {
 		let now = done.fetch_add(n, std::sync::atomic::Ordering::Relaxed) + n;
@@ -154,14 +136,11 @@ async fn run(upload: &Upload, tracker: &Tracker) -> Result<(), String> {
 		.map_err(|e| e.to_string())?
 		.map_err(|e| e.to_string())?;
 	if meta.package != *package {
-		return Err(format!(
-			"the headset returned an APK for {}, not {package}",
-			meta.package
-		));
+		return Err(t!("up.wrong_apk", got = meta.package, package = package).into_owned());
 	}
 	let version = meta
 		.version_code
-		.ok_or_else(|| "the APK has no version code".to_owned())?;
+		.ok_or_else(|| t!("up.no_version").into_owned())?;
 	let name = meta.label.clone().unwrap_or_else(|| upload.name.clone());
 	tracker.update(|s| s.title = format!("{name} v{version}"), true);
 
@@ -175,7 +154,7 @@ async fn run(upload: &Upload, tracker: &Tracker) -> Result<(), String> {
 		.await
 		.map_err(|e| e.to_string())?;
 
-	tracker.stage("Packing");
+	tracker.stage(t!("up.packing"));
 	let zip_path = upload.work_dir.join(archive_name(
 		&name,
 		version,
@@ -193,36 +172,24 @@ async fn run(upload: &Upload, tracker: &Tracker) -> Result<(), String> {
 	let _turn = match upload.lock.try_lock() {
 		Ok(guard) => guard,
 		Err(_) => {
-			tracker.stage("Waiting for another upload to finish");
+			tracker.stage(t!("up.waiting"));
 			upload.lock.lock().await
 		}
 	};
-	tracker.stage("Uploading to the mirror");
+	tracker.stage(t!("up.uploading"));
 	let progress = |done: u64, total: Option<u64>| tracker.bytes(done, total);
 	upload
 		.fetcher
-		.rclone_upload(&upload.upload_config, &remote, &zip_path, &progress)
+		.rclone_upload(
+			&RcloneAccess {
+				config_file: &upload.target.config_file,
+			},
+			&upload.target.remote,
+			&upload.target.dir,
+			&[],
+			&zip_path,
+			&progress,
+		)
 		.await
 		.map_err(|e| e.to_string())
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn picks_upload_remote() {
-		let dir = tempfile::tempdir().unwrap();
-		let config = dir.path().join("upload.config");
-		std::fs::write(
-			&config,
-			"[other]\ntype = ftp\n[RSL-gameuploads]\ntype = ftp\n",
-		)
-		.unwrap();
-		assert_eq!(remote_name(&config).unwrap(), "RSL-gameuploads");
-		std::fs::write(&config, "[only]\ntype = ftp\n").unwrap();
-		assert_eq!(remote_name(&config).unwrap(), "only");
-		std::fs::write(&config, "").unwrap();
-		assert!(remote_name(&config).is_err());
-	}
 }

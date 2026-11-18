@@ -1,3 +1,4 @@
+use rust_i18n::t;
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -29,6 +30,10 @@ async fn track(server: AdbServer, sink: EventSink) {
 					None
 				}
 			},
+			Err(e @ crate::adb::AdbError::BinaryNotFound(_)) => {
+				sink.emit(Event::AdbStatus(AdbStatus::Missing(e.to_string())));
+				None
+			}
 			Err(e) => {
 				sink.emit(Event::AdbStatus(AdbStatus::Unavailable(e.to_string())));
 				None
@@ -86,7 +91,9 @@ pub(super) fn spawn_connect(server: AdbServer, address: String, sink: EventSink)
 	tokio::spawn(async move {
 		match server.connect_wireless(&address).await {
 			Ok(message) => sink.emit(Event::Notice(message)),
-			Err(e) => sink.emit(Event::Error(format!("connect {address}: {e}"))),
+			Err(e) => sink.emit(Event::Error(
+				t!("dev.connect_failed", address = address, error = e).into_owned(),
+			)),
 		}
 	});
 }
@@ -95,7 +102,9 @@ pub(super) fn spawn_disconnect(server: AdbServer, address: String, sink: EventSi
 	tokio::spawn(async move {
 		match server.disconnect_wireless(&address).await {
 			Ok(message) => sink.emit(Event::Notice(message)),
-			Err(e) => sink.emit(Event::Error(format!("disconnect {address}: {e}"))),
+			Err(e) => sink.emit(Event::Error(
+				t!("dev.disconnect_failed", address = address, error = e).into_owned(),
+			)),
 		}
 	});
 }

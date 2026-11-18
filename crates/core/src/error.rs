@@ -2,27 +2,27 @@ use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-	#[error("could not determine platform directories")]
+	#[error("{}", rust_i18n::t!("err.no_platform_dirs"))]
 	NoPlatformDirs,
 
-	#[error("I/O error at {path}: {source}")]
+	#[error("{}", rust_i18n::t!("err.io", path = .path.display(), source = .source))]
 	Io {
 		path: PathBuf,
 		#[source]
 		source: std::io::Error,
 	},
 
-	#[error("invalid settings file {path}: {source}")]
+	#[error("{}", rust_i18n::t!("err.settings_parse", path = .path.display(), source = .source))]
 	SettingsParse {
 		path: PathBuf,
 		#[source]
 		source: toml::de::Error,
 	},
 
-	#[error("failed to serialize settings: {0}")]
+	#[error("{}", rust_i18n::t!("err.settings_serialize", error = .0))]
 	SettingsSerialize(#[from] toml::ser::Error),
 
-	#[error("failed to start async runtime: {0}")]
+	#[error("{}", rust_i18n::t!("err.runtime", error = .0))]
 	Runtime(#[source] std::io::Error),
 }
 

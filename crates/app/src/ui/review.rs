@@ -1,3 +1,4 @@
+use rust_i18n::t;
 use std::collections::VecDeque;
 
 use quest_sideloader_core::sideload::script::{LineKind, ScriptAnalysis, ScriptLine, Verdict};
@@ -45,14 +46,11 @@ impl ReviewDialog {
 				let screen = ctx.content_rect();
 				ui.set_width((screen.width() - 120.0).clamp(420.0, 900.0));
 
-				ui.heading(format!("Review install.txt: {}", review.title));
-				ui.label(
-					"This release comes with a script of adb commands. Some lines do more than \
-				 install the game, so they won't run without your permission.",
-				);
+				ui.heading(t!("rev.heading", title = review.title));
+				ui.label(t!("rev.intro"));
 				if let Some(package) = &review.analysis.package {
 					ui.horizontal(|ui| {
-						ui.label("Game package:");
+						ui.label(t!("rev.package"));
 						ui.monospace(package);
 					});
 				}
@@ -71,28 +69,24 @@ impl ReviewDialog {
 				ui.add_space(8.0);
 				let suspicious = count(&review.analysis, |v| matches!(v, Verdict::Suspicious(_)));
 				let blocked = count(&review.analysis, |v| matches!(v, Verdict::Blocked(_)));
-				ui.label(format!(
-					"{suspicious} line(s) need permission, {blocked} line(s) will never run."
-				));
+				ui.label(t!("rev.counts", suspicious = suspicious, blocked = blocked));
 				ui.horizontal(|ui| {
 					if suspicious > 0
 						&& ui
-							.button("Run all allowed lines")
-							.on_hover_text(
-								"Runs safe and highlighted lines; blocked lines are still skipped",
-							)
+							.button(t!("rev.run_all"))
+							.on_hover_text(t!("rev.run_all_hint"))
 							.clicked()
 					{
 						decision = Some(ReviewDecision::RunAll);
 					}
 					if ui
-						.button("Run safe lines only")
-						.on_hover_text("The game may not work if a skipped line was needed")
+						.button(t!("rev.safe_only"))
+						.on_hover_text(t!("rev.safe_only_hint"))
 						.clicked()
 					{
 						decision = Some(ReviewDecision::SafeOnly);
 					}
-					if ui.button("Cancel installation").clicked() {
+					if ui.button(t!("rev.cancel")).clicked() {
 						decision = Some(ReviewDecision::Cancel);
 					}
 				});
@@ -138,15 +132,15 @@ fn blocked_color(ui: &egui::Ui) -> egui::Color32 {
 fn legend(ui: &mut egui::Ui) {
 	ui.horizontal(|ui| {
 		for (color, text) in [
-			(suspicious_color(ui), "needs permission"),
-			(blocked_color(ui), "blocked"),
+			(suspicious_color(ui), t!("rev.needs_permission")),
+			(blocked_color(ui), t!("rev.blocked")),
 		] {
 			let (rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
 			ui.painter().rect_filled(rect, 2.0, color);
 			ui.label(text);
 			ui.add_space(8.0);
 		}
-		ui.weak("grey lines are not adb commands and are skipped");
+		ui.weak(t!("rev.grey"));
 	});
 }
 

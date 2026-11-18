@@ -7,24 +7,53 @@ Desktop sideloader for Meta Quest headsets, written in Rust with egui.
 
 ## Layout
 
-- `crates/core` - everything that is not UI: settings, the background engine, an
-  async client for the ADB server protocol, the mirror catalog, downloads,
+- `crates/core` has everything that is not UI: settings, the background engine,
+  an async client for the ADB server protocol, the mirror catalog, downloads,
   7z extraction and installation.
-- `crates/app` - the egui desktop application. It sends commands to the engine
-  and renders the events it gets back.
+- `crates/app` is the egui desktop application. It sends commands to the engine
+  and draws the events it gets back.
+
+## Headset tab
+
+The Headset tab shows the connected headset's build, battery temperature,
+memory, Wi-Fi address and wireless ADB state. Each installed app can be started,
+stopped, backed up or uninstalled; uninstalling can back up the saves first and
+remove the app's OBB files.
+
+A save backup is a copy of the app's `Android/data` folder. When the app allows
+`run-as` (debuggable builds), its private data in `/data/data` is copied too.
+Caches are skipped. Backups are kept under the data directory and can be
+deleted, or restored if the app is installed.
+
+The tab can also turn on wireless ADB in one click, take screenshots (saved to
+your Pictures folder), restart or power off the headset, and set the refresh
+rate and CPU and GPU levels until the next restart.
+
+If an update fails because the installed app has a different signature, the
+failed task offers to reinstall it keeping the saves: back up, uninstall,
+install, restore.
+
+## Downloads and Tasks tabs
+
+Downloads lists the release folders in the downloads folder with their size
+and date. Releases stay there after installing when "Keep downloaded files" is
+on in Settings, and each can be installed again, opened or deleted. Tasks lists
+the downloads, installs, uploads and backups started in this session, running
+or finished.
 
 ## Library mirrors
 
-The library is optional. Add a mirror in Settings -> Mirrors:
+The library is optional. Mirrors are added in the Mirrors section of Settings:
 
 - a VRP-style server config, `{"baseUri": "https://.../", "password": "<base64>"}`;
 - an rclone config with a remote that has a `Quest Games` folder (needs `rclone`).
 
-Both kinds can send extra HTTP headers, such as an `X-API-Key` the mirror
-requires. For rclone they are passed through `RCLONE_HEADER`, not the command line.
+Any mirror can have extra HTTP headers, such as an `X-API-Key` it requires,
+and they go with every request. rclone gets them through `RCLONE_HEADER`, so
+they don't appear on its command line.
 
-The mirror's `meta.7z` is unpacked under the data directory; game notes come
-only from it.
+The mirror's `meta.7z` is unpacked under the data directory, and game notes
+come only from it.
 
 ### Going easy on mirrors
 
@@ -36,32 +65,34 @@ Mirrors are run by volunteers, so the app limits how hard it hits them:
   limit in KiB/s or KB/s in Settings;
 - the game list is refreshed at most once a day automatically, and a manual
   sync is refused if the last one was less than 10 minutes ago;
-- interrupted downloads resume instead of starting over, and network errors are
-  retried only a few times with growing pauses; refused requests (403, 404) are
-  not retried;
+- interrupted downloads resume where they stopped; network errors are retried
+  a few times with growing pauses, and refused requests (403, 404) not at all;
 - rclone requests are rate-limited with `--tpslimit`.
 
 ### Sharing new app versions
 
 When a headset has an app the library doesn't have, or a newer version of one,
 the Library tab offers to upload it through the mirror's own upload config
-(`.meta/upload.config` in its metadata). The mirror's blacklist and the
-headset's system apps are skipped, and each app can be dismissed for good.
+(`.meta/upload.config` in its metadata). The app ignores an upload config
+that could reach files on this computer or run programs. The mirror's
+blacklist and the headset's system apps are skipped, and each app can be
+dismissed for good.
 
-Nothing is uploaded without a click on that app's Upload button. An upload
+Nothing is uploaded until you press that app's Upload button. An upload
 contains the APK, the app's OBB files, the headset model and an anonymous
-headset id (SHA-256 of the serial number). The headset is only read from.
+headset id (SHA-256 of the serial number). The app only reads from the headset
+here and changes nothing on it.
 
 ## Building from source
 
 You need:
 
-- **Rust 1.95 or newer**, installed with rustup; check with `rustc --version`.
-- **A C compiler**, used to build the TLS library: GCC or Clang on Linux, Xcode
-  command line tools on macOS (`xcode-select --install`), and the MSVC build tools
-  on Windows (installed together with Rust by rustup).
+- Rust 1.95 or newer, installed with rustup; check with `rustc --version`.
+- A C compiler for the TLS library: GCC or Clang on Linux, the Xcode command
+  line tools on macOS (`xcode-select --install`), and the MSVC build tools on
+  Windows (rustup installs them together with Rust).
 
-No other system libraries are needed at build time. Then:
+The build needs no other system libraries. Then:
 
 ```bash
 git clone https://github.com/JonnyBro/quest-sideloader-rust.git
@@ -79,20 +110,46 @@ cargo test
 cargo clippy --all-targets
 ```
 
-Tests use fake adb servers and never talk to a connected headset. A few of them
-also exercise the real `7z` and `rclone` binaries and are skipped when those
-are not installed.
+Tests use fake adb servers and never talk to a connected headset. A few also
+run the real `7z` and `rclone` binaries and are skipped when those aren't
+installed.
 
 ### Running
 
-- `adb` (Android platform-tools) on `PATH`, or its path set in Settings.
+To run the app you need:
+
+- `adb` from Android SDK Platform-Tools, on `PATH` or with its path set in
+  Settings. If the app can't find adb, it offers to download Platform-Tools
+  from Google into its data folder (Windows, x86-64 Linux and macOS), or to
+  open the download page.
+- Windows: Meta's Quest ADB driver, so the headset shows up over USB. The
+  Visual C++ Redistributable isn't needed, because the C runtime is built into
+  the exe.
 - Linux: a desktop with Wayland or X11, a Vulkan or OpenGL driver, and
   `xdg-desktop-portal` for file dialogs. The headset needs udev rules for USB
   access (for example the `android-udev` package).
-- `rclone`, only for rclone mirrors.
+- `rclone`, only for rclone mirrors. If a sync fails because
+  rclone is missing, the app offers to download the official build from
+  rclone.org and checks it against the published SHA-256 sums before using it.
 
-Logs go to the platform data directory (`~/.local/share/quest-sideloader/logs` on Linux);
-set `RUST_LOG` to change verbosity.
+Logs go to the platform data directory (`~/.local/share/quest-sideloader/logs`
+on Linux). The Logs button in the status bar shows them in the app and turns red
+after an error. Debug builds log in more detail, and `RUST_LOG` sets the level
+in any build. The app sends a desktop notification when a task finishes while
+its window is in the background; this can be turned off in Settings.
+
+Settings and data go to the platform's user folders: on Windows the settings
+are in `%APPDATA%\quest-sideloader\config` and everything else in
+`%APPDATA%\quest-sideloader\data`. For a portable copy, put an empty
+`portable.txt` next to the executable. The app then keeps everything, including
+screenshots, in a `userdata` folder beside it. Paths in the settings are stored
+relative to that folder, so the copy still works from another drive letter or
+computer. The window title shows "(portable)" in this mode.
+
+The interface is in English and Russian. It follows the system language by
+default and can be switched in Settings without a restart. Translations are in
+`crates/*/locales/*.yml`, and a string without a translation is shown in
+English.
 
 ## License
 

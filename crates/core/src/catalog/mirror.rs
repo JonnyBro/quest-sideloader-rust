@@ -1,3 +1,4 @@
+use rust_i18n::t;
 use std::path::PathBuf;
 
 use base64::Engine as _;
@@ -48,9 +49,8 @@ impl Mirror {
 	pub fn archive_password(&self) -> Result<String, CatalogError> {
 		let bytes = base64::engine::general_purpose::STANDARD
 			.decode(self.password.trim())
-			.map_err(|_| CatalogError::Config("the password is not valid base64".into()))?;
-		String::from_utf8(bytes)
-			.map_err(|_| CatalogError::Config("the decoded password is not text".into()))
+			.map_err(|_| CatalogError::Config(t!("mir.bad_base64").into_owned()))?;
+		String::from_utf8(bytes).map_err(|_| CatalogError::Config(t!("mir.not_text").into_owned()))
 	}
 
 	/// Parses a VRP-style config: `{"baseUri": "...", "password": "..."}`.
@@ -61,8 +61,9 @@ impl Mirror {
 			base_uri: String,
 			password: String,
 		}
-		let config: VrpConfig = serde_json::from_str(text)
-			.map_err(|e| CatalogError::Config(format!("invalid server config: {e}")))?;
+		let config: VrpConfig = serde_json::from_str(text).map_err(|e| {
+			CatalogError::Config(t!("mir.bad_server_config", error = e).into_owned())
+		})?;
 		let mirror = Self {
 			id: Self::new_id(),
 			name: name.to_owned(),
@@ -78,31 +79,32 @@ impl Mirror {
 
 	pub fn validate(&self) -> Result<(), CatalogError> {
 		if self.name.trim().is_empty() {
-			return Err(CatalogError::Config("the mirror needs a name".into()));
+			return Err(CatalogError::Config(t!("mir.needs_name").into_owned()));
 		}
 		self.archive_password()?;
 		match &self.kind {
 			MirrorKind::Http { base_uri } => {
-				let url = reqwest::Url::parse(base_uri)
-					.map_err(|e| CatalogError::Config(format!("invalid base URI: {e}")))?;
+				let url = reqwest::Url::parse(base_uri).map_err(|e| {
+					CatalogError::Config(t!("mir.bad_base_uri", error = e).into_owned())
+				})?;
 				if !matches!(url.scheme(), "http" | "https") {
-					return Err(CatalogError::Config(
-						"base URI must start with http:// or https://".into(),
-					));
+					return Err(CatalogError::Config(t!("mir.base_uri_scheme").into_owned()));
 				}
 			}
 			MirrorKind::Rclone { remote, .. } => {
 				if remote.trim().is_empty() {
-					return Err(CatalogError::Config("choose an rclone remote".into()));
+					return Err(CatalogError::Config(t!("mir.choose_remote").into_owned()));
 				}
 			}
 		}
 		for header in &self.headers {
 			reqwest::header::HeaderName::from_bytes(header.name.as_bytes()).map_err(|_| {
-				CatalogError::Config(format!("invalid header name {:?}", header.name))
+				CatalogError::Config(
+					t!("mir.bad_header_name", name = format!("{:?}", header.name)).into_owned(),
+				)
 			})?;
 			reqwest::header::HeaderValue::from_str(&header.value).map_err(|_| {
-				CatalogError::Config(format!("invalid value for header {}", header.name))
+				CatalogError::Config(t!("mir.bad_header_value", name = header.name).into_owned())
 			})?;
 		}
 		Ok(())
@@ -114,7 +116,8 @@ pub fn rclone_remotes(config: &str) -> Vec<String> {
 	config
 		.lines()
 		.filter_map(|line| {
-			let name = line.trim().strip_prefix('[')?.strip_suffix(']')?.trim();
+			let line = line.trim_start_matches('\u{feff}').trim();
+			let name = line.strip_prefix('[')?.strip_suffix(']')?.trim();
 			(!name.is_empty()).then(|| name.to_owned())
 		})
 		.collect()

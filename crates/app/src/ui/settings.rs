@@ -1,6 +1,7 @@
+use rust_i18n::t;
 use std::path::{Path, PathBuf};
 
-use quest_sideloader_core::settings::{MAX_CONCURRENT_DOWNLOADS, SpeedUnit, Theme};
+use quest_sideloader_core::settings::{Language, MAX_CONCURRENT_DOWNLOADS, SpeedUnit, Theme};
 use quest_sideloader_core::{Command, Settings};
 
 use super::mirrors::{self, MirrorForm};
@@ -45,6 +46,14 @@ impl SettingsView {
 		self.saved.contribute_ignored.iter().cloned().collect()
 	}
 
+	pub fn downloads_dir(&self) -> &Path {
+		&self.saved.downloads_dir
+	}
+
+	pub fn notifications(&self) -> bool {
+		self.saved.notifications
+	}
+
 	pub fn active_mirror_name(&self) -> Option<&str> {
 		self.saved.active_mirror().map(|m| m.name.as_str())
 	}
@@ -75,12 +84,12 @@ impl SettingsView {
 	}
 
 	fn general(&mut self, ui: &mut egui::Ui, default_downloads: &Path) {
-		ui.heading("General");
+		ui.heading(t!("set.general"));
 		egui::Grid::new("settings_grid")
 			.num_columns(2)
 			.spacing([16.0, 10.0])
 			.show(ui, |ui| {
-				ui.label("Downloads folder");
+				ui.label(t!("set.downloads_folder"));
 				ui.horizontal(|ui| {
 					if ui
 						.text_edit_singleline(&mut self.downloads_dir_text)
@@ -88,7 +97,7 @@ impl SettingsView {
 					{
 						self.draft.downloads_dir = self.downloads_dir_text.trim().into();
 					}
-					if ui.button("Browse…").clicked()
+					if ui.button(t!("common.browse")).clicked()
 						&& let Some(dir) = rfd::FileDialog::new()
 							.set_directory(&self.draft.downloads_dir)
 							.pick_folder()
@@ -96,28 +105,29 @@ impl SettingsView {
 						self.downloads_dir_text = dir.display().to_string();
 						self.draft.downloads_dir = dir;
 					}
-					if ui.button("Default").clicked() {
+					if ui.button(t!("set.default")).clicked() {
 						self.downloads_dir_text = default_downloads.display().to_string();
 						self.draft.downloads_dir = default_downloads.to_path_buf();
 					}
 				});
 				ui.end_row();
 
-				ui.label("After installing");
-				ui.checkbox(
-					&mut self.draft.keep_downloads,
-					"Keep downloaded files for reinstalling",
-				);
+				ui.label(t!("set.after_installing"));
+				ui.checkbox(&mut self.draft.keep_downloads, t!("set.keep_downloads"));
 				ui.end_row();
 
-				ui.label("Parallel downloads");
+				ui.label(t!("set.notifications"));
+				ui.checkbox(&mut self.draft.notifications, t!("set.notify"));
+				ui.end_row();
+
+				ui.label(t!("set.parallel"));
 				ui.add(egui::Slider::new(
 					&mut self.draft.max_concurrent_downloads,
 					1..=MAX_CONCURRENT_DOWNLOADS,
 				));
 				ui.end_row();
 
-				ui.label("Speed limit");
+				ui.label(t!("set.speed_limit"));
 				ui.horizontal(|ui| {
 					let limit = &mut self.draft.download_limit;
 					ui.add(
@@ -134,36 +144,47 @@ impl SettingsView {
 							}
 						});
 					ui.weak(if limit.value == 0 {
-						"unlimited"
+						t!("set.unlimited")
 					} else {
-						"for all downloads together"
+						t!("set.all_downloads")
 					});
 				});
 				ui.end_row();
 
-				ui.label("ADB binary");
+				ui.label(t!("set.adb_binary"));
 				binary_field(
 					ui,
 					&mut self.adb_path_text,
 					&mut self.draft.adb_path,
-					"adb from PATH",
+					&t!("set.adb_hint"),
 				);
 				ui.end_row();
 
-				ui.label("rclone binary");
+				ui.label(t!("set.rclone_binary"));
 				binary_field(
 					ui,
 					&mut self.rclone_path_text,
 					&mut self.draft.rclone_path,
-					"rclone from PATH (only for rclone mirrors)",
+					&t!("set.rclone_hint"),
 				);
 				ui.end_row();
 
-				ui.label("Theme");
+				ui.label(t!("set.theme"));
 				ui.horizontal(|ui| {
-					ui.selectable_value(&mut self.draft.theme, Theme::System, "System");
-					ui.selectable_value(&mut self.draft.theme, Theme::Dark, "Dark");
-					ui.selectable_value(&mut self.draft.theme, Theme::Light, "Light");
+					let theme = &mut self.draft.theme;
+					ui.selectable_value(theme, Theme::System, t!("set.theme_system"));
+					ui.selectable_value(theme, Theme::Dark, t!("set.theme_dark"));
+					ui.selectable_value(theme, Theme::Light, t!("set.theme_light"));
+				});
+				ui.end_row();
+
+				ui.label(t!("set.language"));
+				ui.horizontal(|ui| {
+					let language = &mut self.draft.language;
+					ui.selectable_value(language, Language::System, t!("set.language_system"));
+					// Language names stay in their own language.
+					ui.selectable_value(language, Language::English, "English");
+					ui.selectable_value(language, Language::Russian, "Русский");
 				});
 				ui.end_row();
 			});
@@ -174,7 +195,7 @@ impl SettingsView {
 			let can_save =
 				self.is_dirty() && !self.saving && !self.draft.downloads_dir.as_os_str().is_empty();
 			if ui
-				.add_enabled(can_save, egui::Button::new("Save"))
+				.add_enabled(can_save, egui::Button::new(t!("set.save")))
 				.clicked()
 			{
 				self.saving = true;
@@ -183,7 +204,10 @@ impl SettingsView {
 				commands.push(Command::SaveSettings(settings));
 			}
 			if ui
-				.add_enabled(self.is_dirty() && !self.saving, egui::Button::new("Revert"))
+				.add_enabled(
+					self.is_dirty() && !self.saving,
+					egui::Button::new(t!("set.revert")),
+				)
 				.clicked()
 			{
 				*self = SettingsView::new(self.saved.clone());
@@ -191,7 +215,7 @@ impl SettingsView {
 			if self.saving {
 				ui.spinner();
 			} else if self.is_dirty() {
-				ui.weak("Unsaved changes");
+				ui.weak(t!("set.unsaved"));
 			}
 		});
 	}
@@ -210,13 +234,13 @@ fn binary_field(ui: &mut egui::Ui, text: &mut String, value: &mut Option<PathBuf
 			let trimmed = text.trim();
 			*value = (!trimmed.is_empty()).then(|| trimmed.into());
 		}
-		if ui.button("Browse…").clicked()
+		if ui.button(t!("common.browse")).clicked()
 			&& let Some(file) = rfd::FileDialog::new().pick_file()
 		{
 			*text = file.display().to_string();
 			*value = Some(file);
 		}
-		if ui.button("Use PATH").clicked() {
+		if ui.button(t!("set.use_path")).clicked() {
 			text.clear();
 			*value = None;
 		}

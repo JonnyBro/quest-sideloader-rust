@@ -70,6 +70,12 @@ pub async fn write_hex(stream: &mut TcpStream, payload: &str) {
 pub struct Recorded {
 	pub pushed: Vec<(String, Vec<u8>)>,
 	pub shell: Vec<String>,
+	/// Files the fake headset has, for listing and pulling.
+	pub device_files: Vec<(String, Vec<u8>)>,
+	/// Sizes of APKs streamed to `cmd package install`.
+	pub installs: Vec<usize>,
+	/// Failure messages the next installs answer with, in order.
+	pub install_failures: Vec<String>,
 }
 
 /// A fake adb server with one online device `SER1`: answers version and
@@ -141,8 +147,57 @@ async fn try_serve(s: &mut TcpStream, rec: &Shared) -> std::io::Result<()> {
 			s.write_all(b"OKAY").await?;
 			if service == "sync:" {
 				receive_and_record(s, rec).await?;
+			} else if let Some(size) = service.strip_prefix("exec:cmd package install ") {
+				let size: usize = size
+					.rsplit(' ')
+					.next()
+					.and_then(|n| n.parse().ok())
+					.unwrap_or(0);
+				let mut apk = vec![0u8; size];
+				s.read_exact(&mut apk).await?;
+				let reply = {
+					let mut rec = rec.lock().unwrap();
+					rec.installs.push(size);
+					if rec.install_failures.is_empty() {
+						"Success\n".to_owned()
+					} else {
+						format!("Failure [{}]\n", rec.install_failures.remove(0))
+					}
+				};
+				s.write_all(reply.as_bytes()).await?;
 			} else if let Some(command) = service.strip_prefix("shell,v2,raw:") {
 				rec.lock().unwrap().shell.push(command.to_owned());
+				if command.starts_with("pm path ") {
+					s.write_all(&packet(1, b"package:/data/app/~~x/pkg-1/base.apk\n"))
+						.await?;
+					s.write_all(&packet(3, &[0])).await?;
+					return Ok(());
+				}
+				if command.starts_with("pm uninstall") {
+					s.write_all(&packet(1, b"Success\n")).await?;
+					s.write_all(&packet(3, &[0])).await?;
+					return Ok(());
+				}
+				// `Device::list_files`: `[ -d DIR ] && find DIR -type f -exec stat ...`
+				if let Some(rest) = command.strip_prefix("[ -d ") {
+					let dir = rest
+						.split(" ]")
+						.next()
+						.unwrap_or_default()
+						.trim_matches('\'');
+					let listing: String = rec
+						.lock()
+						.unwrap()
+						.device_files
+						.iter()
+						.filter(|(path, _)| path.starts_with(&format!("{dir}/")))
+						.map(|(path, data)| format!("{} {path}\n", data.len()))
+						.collect();
+					s.write_all(&packet(1, listing.as_bytes())).await?;
+					s.write_all(&packet(3, &[u8::from(listing.is_empty())]))
+						.await?;
+					return Ok(());
+				}
 				const EXISTING_DIRS: [&str; 3] =
 					["/sdcard", "/sdcard/Android/obb", "/sdcard/Android/data"];
 				let exit = match command.strip_prefix("test -d ") {
@@ -169,6 +224,35 @@ async fn receive_and_record(s: &mut TcpStream, rec: &Shared) -> std::io::Result<
 		match &id {
 			b"QUIT" => return Ok(()),
 			b"SEND" => {}
+			b"RECV" => {
+				let mut path = vec![0u8; len];
+				s.read_exact(&mut path).await?;
+				let path = String::from_utf8_lossy(&path).into_owned();
+				let data = rec
+					.lock()
+					.unwrap()
+					.device_files
+					.iter()
+					.find(|(p, _)| *p == path)
+					.map(|(_, d)| d.clone());
+				match data {
+					Some(data) => {
+						for chunk in data.chunks(64 * 1024) {
+							s.write_all(b"DATA").await?;
+							s.write_all(&(chunk.len() as u32).to_le_bytes()).await?;
+							s.write_all(chunk).await?;
+						}
+						s.write_all(b"DONE\0\0\0\0").await?;
+					}
+					None => {
+						let message = b"No such file or directory";
+						s.write_all(b"FAIL").await?;
+						s.write_all(&(message.len() as u32).to_le_bytes()).await?;
+						s.write_all(message).await?;
+					}
+				}
+				continue;
+			}
 			other => {
 				return Err(std::io::Error::other(format!(
 					"unexpected sync request {other:?}"

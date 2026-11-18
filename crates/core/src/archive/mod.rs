@@ -12,13 +12,13 @@ pub use volumes::{MultiVolumeReader, find_volumes};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ArchiveError {
-	#[error("wrong archive password")]
+	#[error("{}", rust_i18n::t!("err.wrong_password"))]
 	WrongPassword,
 
-	#[error("archive is damaged or unsupported: {0}")]
+	#[error("{}", rust_i18n::t!("err.corrupt", error = .0))]
 	Corrupt(String),
 
-	#[error("archive entry {0:?} points outside the destination folder")]
+	#[error("{}", rust_i18n::t!("err.unsafe_path", entry = format!("{:?}", .0)))]
 	UnsafePath(String),
 
 	#[error("{path}: {source}")]
@@ -28,7 +28,7 @@ pub enum ArchiveError {
 		source: std::io::Error,
 	},
 
-	#[error("extraction was cancelled")]
+	#[error("{}", rust_i18n::t!("err.extract_cancelled"))]
 	Cancelled,
 }
 

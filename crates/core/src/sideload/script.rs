@@ -3,6 +3,7 @@
 //! runs: safe lines run, suspicious ones only after the user approves them,
 //! blocked ones never.
 
+use rust_i18n::t;
 use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,25 +138,25 @@ impl Context<'_> {
 		let normalized = line.replace('\\', "/");
 		let words = match shell_words::split(&normalized) {
 			Ok(words) => words,
-			Err(_) => return blocked("cannot parse the line (unbalanced quotes)"),
+			Err(_) => return blocked(t!("scr.unbalanced")),
 		};
 		let Some((program, args)) = words.split_first() else {
 			return LineKind::Ignored(None);
 		};
 		let program = program.to_ascii_lowercase();
 		if program != "adb" && program != "adb.exe" {
-			return LineKind::Ignored(Some(format!("not an adb command, skipped: {program}")));
+			return LineKind::Ignored(Some(t!("scr.not_adb", program = program).into_owned()));
 		}
 		let args = strip_device_selectors(args);
 		let Some((subcommand, rest)) = args.split_first() else {
-			return blocked("adb without a command");
+			return blocked(t!("scr.no_command"));
 		};
 		match subcommand.as_str() {
 			"install" => self.install(rest),
 			"push" => self.push(rest),
 			"uninstall" => self.uninstall(rest),
 			"shell" => self.shell(rest),
-			other => blocked(format!("`adb {other}` is not supported in install scripts")),
+			other => blocked(t!("scr.unsupported", command = other)),
 		}
 	}
 
@@ -163,7 +164,7 @@ impl Context<'_> {
 		const KNOWN_FLAGS: [&str; 4] = ["-r", "-g", "-d", "-t"];
 		let (flags, files): (Vec<_>, Vec<_>) = args.iter().partition(|a| a.starts_with('-'));
 		let [apk] = files.as_slice() else {
-			return blocked("install expects exactly one APK");
+			return blocked(t!("scr.install_one"));
 		};
 		let apk = match self.local_path(apk) {
 			Ok(path) => path,
@@ -173,7 +174,7 @@ impl Context<'_> {
 		match flags.iter().find(|f| !KNOWN_FLAGS.contains(&f.as_str())) {
 			Some(flag) => command(
 				action,
-				Verdict::Suspicious(format!("unknown install flag {flag}")),
+				Verdict::Suspicious(t!("scr.install_flag", flag = flag).into_owned()),
 			),
 			None => command(action, Verdict::Safe),
 		}
@@ -181,14 +182,14 @@ impl Context<'_> {
 
 	fn push(&self, args: &[String]) -> LineKind {
 		let [local, remote] = args else {
-			return blocked("push expects a local path and a device path");
+			return blocked(t!("scr.push_args"));
 		};
 		let local_path = match self.local_path(local) {
 			Ok(path) => path,
 			Err(reason) => return blocked(reason),
 		};
 		let Some(remote_norm) = normalize_remote(remote) else {
-			return blocked(format!("device path {remote} contains `..`"));
+			return blocked(t!("scr.dotdot", path = remote));
 		};
 		let local_name = Path::new(local)
 			.file_name()
@@ -201,9 +202,7 @@ impl Context<'_> {
 		let Some(package) = self.package else {
 			return command(
 				action,
-				Verdict::Suspicious(
-					"the game's package name is unknown, so the target can't be checked".into(),
-				),
+				Verdict::Suspicious(t!("scr.no_package_target").into_owned()),
 			);
 		};
 		// `adb push com.game /sdcard/Android/obb/` creates obb/com.game itself.
@@ -215,9 +214,7 @@ impl Context<'_> {
 		} else {
 			command(
 				action,
-				Verdict::Suspicious(format!(
-					"writes to {remote_norm}, outside this game's folders"
-				)),
+				Verdict::Suspicious(t!("scr.writes_outside", path = remote_norm).into_owned()),
 			)
 		}
 	}
@@ -225,7 +222,7 @@ impl Context<'_> {
 	fn uninstall(&self, args: &[String]) -> LineKind {
 		let packages: Vec<_> = args.iter().filter(|a| !a.starts_with('-')).collect();
 		let [package] = packages.as_slice() else {
-			return blocked("uninstall expects exactly one package");
+			return blocked(t!("scr.uninstall_one"));
 		};
 		self.uninstall_verdict(package)
 	}
@@ -237,19 +234,19 @@ impl Context<'_> {
 		if Some(package) == self.package {
 			command(
 				action,
-				Verdict::Suspicious("removes the installed game together with its saves".into()),
+				Verdict::Suspicious(t!("scr.removes_saves").into_owned()),
 			)
 		} else {
 			command(
 				action,
-				Verdict::Suspicious(format!("removes another app: {package}")),
+				Verdict::Suspicious(t!("scr.removes_other", package = package).into_owned()),
 			)
 		}
 	}
 
 	fn shell(&self, args: &[String]) -> LineKind {
 		if args.is_empty() {
-			return blocked("interactive shell is not supported");
+			return blocked(t!("scr.interactive"));
 		}
 		let command_text = if args.len() == 1 {
 			args[0].clone()
@@ -260,16 +257,13 @@ impl Context<'_> {
 			command: command_text.clone(),
 		};
 		if command_text.contains(['\n', '\r']) {
-			return blocked("multi-line shell command");
+			return blocked(t!("scr.multiline"));
 		}
 		if contains_shell_operators(&command_text) {
-			return command(
-				action,
-				Verdict::Suspicious("chains several commands or redirects output".into()),
-			);
+			return command(action, Verdict::Suspicious(t!("scr.chains").into_owned()));
 		}
 		let Ok(words) = shell_words::split(&command_text) else {
-			return blocked("cannot parse the shell command");
+			return blocked(t!("scr.unparsable_shell"));
 		};
 		let verdict = self.shell_verdict(&words);
 		if let Verdict::Suspicious(_) = &verdict
@@ -284,9 +278,10 @@ impl Context<'_> {
 
 	fn shell_verdict(&self, words: &[String]) -> Verdict {
 		let Some((program, args)) = words.split_first() else {
-			return Verdict::Suspicious("empty shell command".into());
+			return Verdict::Suspicious(t!("scr.empty_shell").into_owned());
 		};
-		let unknown = || Verdict::Suspicious(format!("unrecognized shell command `{program}`"));
+		let unknown =
+			|| Verdict::Suspicious(t!("scr.unknown_shell", program = program).into_owned());
 		let package = self.package;
 		match program.as_str() {
 			"pm" => match args {
@@ -294,10 +289,10 @@ impl Context<'_> {
 					if Some(pkg.as_str()) == package {
 						Verdict::Safe
 					} else {
-						Verdict::Suspicious(format!("changes permissions of another app: {pkg}"))
+						Verdict::Suspicious(t!("scr.permissions_other", package = pkg).into_owned())
 					}
 				}
-				_ => Verdict::Suspicious("package manager command".into()),
+				_ => Verdict::Suspicious(t!("scr.pm").into_owned()),
 			},
 			"mkdir" | "rm" | "mv" | "cp" | "touch" => {
 				let paths: Vec<_> = args.iter().filter(|a| !a.starts_with('-')).collect();
@@ -305,9 +300,7 @@ impl Context<'_> {
 					return unknown();
 				}
 				let Some(package) = package else {
-					return Verdict::Suspicious(
-						"the game's package name is unknown, so paths can't be checked".into(),
-					);
+					return Verdict::Suspicious(t!("scr.no_package_paths").into_owned());
 				};
 				match paths
 					.iter()
@@ -315,10 +308,10 @@ impl Context<'_> {
 				{
 					None => Verdict::Safe,
 					Some(path) if program == "rm" => {
-						Verdict::Suspicious(format!("deletes {path}, outside this game's folders"))
+						Verdict::Suspicious(t!("scr.deletes_outside", path = path).into_owned())
 					}
 					Some(path) => {
-						Verdict::Suspicious(format!("touches {path}, outside this game's folders"))
+						Verdict::Suspicious(t!("scr.touches_outside", path = path).into_owned())
 					}
 				}
 			}
@@ -333,7 +326,7 @@ impl Context<'_> {
 			.components()
 			.any(|c| !matches!(c, Component::Normal(_) | Component::CurDir));
 		if escapes || path.contains(':') {
-			return Err(format!("reads {path}, outside the release folder"));
+			return Err(t!("scr.reads_outside", path = path).into_owned());
 		}
 		Ok(self.root.join(relative))
 	}

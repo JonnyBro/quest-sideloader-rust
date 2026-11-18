@@ -81,7 +81,7 @@ mod tests {
 			throttle.take(25_000).await;
 		}
 		a.await.unwrap();
-		// 200 kB at 200 kB/s, shared by two downloaders.
+		// 200 kB at 200 kB/s, shared by two downloads.
 		let elapsed = started.elapsed();
 		assert!(elapsed >= Duration::from_millis(850), "{elapsed:?}");
 		assert!(elapsed < Duration::from_millis(1600), "{elapsed:?}");

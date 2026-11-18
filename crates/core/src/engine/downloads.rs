@@ -2,6 +2,7 @@
 //! installer. Jobs wait in a queue; only `max_concurrent_downloads` of them
 //! transfer at once, unpacking and installing don't hold a slot.
 
+use rust_i18n::t;
 use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -22,12 +23,13 @@ use crate::sideload::SideloadError;
 use crate::sideload::run::Update;
 
 const MIB: u64 = 1024 * 1024;
-/// Written into the unpacked folder once extraction finished.
-const COMPLETE_MARKER: &str = ".quest-sideloader-complete";
+/// Downloads in progress live here; a release is moved into the downloads
+/// folder only once it's complete, so a folder there is always whole.
+const INCOMPLETE_DIR: &str = ".incomplete";
 
 #[derive(Debug, thiserror::Error)]
 enum JobError {
-	#[error("cancelled")]
+	#[error("{}", rust_i18n::t!("err.cancelled"))]
 	Cancelled,
 	#[error("{0}")]
 	Failed(String),
@@ -115,12 +117,13 @@ impl Queue {
 				kind: TaskKind::Download,
 				serial: job.serial.clone(),
 				title: job.game.name.clone(),
-				stage: "Queued".into(),
+				stage: t!("task.queued").into_owned(),
 				progress: None,
 				detail: None,
 				state: TaskState::Queued,
 				warnings: Vec::new(),
 				output: None,
+				conflict: None,
 			},
 			sink,
 		);
@@ -191,8 +194,10 @@ impl Queue {
 			self.pending.insert(to, item);
 		}
 		for (i, p) in self.pending.iter().enumerate() {
-			p.tracker
-				.update(|s| s.stage = format!("Queued · #{}", i + 1), true);
+			p.tracker.update(
+				|s| s.stage = t!("task.queued_pos", pos = i + 1).into_owned(),
+				true,
+			);
 		}
 	}
 
@@ -235,9 +240,9 @@ fn finish(job: &Job, deps: &Deps, tracker: &Tracker, result: Result<Option<PathB
 	match result {
 		Ok(output) => {
 			let stage = if output.is_some() {
-				"Downloaded"
+				t!("task.downloaded")
 			} else {
-				"Installed"
+				t!("task.installed")
 			};
 			tracker.finish(TaskState::Done, Some(stage.into()), output);
 			if let Some(serial) = &job.serial {
@@ -247,9 +252,11 @@ fn finish(job: &Job, deps: &Deps, tracker: &Tracker, result: Result<Option<PathB
 				);
 			}
 		}
-		Err(JobError::Cancelled) => {
-			tracker.finish(TaskState::Cancelled, Some("Cancelled".into()), None)
-		}
+		Err(JobError::Cancelled) => tracker.finish(
+			TaskState::Cancelled,
+			Some(t!("task.cancelled").into_owned()),
+			None,
+		),
 		Err(JobError::Failed(e)) => {
 			tracing::error!("{}: {e}", job.game.release_name);
 			tracker.finish(TaskState::Failed(e), None, None);
@@ -308,12 +315,15 @@ fn first_volume(files: &[RemoteFile]) -> Option<&str> {
 fn check_space(dir: &Path, needed: u64) -> Result<(), JobError> {
 	let available = fs4::available_space(dir).map_err(io_failed(dir))?;
 	if available < needed {
-		return Err(JobError::Failed(format!(
-			"not enough free space in {}: need about {}, have {}",
-			dir.display(),
-			format_bytes(needed),
-			format_bytes(available)
-		)));
+		return Err(JobError::Failed(
+			t!(
+				"dl.no_space",
+				dir = dir.display(),
+				need = format_bytes(needed),
+				have = format_bytes(available)
+			)
+			.into_owned(),
+		));
 	}
 	Ok(())
 }
@@ -327,19 +337,26 @@ async fn run(
 	review: oneshot::Receiver<ReviewDecision>,
 ) -> Result<Option<PathBuf>, JobError> {
 	let release = &job.game.release_name;
-	let job_dir = deps.downloads_dir.join(folder_name(release));
-	let archive_dir = job_dir.join("archive");
-	let files_dir = job_dir.join("files");
-	tokio::fs::create_dir_all(&job_dir)
-		.await
-		.map_err(io_failed(&job_dir))?;
+	let name = folder_name(release);
+	let files_dir = deps.downloads_dir.join(&name);
+	let work_dir = deps.downloads_dir.join(INCOMPLETE_DIR).join(&name);
+	let archive_dir = work_dir.join("archive");
+	let staging = work_dir.join("files");
 
-	if !files_dir.join(COMPLETE_MARKER).is_file() {
+	if files_dir.is_dir() {
+		slot.free();
+		tracing::debug!(path = %files_dir.display(), "release already downloaded");
+	} else {
+		tokio::fs::create_dir_all(&work_dir)
+			.await
+			.map_err(io_failed(&work_dir))?;
 		download(job, deps, tracker, &archive_dir).await?;
 		slot.free();
-		unpack(job, tracker, &archive_dir, &files_dir).await?;
-	} else {
-		slot.free();
+		unpack(job, tracker, &archive_dir, &staging).await?;
+		let (staging, files_dir, work_dir) = (staging.clone(), files_dir.clone(), work_dir.clone());
+		tokio::task::spawn_blocking(move || finalize(&staging, &files_dir, &work_dir))
+			.await
+			.map_err(|e| JobError::Failed(e.to_string()))??;
 	}
 
 	let Some(serial) = &job.serial else {
@@ -361,14 +378,14 @@ async fn run(
 	}
 	// Removed before the task reports done, so a failure (on Windows, often a scanner holding a file open)
 	// is visible instead of silently leaving gigabytes behind.
-	let dir = job_dir.clone();
+	let dir = files_dir.clone();
 	let removed = tokio::task::spawn_blocking(move || remove_if_exists(&dir))
 		.await
 		.map_err(|e| JobError::Failed(e.to_string()))?;
 	if let Err(e) = removed {
-		tracker.report(Update::Warning(format!(
-			"installed, but the downloaded files could not be removed: {e}"
-		)));
+		tracker.report(Update::Warning(
+			t!("dl.remove_failed", error = e).into_owned(),
+		));
 	}
 	Ok(None)
 }
@@ -380,17 +397,18 @@ async fn download(
 	archive_dir: &Path,
 ) -> Result<(), JobError> {
 	let release = &job.game.release_name;
-	tracker.stage("Listing files");
+	let listing = t!("dl.listing");
+	tracker.stage(listing.clone());
 	let files = wanted(
-		with_retries(tracker, "Listing files", || {
+		with_retries(tracker, &listing, || {
 			deps.fetcher.list_release(&job.mirror, release)
 		})
 		.await?,
 	);
 	if first_volume(&files).is_none() {
-		return Err(JobError::Failed(format!(
-			"the mirror has no archive for {release}"
-		)));
+		return Err(JobError::Failed(
+			t!("dl.no_archive", release = release).into_owned(),
+		));
 	}
 
 	let listed: Option<u64> = files.iter().map(|f| f.size).sum();
@@ -403,7 +421,7 @@ async fn download(
 		check_space(archive_dir, size.saturating_mul(2) + 512 * MIB)?;
 	}
 
-	tracker.stage(format!("Downloading {} file(s)", files.len()));
+	tracker.stage(t!("dl.downloading_n", n = files.len()));
 	let mut done_before = 0u64;
 	for file in &files {
 		let dest = archive_dir.join(&file.name);
@@ -417,7 +435,7 @@ async fn download(
 			let path = release_file_path(&job.mirror, release, &file.name);
 			let base = done_before;
 			let total = estimate;
-			let stage = format!("Downloading {}", file.name);
+			let stage = t!("dl.downloading_file", name = file.name);
 			let progress: FetchProgress<'_> = &|done, _| tracker.bytes(base + done, total);
 			with_retries(tracker, &stage, || {
 				deps.fetcher
@@ -427,6 +445,30 @@ async fn download(
 		}
 		done_before += tokio::fs::metadata(&dest).await.map_or(0, |m| m.len());
 		tracker.bytes(done_before, estimate);
+	}
+	Ok(())
+}
+
+fn finalize(staging: &Path, files_dir: &Path, work_dir: &Path) -> Result<(), JobError> {
+	let entries: Vec<_> = std::fs::read_dir(staging)
+		.map_err(io_failed(staging))?
+		.filter_map(|e| e.ok())
+		.collect();
+	let source = match entries.as_slice() {
+		[only]
+			if only.file_type().is_ok_and(|t| t.is_dir())
+				&& !crate::sideload::is_package_name(&only.file_name().to_string_lossy()) =>
+		{
+			only.path()
+		}
+		_ => staging.to_path_buf(),
+	};
+	remove_if_exists(files_dir)?;
+	std::fs::rename(&source, files_dir).map_err(io_failed(&source))?;
+	remove_if_exists(work_dir)?;
+	// Drop `.incomplete` itself once nothing else is in progress.
+	if let Some(parent) = work_dir.parent() {
+		let _ = std::fs::remove_dir(parent);
 	}
 	Ok(())
 }
@@ -460,9 +502,7 @@ where
 					return Err(e);
 				};
 				tracing::warn!("{stage}: {e}; retrying in {delay} s");
-				tracker.stage(format!(
-					"{stage}: connection problem, retrying in {delay} s"
-				));
+				tracker.stage(t!("dl.retrying", stage = stage, delay = delay));
 				tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
 				tracker.stage(stage.to_owned());
 			}
@@ -475,9 +515,9 @@ async fn unpack(
 	job: &Job,
 	tracker: &Tracker,
 	archive_dir: &Path,
-	files_dir: &Path,
+	staging: &Path,
 ) -> Result<(), JobError> {
-	tracker.stage("Unpacking");
+	tracker.stage(t!("dl.unpacking"));
 	let password = job.mirror.archive_password()?;
 	let first = {
 		let entries = std::fs::read_dir(archive_dir).map_err(io_failed(archive_dir))?;
@@ -490,25 +530,19 @@ async fn unpack(
 			.collect();
 		first_volume(&files)
 			.map(|n| archive_dir.join(n))
-			.ok_or_else(|| JobError::Failed("downloaded files contain no archive".into()))?
+			.ok_or_else(|| JobError::Failed(t!("dl.no_archive_local").into_owned()))?
 	};
 
 	let cancel = Arc::new(AtomicBool::new(false));
 	let _guard = CancelOnDrop(cancel.clone());
-	let staging = files_dir.with_extension("partial");
-	let files_dir = files_dir.to_path_buf();
-	let archive_dir = archive_dir.to_path_buf();
 	let progress = |done: u64, total: u64| tracker.bytes(done, Some(total));
 
 	tokio::task::block_in_place(|| -> Result<(), JobError> {
-		remove_if_exists(&staging)?;
+		remove_if_exists(staging)?;
 		let volumes = archive::find_volumes(&first).map_err(io_failed(&first))?;
-		archive::extract_7z(&volumes, &staging, Some(&password), &progress, &cancel)?;
-		extract_nested(&staging, &password, &cancel)?;
-		remove_if_exists(&files_dir)?;
-		std::fs::rename(&staging, &files_dir).map_err(io_failed(&staging))?;
-		std::fs::write(files_dir.join(COMPLETE_MARKER), b"").map_err(io_failed(&files_dir))?;
-		remove_if_exists(&archive_dir)
+		archive::extract_7z(&volumes, staging, Some(&password), &progress, &cancel)?;
+		extract_nested(staging, &password, &cancel)?;
+		remove_if_exists(archive_dir)
 	})
 }
 
@@ -568,11 +602,14 @@ async fn check_headset_space(ctx: &InstallContext, files_dir: &Path) -> Result<(
 	.map_err(|e| JobError::Failed(e.to_string()))?
 	.map_err(io_failed(files_dir))?;
 	match ctx.device.free_space("/sdcard").await {
-		Ok(free) if free < size => Err(JobError::Failed(format!(
-			"not enough space on the headset: need {}, have {}",
-			format_bytes(size),
-			format_bytes(free)
-		))),
+		Ok(free) if free < size => Err(JobError::Failed(
+			t!(
+				"dl.no_space_headset",
+				need = format_bytes(size),
+				have = format_bytes(free)
+			)
+			.into_owned(),
+		)),
 		Ok(_) => Ok(()),
 		Err(e) => {
 			tracing::warn!("could not check headset storage: {e}");
@@ -626,6 +663,7 @@ mod tests {
 				state: TaskState::Running,
 				warnings: Vec::new(),
 				output: None,
+				conflict: None,
 			},
 			EventSink {
 				tx: sink_tx,
@@ -950,18 +988,28 @@ mod tests {
 			let done = wait_finished(&s.engine, None);
 			assert_eq!(done.state, TaskState::Done, "{:?}", done);
 			let output = done.output.expect("download-only keeps the files");
-			assert!(output.join(RELEASE).join("install.txt").is_file());
+			assert_eq!(
+				output,
+				s.dir.path().join("downloads").join(RELEASE),
+				"release sits in the downloads root"
+			);
 			assert!(
-				output.join(RELEASE).join("extra.bin").is_file(),
+				output.join("install.txt").is_file(),
+				"the archive's wrapping folder is unwrapped"
+			);
+			assert!(output.join("com.example.game/main.obb").is_file());
+			assert!(
+				output.join("extra.bin").is_file(),
 				"nested archive unpacked"
 			);
+			assert!(!output.join("_data.7z").exists(), "nested archive removed");
 			assert!(
-				!output.join(RELEASE).join("_data.7z").exists(),
-				"nested archive removed"
-			);
-			assert!(
-				!output.with_file_name("archive").exists(),
-				"volumes removed after unpacking"
+				!s.dir
+					.path()
+					.join("downloads")
+					.join(super::super::INCOMPLETE_DIR)
+					.exists(),
+				"temporary files removed after unpacking"
 			);
 			assert!(s.fake.recorded.lock().unwrap().pushed.is_empty());
 		}

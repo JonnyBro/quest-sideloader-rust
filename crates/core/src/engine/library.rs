@@ -1,3 +1,4 @@
+use rust_i18n::t;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
@@ -155,16 +156,14 @@ impl Library {
 			&& last.elapsed() < SYNC_COOLDOWN
 		{
 			let wait = (SYNC_COOLDOWN - last.elapsed()).as_secs().div_ceil(60);
-			self.sink.emit(Event::Notice(format!(
-				"The library was synced moments ago; try again in {wait} min"
-			)));
+			self.sink
+				.emit(Event::Notice(t!("lib.cooldown", wait = wait).into_owned()));
 			return;
 		}
 		self.last_manual_sync = Some(Instant::now());
 		let Some(mirror) = mirror else {
-			self.sink.emit(Event::Error(
-				"No mirror configured. Add one in Settings.".into(),
-			));
+			self.sink
+				.emit(Event::Error(t!("lib.no_mirror").into_owned()));
 			return;
 		};
 		let (fetcher, root, sink) = (self.fetcher.clone(), self.root.clone(), self.sink.clone());
@@ -190,11 +189,11 @@ async fn run_sync(fetcher: &Fetcher, mirror: &Mirror, root: &std::path::Path, si
 		*last = Instant::now();
 		let (stage, progress) = match stage {
 			SyncStage::Downloading { done, total } => (
-				format!("Downloading metadata ({})", crate::format_bytes(done)),
+				t!("lib.downloading_meta", size = crate::format_bytes(done)).into_owned(),
 				total.filter(|&t| t > 0).map(|t| done as f32 / t as f32),
 			),
 			SyncStage::Extracting { done, total } => (
-				"Unpacking metadata".to_owned(),
+				t!("lib.unpacking_meta").into_owned(),
 				(total > 0).then(|| done as f32 / total as f32),
 			),
 		};
@@ -204,12 +203,30 @@ async fn run_sync(fetcher: &Fetcher, mirror: &Mirror, root: &std::path::Path, si
 		}));
 	};
 	sink.emit(Event::CatalogStatus(CatalogStatus::Syncing {
-		stage: format!("Connecting to {}", mirror.name),
+		stage: t!("lib.connecting", name = mirror.name).into_owned(),
 		progress: None,
 	}));
 
+	let kind = match &mirror.kind {
+		crate::catalog::MirrorKind::Http { .. } => "http",
+		crate::catalog::MirrorKind::Rclone { .. } => "rclone",
+	};
+	tracing::info!(
+		mirror = %mirror.name,
+		kind,
+		headers = %crate::catalog::header_names(&mirror.headers),
+		"sync started"
+	);
+	let started = Instant::now();
 	match catalog::sync(fetcher, mirror, root, &report).await {
 		Ok(catalog) => {
+			tracing::info!(
+				mirror = %mirror.name,
+				games = catalog.games.len(),
+				can_upload = catalog.upload_target().is_some(),
+				elapsed = ?started.elapsed(),
+				"sync finished"
+			);
 			tracing::info!("synced {} games from {}", catalog.games.len(), mirror.name);
 			sink.emit(Event::CatalogLoaded(Some(Arc::new(catalog))));
 			sink.emit(Event::CatalogStatus(CatalogStatus::Idle));
@@ -217,6 +234,9 @@ async fn run_sync(fetcher: &Fetcher, mirror: &Mirror, root: &std::path::Path, si
 		Err(e) => {
 			tracing::error!("sync with {} failed: {e}", mirror.name);
 			sink.emit(Event::CatalogStatus(CatalogStatus::Failed(describe(&e))));
+			if matches!(e, CatalogError::RcloneNotFound(_)) {
+				sink.emit(Event::RcloneMissing);
+			}
 		}
 	}
 }
@@ -225,9 +245,7 @@ fn describe(e: &CatalogError) -> String {
 	match e {
 		CatalogError::Status {
 			status: 401 | 403, ..
-		} => {
-			format!("{e}. The mirror refused access; check its URL and headers (API key).")
-		}
+		} => t!("lib.refused", error = e).into_owned(),
 		other => other.to_string(),
 	}
 }

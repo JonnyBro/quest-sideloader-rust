@@ -1,3 +1,4 @@
+use rust_i18n::t;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -52,14 +53,15 @@ pub async fn run_default(
 	};
 	let progress = |n| counter.add(n);
 	for apk in &plan.apks {
-		report(Update::Stage(format!(
-			"Installing {}",
-			file_name(&apk.path)
-		)));
+		report(Update::Stage(
+			t!("run.installing", name = file_name(&apk.path)).into_owned(),
+		));
 		device.install_apk(&apk.path, &progress).await?;
 	}
 	for obb in &plan.obbs {
-		report(Update::Stage(format!("Copying OBB {}", obb.package)));
+		report(Update::Stage(
+			t!("run.copying_obb", package = obb.package).into_owned(),
+		));
 		device.push(&obb.path, &obb.remote_dir(), &progress).await?;
 	}
 	Ok(())
@@ -108,7 +110,7 @@ pub async fn run_script(
 			if !path.exists() {
 				return Err(SideloadError::Script {
 					line: *line,
-					message: format!("{} does not exist", path.display()),
+					message: t!("run.missing", path = path.display()).into_owned(),
 				});
 			}
 			total += local_size(path)?;
@@ -123,32 +125,36 @@ pub async fn run_script(
 	let step_count = actions.len();
 
 	for (step, (line, action)) in actions.iter().enumerate() {
-		let prefix = format!("Step {}/{step_count}", step + 1);
+		let prefix = t!("run.step", n = step + 1, total = step_count);
 		match action {
 			Action::Install { apk } => {
-				report(Update::Stage(format!(
-					"{prefix}: installing {}",
-					file_name(apk)
-				)));
+				report(Update::Stage(
+					t!("run.step_installing", step = prefix, name = file_name(apk)).into_owned(),
+				));
 				device.install_apk(apk, &progress).await?;
 			}
 			Action::Push { local, remote } => {
-				report(Update::Stage(format!(
-					"{prefix}: copying {}",
-					file_name(local)
-				)));
+				report(Update::Stage(
+					t!("run.step_copying", step = prefix, name = file_name(local)).into_owned(),
+				));
 				let target = push_target(device, local, remote).await?;
 				device.push(local, &target, &progress).await?;
 			}
 			Action::Uninstall { package } => {
-				report(Update::Stage(format!("{prefix}: uninstalling {package}")));
+				report(Update::Stage(
+					t!("run.step_uninstalling", step = prefix, package = package).into_owned(),
+				));
 				let command = format!("pm uninstall {}", shell_words::quote(package));
 				let out = device.shell_with_timeout(&command, SHELL_TIMEOUT).await?;
 				if !out.success() {
-					report(Update::Warning(format!(
-						"line {line}: uninstall failed: {}",
-						out.stdout.trim()
-					)));
+					report(Update::Warning(
+						t!(
+							"run.uninstall_failed",
+							line = line,
+							detail = out.stdout.trim()
+						)
+						.into_owned(),
+					));
 				}
 			}
 			Action::Shell { command } => {
@@ -160,9 +166,15 @@ pub async fn run_script(
 					} else {
 						out.stderr.trim()
 					};
-					report(Update::Warning(format!(
-						"line {line}: `{command}` failed: {detail}"
-					)));
+					report(Update::Warning(
+						t!(
+							"run.command_failed",
+							line = line,
+							command = command,
+							detail = detail
+						)
+						.into_owned(),
+					));
 				}
 			}
 		}

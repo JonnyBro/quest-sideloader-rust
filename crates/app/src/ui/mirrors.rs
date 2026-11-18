@@ -1,3 +1,4 @@
+use rust_i18n::t;
 use std::path::{Path, PathBuf};
 
 use quest_sideloader_core::Settings;
@@ -65,14 +66,15 @@ impl MirrorForm {
 	fn build(&self, rclone_dir: &Path) -> Result<Mirror, String> {
 		let mirror = match self.kind {
 			FormKind::VrpJson => {
-				let mut mirror = Mirror::from_vrp_json(&self.name_or("Mirror"), &self.json)
-					.map_err(|e| e.to_string())?;
+				let mut mirror =
+					Mirror::from_vrp_json(&self.name_or(&t!("mir.default_name")), &self.json)
+						.map_err(|e| e.to_string())?;
 				mirror.headers = self.headers();
 				mirror
 			}
 			FormKind::Http => Mirror {
 				id: Mirror::new_id(),
-				name: self.name_or("Mirror"),
+				name: self.name_or(&t!("mir.default_name")),
 				kind: MirrorKind::Http {
 					base_uri: self.base_uri.trim().to_owned(),
 				},
@@ -83,7 +85,7 @@ impl MirrorForm {
 				let source = self
 					.rclone_file
 					.as_ref()
-					.ok_or("choose an rclone config file")?;
+					.ok_or_else(|| t!("mir.choose_config").into_owned())?;
 				let id = Mirror::new_id();
 				let mirror = Mirror {
 					name: self.name_or(&self.remote),
@@ -98,7 +100,7 @@ impl MirrorForm {
 				mirror.validate().map_err(|e| e.to_string())?;
 				if let MirrorKind::Rclone { config_file, .. } = &mirror.kind {
 					copy_private(source, config_file)
-						.map_err(|e| format!("could not copy the rclone config: {e}"))?;
+						.map_err(|e| t!("mir.copy_failed", error = e).into_owned())?;
 				}
 				return Ok(mirror);
 			}
@@ -115,10 +117,13 @@ impl MirrorForm {
 				self.error = self
 					.remotes
 					.is_empty()
-					.then(|| "no remotes found in this file".to_owned());
+					.then(|| t!("mir.no_remotes").into_owned());
 				self.rclone_file = Some(path);
 			}
-			Err(e) => self.error = Some(format!("cannot read {}: {e}", path.display())),
+			Err(e) => {
+				self.error =
+					Some(t!("mir.cannot_read", path = path.display(), error = e).into_owned())
+			}
 		}
 	}
 }
@@ -162,7 +167,7 @@ fn describe(mirror: &Mirror) -> String {
 	};
 	match mirror.headers.len() {
 		0 => base,
-		n => format!("{base} · {n} header(s)"),
+		n => t!("mir.headers_count", base = base, n = n).into_owned(),
 	}
 }
 
@@ -173,28 +178,32 @@ fn reqwest_host(uri: &str) -> Option<String> {
 }
 
 pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclone_dir: &Path) {
-	ui.heading("Mirrors");
-	ui.weak("Servers the library is loaded from. The highlighted one is used.");
+	ui.heading(t!("mir.heading"));
+	ui.weak(t!("mir.intro"));
 	ui.add_space(4.0);
 
 	let mut remove = None;
 	if draft.mirrors.is_empty() {
-		ui.weak("No mirrors yet.");
+		ui.weak(t!("mir.none"));
 	}
 	egui::Grid::new("mirrors_grid")
 		.num_columns(3)
 		.spacing([12.0, 6.0])
 		.show(ui, |ui| {
+			let mut activate = None;
 			for mirror in &draft.mirrors {
 				let active = draft.active_mirror.as_deref() == Some(mirror.id.as_str());
 				if ui.selectable_label(active, &mirror.name).clicked() {
-					draft.active_mirror = Some(mirror.id.clone());
+					activate = Some(mirror.id.clone());
 				}
 				ui.weak(describe(mirror));
-				if ui.small_button("Remove").clicked() {
+				if ui.small_button(t!("mir.remove")).clicked() {
 					remove = Some(mirror.id.clone());
 				}
 				ui.end_row();
+			}
+			if let Some(id) = activate {
+				draft.active_mirror = Some(id);
 			}
 		});
 	if let Some(id) = remove {
@@ -204,7 +213,7 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 
 	ui.add_space(6.0);
 	if !form.open {
-		if ui.button("Add mirror…").clicked() {
+		if ui.button(t!("mir.add_mirror")).clicked() {
 			form.open = true;
 		}
 		return;
@@ -212,22 +221,24 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 
 	egui::Frame::group(ui.style()).show(ui, |ui| {
 		ui.horizontal(|ui| {
-			ui.selectable_value(&mut form.kind, FormKind::VrpJson, "Server config (JSON)");
+			ui.selectable_value(&mut form.kind, FormKind::VrpJson, t!("mir.kind_json"));
 			ui.selectable_value(&mut form.kind, FormKind::Http, "HTTP");
-			ui.selectable_value(&mut form.kind, FormKind::Rclone, "rclone config");
+			ui.selectable_value(&mut form.kind, FormKind::Rclone, t!("mir.kind_rclone"));
 		});
 		ui.add_space(4.0);
 		egui::Grid::new("mirror_form")
 			.num_columns(2)
 			.spacing([12.0, 6.0])
 			.show(ui, |ui| {
-				ui.label("Name");
-				ui.add(egui::TextEdit::singleline(&mut form.name).hint_text("Mirror"));
+				ui.label(t!("mir.name"));
+				ui.add(
+					egui::TextEdit::singleline(&mut form.name).hint_text(t!("mir.default_name")),
+				);
 				ui.end_row();
 
 				match form.kind {
 					FormKind::VrpJson => {
-						ui.label("Config");
+						ui.label(t!("mir.config"));
 						ui.vertical(|ui| {
 							ui.add(
 								egui::TextEdit::multiline(&mut form.json)
@@ -236,7 +247,7 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 									.desired_width(420.0)
 									.font(egui::TextStyle::Monospace),
 							);
-							if ui.button("Load from file…").clicked()
+							if ui.button(t!("mir.load_file")).clicked()
 								&& let Some(path) = rfd::FileDialog::new()
 									.add_filter("JSON", &["json"])
 									.pick_file()
@@ -244,8 +255,10 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 								match std::fs::read_to_string(&path) {
 									Ok(text) => form.json = text,
 									Err(e) => {
-										form.error =
-											Some(format!("cannot read {}: {e}", path.display()))
+										form.error = Some(
+											t!("mir.cannot_read", path = path.display(), error = e)
+												.into_owned(),
+										)
 									}
 								}
 							}
@@ -253,32 +266,32 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 						ui.end_row();
 					}
 					FormKind::Http => {
-						ui.label("Base URI");
+						ui.label(t!("mir.base_uri"));
 						ui.add(
 							egui::TextEdit::singleline(&mut form.base_uri)
 								.hint_text("https://example.org/files/")
 								.desired_width(420.0),
 						);
 						ui.end_row();
-						ui.label("Password");
+						ui.label(t!("mir.password"));
 						ui.add(
 							egui::TextEdit::singleline(&mut form.password)
 								.password(true)
-								.hint_text("base64, as in VRP configs"),
+								.hint_text(t!("mir.password_hint")),
 						);
 						ui.end_row();
 					}
 					FormKind::Rclone => {
-						ui.label("Config file");
+						ui.label(t!("mir.config_file"));
 						ui.horizontal(|ui| {
-							let label = form
-								.rclone_file
-								.as_ref()
-								.map_or_else(|| "none".to_owned(), |p| p.display().to_string());
+							let label = form.rclone_file.as_ref().map_or_else(
+								|| t!("mir.none_selected").into_owned(),
+								|p| p.display().to_string(),
+							);
 							ui.weak(label);
-							if ui.button("Choose…").clicked()
+							if ui.button(t!("mir.choose")).clicked()
 								&& let Some(path) = rfd::FileDialog::new()
-									.add_filter("rclone config", &["conf"])
+									.add_filter(t!("mir.kind_rclone"), &["conf"])
 									.pick_file()
 							{
 								form.load_rclone_file(path);
@@ -286,7 +299,7 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 						});
 						ui.end_row();
 						if !form.remotes.is_empty() {
-							ui.label("Remote");
+							ui.label(t!("mir.remote"));
 							egui::ComboBox::from_id_salt("rclone_remote")
 								.selected_text(&form.remote)
 								.show_ui(ui, |ui| {
@@ -300,17 +313,17 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 								});
 							ui.end_row();
 						}
-						ui.label("Password");
+						ui.label(t!("mir.password"));
 						ui.add(
 							egui::TextEdit::singleline(&mut form.password)
 								.password(true)
-								.hint_text("base64 archive password"),
+								.hint_text(t!("mir.archive_password_hint")),
 						);
 						ui.end_row();
 					}
 				}
 
-				ui.label("Headers");
+				ui.label(t!("mir.headers"));
 				ui.vertical(|ui| {
 					let mut drop_header = None;
 					for (i, (name, value)) in form.headers.iter_mut().enumerate() {
@@ -322,7 +335,7 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 							);
 							ui.add(
 								egui::TextEdit::singleline(value)
-									.password(true)
+									.hint_text(t!("mir.header_value"))
 									.desired_width(220.0),
 							);
 							if ui.small_button("✕").clicked() {
@@ -333,7 +346,7 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 					if let Some(i) = drop_header {
 						form.headers.remove(i);
 					}
-					if ui.small_button("Add header").clicked() {
+					if ui.small_button(t!("mir.add_header")).clicked() {
 						form.headers.push((String::new(), String::new()));
 					}
 				});
@@ -344,7 +357,7 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 			ui.colored_label(ui.visuals().error_fg_color, error);
 		}
 		ui.horizontal(|ui| {
-			if ui.button("Add").clicked() {
+			if ui.button(t!("mir.add")).clicked() {
 				match form.build(rclone_dir) {
 					Ok(mirror) => {
 						let id = mirror.id.clone();
@@ -357,7 +370,7 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 					Err(e) => form.error = Some(e),
 				}
 			}
-			if ui.button("Cancel").clicked() {
+			if ui.button(t!("common.cancel")).clicked() {
 				*form = MirrorForm::new();
 			}
 		});
