@@ -189,8 +189,8 @@ lib.connecting:
   en: "Connecting to %{name}"
   ru: "Подключение к %{name}"
 lib.refused:
-  en: "%{error}. The mirror refused access; check its URL and headers (API key)."
-  ru: "%{error}. Зеркало отказало в доступе; проверьте его адрес и заголовки (API-ключ)."
+  en: "%{error}. The mirror refused access. Check its address; if it's right, the mirror may no longer accept this build's API key."
+  ru: "%{error}. Зеркало отказало в доступе. Проверьте его адрес; если он верный, зеркало, возможно, больше не принимает API-ключ этой сборки."
 eng.queue_full:
   en: "The download queue is full (%{max}); wait for a download to finish"
   ru: "Очередь загрузок заполнена (%{max}); дождитесь окончания одной из загрузок"
@@ -467,12 +467,6 @@ mir.base_uri_scheme:
 mir.choose_remote:
   en: "choose an rclone remote"
   ru: "выберите rclone remote"
-mir.bad_header_name:
-  en: "invalid header name %{name}"
-  ru: "неверное имя заголовка %{name}"
-mir.bad_header_value:
-  en: "invalid value for header %{name}"
-  ru: "неверное значение заголовка %{name}"
 adb.not_launchable:
   en: "%{package} has no launchable activity"
   ru: "у %{package} нет запускаемой activity"
@@ -548,3 +542,6 @@ rc.zip_unreadable:
 rc.zip_no_rclone:
   en: "the rclone zip has no rclone program in it"
   ru: "в zip нет программы rclone"
+lib.refused_no_key:
+  en: "%{error}. The mirror refused access. This build has no API key, and mirrors that require one only work with official builds."
+  ru: "%{error}. Зеркало отказало в доступе. В этой сборке нет API-ключа, а зеркала, которым он нужен, работают только с официальными сборками."

@@ -26,6 +26,16 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install rclone
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Linux) sudo apt-get update && sudo apt-get install -y rclone ;;
+            macOS) brew install rclone ;;
+            Windows) choco install rclone -y --no-progress ;;
+          esac
+          rclone version
+
       - name: Format
         if: runner.os == 'Linux'
         run: cargo fmt --all --check

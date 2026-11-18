@@ -329,10 +329,6 @@ mod tests {
 					base_uri: "https://example.org/".into(),
 				},
 				password: "aGk=".into(),
-				headers: vec![crate::catalog::Header {
-					name: "X-Api-Key".into(),
-					value: "k".into(),
-				}],
 			}],
 			contribute_ignored: vec!["com.discord".into()],
 		};
@@ -364,7 +360,6 @@ mod tests {
 				base_uri: "https://a/".into(),
 			},
 			password: "aGk=".into(),
-			headers: Vec::new(),
 		});
 		settings.normalize();
 		assert_eq!(settings.active_mirror().map(|m| m.name.as_str()), Some("A"));

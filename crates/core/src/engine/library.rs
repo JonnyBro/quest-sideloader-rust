@@ -214,7 +214,7 @@ async fn run_sync(fetcher: &Fetcher, mirror: &Mirror, root: &std::path::Path, si
 	tracing::info!(
 		mirror = %mirror.name,
 		kind,
-		headers = %crate::catalog::header_names(&mirror.headers),
+		api_key = fetcher.has_api_key(),
 		"sync started"
 	);
 	let started = Instant::now();
@@ -233,7 +233,10 @@ async fn run_sync(fetcher: &Fetcher, mirror: &Mirror, root: &std::path::Path, si
 		}
 		Err(e) => {
 			tracing::error!("sync with {} failed: {e}", mirror.name);
-			sink.emit(Event::CatalogStatus(CatalogStatus::Failed(describe(&e))));
+			sink.emit(Event::CatalogStatus(CatalogStatus::Failed(describe(
+				&e,
+				fetcher.has_api_key(),
+			))));
 			if matches!(e, CatalogError::RcloneNotFound(_)) {
 				sink.emit(Event::RcloneMissing);
 			}
@@ -241,11 +244,14 @@ async fn run_sync(fetcher: &Fetcher, mirror: &Mirror, root: &std::path::Path, si
 	}
 }
 
-fn describe(e: &CatalogError) -> String {
+fn describe(e: &CatalogError, has_key: bool) -> String {
 	match e {
 		CatalogError::Status {
 			status: 401 | 403, ..
-		} => t!("lib.refused", error = e).into_owned(),
+		} if has_key => t!("lib.refused", error = e).into_owned(),
+		CatalogError::Status {
+			status: 401 | 403, ..
+		} => t!("lib.refused_no_key", error = e).into_owned(),
 		other => other.to_string(),
 	}
 }

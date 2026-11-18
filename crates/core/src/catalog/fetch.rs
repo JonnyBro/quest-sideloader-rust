@@ -1,55 +1,108 @@
-//! Downloading files from a mirror, over HTTP or through rclone.
+//! Downloading files from a mirror. Everything goes through rclone: HTTP
+//! mirrors through its `http` backend, which some mirrors require.
 
 use rust_i18n::t;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::time::Duration;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 
+use super::CatalogError;
 use super::mirror::{Mirror, MirrorKind, release_hash};
-use super::{CatalogError, io_err};
 
 /// Receives `(bytes so far, total if known)`.
 pub type FetchProgress<'a> = &'a (dyn Fn(u64, Option<u64>) + Send + Sync);
 
 const RCLONE_ROOT: &str = "Quest Games";
 
+/// An empty config, so rclone neither reads nor writes the user's own.
+const NO_CONFIG: &str = if cfg!(windows) { "NUL" } else { "/dev/null" };
+
 #[derive(Clone)]
 pub struct Fetcher {
-	http: reqwest::Client,
 	rclone: PathBuf,
-	throttle: std::sync::Arc<super::throttle::Throttle>,
-	rclone_parallel: std::sync::Arc<std::sync::atomic::AtomicU8>,
+	/// Total bytes per second for all downloads; `0` is unlimited.
+	limit: Arc<AtomicU64>,
+	parallel: Arc<AtomicU8>,
+	/// Sent to mirrors as [`crate::api_key::HEADER`]; never logged.
+	api_key: Option<String>,
+}
+
+/// How rclone reaches one mirror.
+struct Location<'a> {
+	config_file: &'a Path,
+	/// `remote:path` that relative paths are appended to.
+	prefix: String,
+	flags: Vec<String>,
+	/// For error messages; without credentials.
+	shown: String,
+}
+
+impl Location<'_> {
+	fn path(&self, relative: &str) -> String {
+		if self.prefix.ends_with(':') {
+			format!("{}{relative}", self.prefix)
+		} else {
+			format!("{}/{relative}", self.prefix)
+		}
+	}
+}
+
+fn location(mirror: &Mirror) -> Location<'_> {
+	match &mirror.kind {
+		// No leading slash: rclone's http backend would resolve it against
+		// the server root and lose the path in the mirror's URL.
+		MirrorKind::Http { base_uri } => Location {
+			config_file: Path::new(NO_CONFIG),
+			prefix: ":http:".into(),
+			flags: vec!["--http-url".into(), base_uri.clone()],
+			shown: redact_str(base_uri),
+		},
+		// VRP mirrors have always been addressed from the remote's root.
+		MirrorKind::Rclone {
+			config_file,
+			remote,
+		} => Location {
+			config_file,
+			prefix: format!("{remote}:/{RCLONE_ROOT}"),
+			flags: Vec::new(),
+			shown: format!("{remote}:/{RCLONE_ROOT}"),
+		},
+	}
 }
 
 impl Fetcher {
 	pub fn new(rclone_path: Option<PathBuf>) -> Result<Self, CatalogError> {
-		let http = reqwest::Client::builder()
-			.user_agent(concat!("quest-sideloader/", env!("CARGO_PKG_VERSION")))
-			.connect_timeout(Duration::from_secs(20))
-			.read_timeout(Duration::from_secs(60))
-			.build()
-			.map_err(|e| CatalogError::Http(e.to_string()))?;
 		Ok(Self {
-			http,
 			rclone: rclone_path.unwrap_or_else(|| PathBuf::from("rclone")),
-			throttle: std::sync::Arc::new(super::throttle::Throttle::new()),
-			rclone_parallel: std::sync::Arc::new(std::sync::atomic::AtomicU8::new(1)),
+			limit: Arc::new(AtomicU64::new(0)),
+			parallel: Arc::new(AtomicU8::new(1)),
+			api_key: crate::api_key::embedded(),
 		})
+	}
+
+	/// Whether this build sends an API key to mirrors.
+	pub fn has_api_key(&self) -> bool {
+		self.api_key.is_some()
+	}
+
+	#[cfg(test)]
+	pub(crate) fn with_api_key(mut self, key: Option<&str>) -> Self {
+		self.api_key = key.map(str::to_owned);
+		self
 	}
 
 	/// Caps the combined speed of all downloads; `0` is unlimited. Clones of
 	/// this fetcher share the limit. `parallel` is how many downloads may run
 	/// at once, which rclone needs to split the limit.
 	pub fn set_bandwidth_limit(&self, bytes_per_sec: u64, parallel: u8) {
-		self.throttle.set(bytes_per_sec);
-		self.rclone_parallel
-			.store(parallel.max(1), std::sync::atomic::Ordering::Relaxed);
+		self.limit.store(bytes_per_sec, Ordering::Relaxed);
+		self.parallel.store(parallel.max(1), Ordering::Relaxed);
 	}
 
-	/// Downloads `remote_path` (relative to the mirror root) to `dest`. An
-	/// HTTP download resumes from `dest.part` if a previous attempt left one.
+	/// Downloads `remote_path` (relative to the mirror root) to `dest`.
 	pub async fn download_file(
 		&self,
 		mirror: &Mirror,
@@ -60,136 +113,76 @@ impl Fetcher {
 		if let Some(parent) = dest.parent() {
 			tokio::fs::create_dir_all(parent)
 				.await
-				.map_err(io_err(parent))?;
+				.map_err(super::io_err(parent))?;
 		}
-		match &mirror.kind {
-			MirrorKind::Http { base_uri } => {
-				let url = join_url(base_uri, remote_path)?;
-				self.http_download(url, &mirror.headers, dest, progress)
-					.await
-			}
-			_ => {
-				let (access, base) = rclone_location(mirror)?;
-				let source = format!("{base}/{remote_path}");
-				self.rclone_copyto(&access, &mirror.headers, &source, dest, progress)
-					.await
-			}
-		}
-	}
-
-	async fn http_download(
-		&self,
-		url: reqwest::Url,
-		headers: &[super::mirror::Header],
-		dest: &Path,
-		progress: FetchProgress<'_>,
-	) -> Result<(), CatalogError> {
-		let part = part_path(dest);
-		let resume_from = tokio::fs::metadata(&part).await.map_or(0, |m| m.len());
-
-		let mut request = self.http.get(url.clone());
-		for header in headers {
-			request = request.header(&header.name, &header.value);
-		}
-		if resume_from > 0 {
-			request = request.header(reqwest::header::RANGE, format!("bytes={resume_from}-"));
-		}
-		tracing::debug!(
-			url = %redact(&url),
-			headers = %header_names(headers),
-			resume_from,
-			dest = %dest.display(),
-			"GET (download)"
-		);
-		let mut response = request.send().await.map_err(|e| {
-			tracing::debug!(url = %redact(&url), error = %e, "request failed");
-			CatalogError::Http(e.to_string())
-		})?;
-		let status = response.status();
-		tracing::debug!(url = %redact(&url), status = status.as_u16(), length = ?response.content_length(), "response");
-		if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE && resume_from > 0 {
-			// The partial file is already complete (or stale); start over.
-			tokio::fs::remove_file(&part).await.map_err(io_err(&part))?;
-			return Box::pin(self.http_download(url, headers, dest, progress)).await;
-		}
-		if !status.is_success() {
-			return Err(CatalogError::Status {
-				status: status.as_u16(),
-				url: redact(&url),
-			});
-		}
-
-		let resumed = status == reqwest::StatusCode::PARTIAL_CONTENT;
-		let mut done = if resumed { resume_from } else { 0 };
-		let total = response.content_length().map(|len| len + done);
-		let mut file = tokio::fs::OpenOptions::new()
-			.create(true)
-			.write(true)
-			.append(resumed)
-			.truncate(!resumed)
-			.open(&part)
-			.await
-			.map_err(io_err(&part))?;
-
-		progress(done, total);
-		while let Some(chunk) = response
-			.chunk()
-			.await
-			.map_err(|e| CatalogError::Http(e.to_string()))?
-		{
-			self.throttle.take(chunk.len() as u64).await;
-			file.write_all(&chunk).await.map_err(io_err(&part))?;
-			done += chunk.len() as u64;
-			progress(done, total);
-		}
-		file.flush().await.map_err(io_err(&part))?;
-		drop(file);
-		if let Some(total) = total
-			&& done != total
-		{
-			return Err(CatalogError::Http(
-				t!("cat.ended_early", done = done, total = total).into_owned(),
-			));
-		}
-		tokio::fs::rename(&part, dest).await.map_err(io_err(dest))
-	}
-
-	async fn rclone_copyto(
-		&self,
-		access: &RcloneAccess<'_>,
-		headers: &[super::mirror::Header],
-		source: &str,
-		dest: &Path,
-		progress: FetchProgress<'_>,
-	) -> Result<(), CatalogError> {
-		let mut command = self.rclone_command(access, headers);
+		let at = location(mirror);
+		let mut command = self.rclone_command(at.config_file, true);
 		command
 			.arg("copyto")
-			.arg(source)
+			.arg(at.path(remote_path))
 			.arg(dest)
+			.args(&at.flags)
 			.args(["--retries", "3", "--low-level-retries", "10"])
 			.args(self.rclone_bwlimit());
-		self.run_rclone(command, progress).await
+		self.run_rclone(command, progress)
+			.await
+			.map_err(|e| with_status(e, &at.shown))
 	}
 
-	/// Uploads one file into `dir` (empty for the root) of `remote`, sending
-	/// `headers` along.
+	/// Uploads one file into `dir` (empty for the root) of `remote`. The upload
+	/// config points at the mirror's own upload server, which doesn't get the key.
 	pub async fn rclone_upload(
 		&self,
 		access: &RcloneAccess<'_>,
 		remote: &str,
 		dir: &str,
-		headers: &[super::mirror::Header],
 		file: &Path,
 		progress: FetchProgress<'_>,
 	) -> Result<(), CatalogError> {
-		let mut command = self.rclone_command(access, headers);
+		let mut command = self.rclone_command(access.config_file, false);
 		command
 			.arg("copy")
 			.arg(file)
 			.arg(format!("{remote}:{}", dir.trim_matches('/')))
 			.args(["--checkers", "1", "--retries", "2", "--inplace"]);
 		self.run_rclone(command, progress).await
+	}
+
+	/// Files in a release's folder on the mirror.
+	pub async fn list_release(
+		&self,
+		mirror: &Mirror,
+		release_name: &str,
+	) -> Result<Vec<RemoteFile>, CatalogError> {
+		let at = location(mirror);
+		let folder = match mirror.kind {
+			MirrorKind::Http { .. } => release_hash(release_name),
+			MirrorKind::Rclone { .. } => release_name.to_owned(),
+		};
+		let mut command = self.rclone_command(at.config_file, true);
+		command
+			.arg("lsjson")
+			.arg("--files-only")
+			.arg(at.path(&format!("{folder}/")))
+			.args(&at.flags)
+			.stdout(Stdio::piped())
+			.stderr(Stdio::piped());
+		tracing::debug!(command = %describe_command(&command), "listing a release");
+		let output = command
+			.output()
+			.await
+			.map_err(|e| Self::spawn_error(&command, e))?;
+		if !output.status.success() {
+			let stderr = String::from_utf8_lossy(&output.stderr);
+			let message = stderr
+				.lines()
+				.last()
+				.unwrap_or("lsjson failed")
+				.trim()
+				.to_owned();
+			return Err(with_status(CatalogError::Rclone(message), &at.shown));
+		}
+		parse_lsjson(&output.stdout)
 	}
 
 	/// Runs rclone with JSON logs, reporting its transfer stats as progress.
@@ -246,23 +239,20 @@ impl Fetcher {
 			})))
 		}
 	}
-}
 
-impl Fetcher {
-	pub(crate) fn rclone_command(
-		&self,
-		access: &RcloneAccess<'_>,
-		headers: &[super::mirror::Header],
-	) -> tokio::process::Command {
+	pub(crate) fn rclone_command(&self, config_file: &Path, send_key: bool) -> tokio::process::Command {
 		let mut command = tokio::process::Command::new(&self.rclone);
-		// Through the environment rather than `--header`, so keys don't show up
-		// in other users' process lists.
-		if !headers.is_empty() {
-			command.env("RCLONE_HEADER", rclone_header_env(headers));
+		// Through the environment rather than `--header`, so the key doesn't
+		// show up in other users' process lists.
+		if send_key && let Some(key) = &self.api_key {
+			command.env(
+				"RCLONE_HEADER",
+				rclone_header_env(crate::api_key::HEADER, key),
+			);
 		}
 		command
 			.arg("--config")
-			.arg(access.config_file)
+			.arg(config_file)
 			// Never stop to ask for a config password on a terminal.
 			.arg("--ask-password=false")
 			// Keep request bursts small; mirrors ask clients to be gentle.
@@ -281,12 +271,8 @@ impl Fetcher {
 	/// limit divided by the most downloads that may run at once. The `B`
 	/// suffix keeps it in plain bytes, whatever unit the user picked.
 	fn rclone_bwlimit(&self) -> Vec<String> {
-		let parallel = u64::from(
-			self.rclone_parallel
-				.load(std::sync::atomic::Ordering::Relaxed)
-				.max(1),
-		);
-		match self.throttle.limit() {
+		let parallel = u64::from(self.parallel.load(Ordering::Relaxed).max(1));
+		match self.limit.load(Ordering::Relaxed) {
 			0 => Vec::new(),
 			bytes => vec![
 				"--bwlimit".into(),
@@ -302,64 +288,25 @@ impl Fetcher {
 			CatalogError::Rclone(e.to_string())
 		}
 	}
+}
 
-	/// Files in a release's folder on the mirror.
-	pub async fn list_release(
-		&self,
-		mirror: &Mirror,
-		release_name: &str,
-	) -> Result<Vec<RemoteFile>, CatalogError> {
-		match &mirror.kind {
-			MirrorKind::Http { base_uri } => {
-				let url = join_url(base_uri, &format!("{}/", release_hash(release_name)))?;
-				let mut request = self.http.get(url.clone());
-				for header in &mirror.headers {
-					request = request.header(&header.name, &header.value);
-				}
-				let response = request
-					.send()
-					.await
-					.map_err(|e| CatalogError::Http(e.to_string()))?;
-				let status = response.status();
-				if !status.is_success() {
-					return Err(CatalogError::Status {
-						status: status.as_u16(),
-						url: redact(&url),
-					});
-				}
-				let html = response
-					.text()
-					.await
-					.map_err(|e| CatalogError::Http(e.to_string()))?;
-				Ok(parse_index(&url, &html))
-			}
-			_ => {
-				let (access, base) = rclone_location(mirror)?;
-				let mut command = self.rclone_command(&access, &mirror.headers);
-				command
-					.arg("lsjson")
-					.arg("--files-only")
-					.arg(format!("{base}/{release_name}/"))
-					.stdout(Stdio::piped())
-					.stderr(Stdio::piped());
-				let output = command
-					.output()
-					.await
-					.map_err(|e| Self::spawn_error(&command, e))?;
-				if !output.status.success() {
-					let stderr = String::from_utf8_lossy(&output.stderr);
-					return Err(CatalogError::Rclone(
-						stderr
-							.lines()
-							.last()
-							.unwrap_or("lsjson failed")
-							.trim()
-							.to_owned(),
-					));
-				}
-				parse_lsjson(&output.stdout)
-			}
-		}
+/// rclone reports refused requests as text (`HTTP Error: 403 Forbidden`);
+/// they become statuses so they aren't retried and get a clear message.
+fn with_status(e: CatalogError, shown: &str) -> CatalogError {
+	let CatalogError::Rclone(message) = &e else {
+		return e;
+	};
+	let status = message
+		.split("HTTP Error: ")
+		.nth(1)
+		.and_then(|rest| rest.get(..3))
+		.and_then(|code| code.parse::<u16>().ok());
+	match status {
+		Some(status) => CatalogError::Status {
+			status,
+			url: shown.to_owned(),
+		},
+		None => e,
 	}
 }
 
@@ -367,82 +314,6 @@ impl Fetcher {
 pub struct RemoteFile {
 	pub name: String,
 	pub size: Option<u64>,
-}
-
-/// Path of a release file relative to the mirror root, as `download_file` wants it.
-pub fn release_file_path(mirror: &Mirror, release_name: &str, file: &str) -> String {
-	match mirror.kind {
-		MirrorKind::Http { .. } => format!(
-			"{}/{}",
-			release_hash(release_name),
-			percent_encoding::utf8_percent_encode(file, PATH_SEGMENT)
-		),
-		_ => format!("{release_name}/{file}"),
-	}
-}
-
-/// How to run rclone for one mirror.
-#[derive(Debug, Clone, Copy)]
-pub struct RcloneAccess<'a> {
-	pub config_file: &'a Path,
-}
-
-/// rclone access and the `remote:folder` prefix of an rclone-backed mirror.
-fn rclone_location(mirror: &Mirror) -> Result<(RcloneAccess<'_>, String), CatalogError> {
-	match &mirror.kind {
-		// VRP mirrors have always been addressed from the remote's root.
-		MirrorKind::Rclone {
-			config_file,
-			remote,
-		} => Ok((
-			RcloneAccess { config_file },
-			format!("{remote}:/{RCLONE_ROOT}"),
-		)),
-		MirrorKind::Http { .. } => Err(CatalogError::Config(t!("cat.sync_first").into_owned())),
-	}
-}
-
-const PATH_SEGMENT: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
-	.remove(b'-')
-	.remove(b'.')
-	.remove(b'_')
-	.remove(b'~');
-
-/// Direct child files linked from an autoindex page (nginx, Apache, rclone serve).
-fn parse_index(listing: &reqwest::Url, html: &str) -> Vec<RemoteFile> {
-	let mut files = Vec::new();
-	let mut rest = html;
-	while let Some(pos) = rest.find("href=") {
-		rest = &rest[pos + 5..];
-		let Some(quote) = rest.chars().next().filter(|c| *c == '"' || *c == '\'') else {
-			continue;
-		};
-		let Some(end) = rest[1..].find(quote) else {
-			break;
-		};
-		let href = rest[1..=end].replace("&amp;", "&");
-		rest = &rest[end + 1..];
-
-		let Ok(url) = listing.join(&href) else {
-			continue;
-		};
-		if url.origin() != listing.origin() || url.query().is_some() {
-			continue;
-		}
-		let Some(name) = url.path().strip_prefix(listing.path()) else {
-			continue;
-		};
-		if name.is_empty() || name.contains('/') {
-			continue;
-		}
-		let name = percent_encoding::percent_decode_str(name)
-			.decode_utf8_lossy()
-			.into_owned();
-		if !files.iter().any(|f: &RemoteFile| f.name == name) {
-			files.push(RemoteFile { name, size: None });
-		}
-	}
-	files
 }
 
 /// Some rclone builds leave fields out or spell them differently, so every
@@ -482,45 +353,35 @@ fn parse_lsjson(stdout: &[u8]) -> Result<Vec<RemoteFile>, CatalogError> {
 }
 
 /// rclone reads multi-value flags from the environment as one CSV line.
-fn rclone_header_env(headers: &[super::mirror::Header]) -> String {
-	headers
-		.iter()
-		.map(|h| {
-			let field = format!("{}: {}", h.name, h.value);
-			if field.contains([',', '"', '\n', '\r']) {
-				format!("\"{}\"", field.replace('"', "\"\""))
-			} else {
-				field
-			}
-		})
-		.collect::<Vec<_>>()
-		.join(",")
-}
-
-fn part_path(dest: &Path) -> PathBuf {
-	let mut name = dest.file_name().unwrap_or_default().to_os_string();
-	name.push(".part");
-	dest.with_file_name(name)
-}
-
-fn join_url(base: &str, path: &str) -> Result<reqwest::Url, CatalogError> {
-	let base = if base.ends_with('/') {
-		base.to_owned()
+fn rclone_header_env(name: &str, value: &str) -> String {
+	let field = format!("{name}: {value}");
+	if field.contains([',', '"', '\n', '\r']) {
+		format!("\"{}\"", field.replace('"', "\"\""))
 	} else {
-		format!("{base}/")
-	};
-	reqwest::Url::parse(&base)
-		.and_then(|b| b.join(path))
-		.map_err(|e| CatalogError::Config(t!("cat.bad_mirror_url", error = e).into_owned()))
+		field
+	}
 }
 
-/// Header names only; values are often keys.
-pub(crate) fn header_names(headers: &[super::mirror::Header]) -> String {
-	headers
-		.iter()
-		.map(|h| h.name.as_str())
-		.collect::<Vec<_>>()
-		.join(", ")
+/// Path of a release file relative to the mirror root, as `download_file` wants it.
+pub fn release_file_path(mirror: &Mirror, release_name: &str, file: &str) -> String {
+	match mirror.kind {
+		MirrorKind::Http { .. } => format!("{}/{file}", release_hash(release_name)),
+		MirrorKind::Rclone { .. } => format!("{release_name}/{file}"),
+	}
+}
+
+/// How to run rclone for an upload config.
+#[derive(Debug, Clone, Copy)]
+pub struct RcloneAccess<'a> {
+	pub config_file: &'a Path,
+}
+
+/// Like [`redact`] for a URL that may not parse.
+fn redact_str(url: &str) -> String {
+	match reqwest::Url::parse(url) {
+		Ok(parsed) => redact(&parsed),
+		Err(_) => url.split('?').next().unwrap_or_default().to_owned(),
+	}
 }
 
 /// Mirror URLs can carry credentials; keep them out of error messages.
@@ -556,8 +417,8 @@ fn rclone_log_text(line: &str) -> String {
 	}
 }
 
-/// Program and arguments for the log. Header values travel in the
-/// environment and are listed by name only.
+/// Program and arguments for the log. The key travels in the environment and
+/// is only mentioned, never shown.
 fn describe_command(command: &tokio::process::Command) -> String {
 	let std = command.as_std();
 	let mut text = std.get_program().to_string_lossy().into_owned();
@@ -590,18 +451,18 @@ fn parse_rclone_log(line: &str) -> Option<RcloneLog> {
 		return Some(RcloneLog::Stats { bytes, total });
 	}
 	let level = value.get("level")?.as_str()?;
-	if level == "error" || level == "critical" {
-		return Some(RcloneLog::Error(
-			value.get("msg")?.as_str()?.trim().to_owned(),
-		));
+	let msg = value.get("msg")?.as_str()?.trim();
+	// A failed `copyto` ends with a notice ("Failed to copyto: ...") and may
+	// log nothing at error level.
+	if level == "error" || level == "critical" || (level == "notice" && msg.starts_with("Failed to"))
+	{
+		return Some(RcloneLog::Error(msg.to_owned()));
 	}
 	None
 }
 
 #[cfg(test)]
 mod tests {
-	use std::sync::Mutex;
-
 	use tokio::io::{AsyncReadExt, AsyncWriteExt};
 	use tokio::net::TcpListener;
 
@@ -613,144 +474,7 @@ mod tests {
 			name: "test".into(),
 			kind: MirrorKind::Http { base_uri: base },
 			password: "aGk=".into(),
-			headers: vec![super::super::mirror::Header {
-				name: "X-Test".into(),
-				value: "yes".into(),
-			}],
 		}
-	}
-
-	/// Serves `body` once per connection; honours `Range: bytes=N-`.
-	async fn serve(body: &'static [u8]) -> (String, tokio::sync::mpsc::UnboundedReceiver<String>) {
-		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-		let addr = listener.local_addr().unwrap();
-		let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-		tokio::spawn(async move {
-			while let Ok((mut s, _)) = listener.accept().await {
-				let mut req = vec![0u8; 4096];
-				let n = s.read(&mut req).await.unwrap();
-				let req = String::from_utf8_lossy(&req[..n]).into_owned();
-				let range = req
-					.lines()
-					.find_map(|l| {
-						l.to_ascii_lowercase()
-							.strip_prefix("range: bytes=")
-							.map(str::to_owned)
-					})
-					.and_then(|r| r.trim_end_matches('-').parse::<usize>().ok());
-				let _ = tx.send(req);
-				let response = match range {
-					Some(start) => {
-						let rest = &body[start..];
-						let mut head = format!(
-							"HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-							rest.len()
-						)
-						.into_bytes();
-						head.extend_from_slice(rest);
-						head
-					}
-					None => {
-						let mut head = format!(
-							"HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-							body.len()
-						)
-						.into_bytes();
-						head.extend_from_slice(body);
-						head
-					}
-				};
-				s.write_all(&response).await.unwrap();
-			}
-		});
-		(format!("http://{addr}/files"), rx)
-	}
-
-	#[tokio::test]
-	async fn http_download_with_headers_and_progress() {
-		let (base, mut requests) = serve(b"0123456789").await;
-		let dir = tempfile::tempdir().unwrap();
-		let dest = dir.path().join("meta.7z");
-		let seen = Mutex::new(Vec::new());
-		Fetcher::new(None)
-			.unwrap()
-			.download_file(&http_mirror(base), "meta.7z", &dest, &|done, total| {
-				seen.lock().unwrap().push((done, total));
-			})
-			.await
-			.unwrap();
-		assert_eq!(std::fs::read(&dest).unwrap(), b"0123456789");
-		assert!(!part_path(&dest).exists());
-		assert_eq!(seen.lock().unwrap().last(), Some(&(10, Some(10))));
-		let request = requests.recv().await.unwrap();
-		assert!(request.starts_with("GET /files/meta.7z "), "{request}");
-		assert!(request.to_ascii_lowercase().contains("x-test: yes"));
-	}
-
-	#[tokio::test]
-	async fn http_download_resumes_partial_file() {
-		let (base, mut requests) = serve(b"0123456789").await;
-		let dir = tempfile::tempdir().unwrap();
-		let dest = dir.path().join("game.7z.001");
-		std::fs::write(part_path(&dest), b"0123").unwrap();
-		Fetcher::new(None)
-			.unwrap()
-			.download_file(&http_mirror(base), "abc/game.7z.001", &dest, &|_, _| {})
-			.await
-			.unwrap();
-		assert_eq!(std::fs::read(&dest).unwrap(), b"0123456789");
-		assert!(
-			requests
-				.recv()
-				.await
-				.unwrap()
-				.to_ascii_lowercase()
-				.contains("range: bytes=4-")
-		);
-	}
-
-	#[tokio::test]
-	async fn http_error_status() {
-		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-		let addr = listener.local_addr().unwrap();
-		tokio::spawn(async move {
-			let (mut s, _) = listener.accept().await.unwrap();
-			let mut buf = [0u8; 1024];
-			let _ = s.read(&mut buf).await;
-			s.write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
-				.await
-				.unwrap();
-		});
-		let dir = tempfile::tempdir().unwrap();
-		let err = Fetcher::new(None)
-			.unwrap()
-			.download_file(
-				&http_mirror(format!("http://user:pw@{addr}/")),
-				"meta.7z",
-				&dir.path().join("x"),
-				&|_, _| {},
-			)
-			.await
-			.unwrap_err();
-		match err {
-			CatalogError::Status { status, url } => {
-				assert_eq!(status, 403);
-				assert!(!url.contains("pw"), "{url}");
-			}
-			other => panic!("{other:?}"),
-		}
-	}
-
-	#[test]
-	fn url_joining() {
-		assert_eq!(
-			join_url("https://h/a", "meta.7z").unwrap().as_str(),
-			"https://h/a/meta.7z"
-		);
-		assert_eq!(
-			join_url("https://h/a/", "0bee/x.7z.001").unwrap().as_str(),
-			"https://h/a/0bee/x.7z.001"
-		);
 	}
 
 	#[test]
@@ -771,24 +495,29 @@ mod tests {
 				"Failed to copyto: directory not found".into()
 			))
 		);
+		let failed = r#"{"level":"notice","msg":"Failed to copyto: failed to stat: HTTP Error: 403 Forbidden"}"#;
+		assert!(matches!(parse_rclone_log(failed), Some(RcloneLog::Error(_))));
 		assert_eq!(parse_rclone_log(r#"{"level":"info","msg":"hi"}"#), None);
 		assert_eq!(parse_rclone_log("not json"), None);
 	}
 
 	#[test]
+	fn refused_requests_become_statuses() {
+		let refused = CatalogError::Rclone("failed to stat: HTTP Error: 403 Forbidden".into());
+		assert!(matches!(
+			with_status(refused, "https://m/"),
+			CatalogError::Status { status: 403, .. }
+		));
+		let other = CatalogError::Rclone("directory not found".into());
+		assert!(matches!(with_status(other, "x"), CatalogError::Rclone(_)));
+	}
+
+	#[test]
 	fn rclone_header_csv() {
-		use super::super::mirror::Header;
-		let h = |name: &str, value: &str| Header {
-			name: name.into(),
-			value: value.into(),
-		};
+		assert_eq!(rclone_header_env("X-API-Key", "abc"), "X-API-Key: abc");
 		assert_eq!(
-			rclone_header_env(&[h("X-Api-Key", "abc")]),
-			"X-Api-Key: abc"
-		);
-		assert_eq!(
-			rclone_header_env(&[h("X-Api-Key", "a,b"), h("X-Other", "say \"hi\"")]),
-			r#""X-Api-Key: a,b","X-Other: say ""hi""""#
+			rclone_header_env("X-API-Key", "a,\"b\""),
+			r#""X-API-Key: a,""b""""#
 		);
 	}
 
@@ -837,7 +566,7 @@ mod tests {
 
 	/// Real rclone with an `http` remote; skipped when rclone isn't installed.
 	#[tokio::test]
-	async fn rclone_sends_mirror_headers() {
+	async fn rclone_sends_the_key() {
 		if std::process::Command::new("rclone")
 			.arg("version")
 			.output()
@@ -850,7 +579,7 @@ mod tests {
 		let dir = tempfile::tempdir().unwrap();
 		let config = dir.path().join("rclone.conf");
 		std::fs::write(&config, format!("[vrp]\ntype = http\nurl = {url}\n")).unwrap();
-		let mut mirror = Mirror {
+		let mirror = Mirror {
 			id: "r".into(),
 			name: "r".into(),
 			kind: MirrorKind::Rclone {
@@ -858,12 +587,12 @@ mod tests {
 				remote: "vrp".into(),
 			},
 			password: "aGk=".into(),
-			headers: Vec::new(),
 		};
-		let fetcher = Fetcher::new(None).unwrap();
 		let dest = dir.path().join("meta.7z");
 
-		let denied = fetcher
+		let denied = Fetcher::new(None)
+			.unwrap()
+			.with_api_key(None)
 			.download_file(&mirror, "meta.7z", &dest, &|_, _| {})
 			.await;
 		assert!(
@@ -871,35 +600,13 @@ mod tests {
 			"the server must refuse requests without the key"
 		);
 
-		mirror.headers = vec![super::super::mirror::Header {
-			name: "X-Api-Key".into(),
-			value: "secret".into(),
-		}];
-		fetcher
+		Fetcher::new(None)
+			.unwrap()
+			.with_api_key(Some("secret"))
 			.download_file(&mirror, "meta.7z", &dest, &|_, _| {})
 			.await
 			.unwrap();
 		assert_eq!(std::fs::read(&dest).unwrap(), b"meta archive bytes");
-	}
-
-	#[test]
-	fn autoindex_listing() {
-		let listing = reqwest::Url::parse("https://m.example/files/0bee/").unwrap();
-		let html = r#"<html><body><h1>Index of /files/0bee/</h1>
-			<a href="../">../</a>
-			<a href="0bee.7z.001">0bee.7z.001</a> 01-Jan-2024 1073741824
-			<a href='0bee.7z.002'>0bee.7z.002</a>
-			<a href="/files/0bee/release%20notes.txt">release notes.txt</a>
-			<a href="sub/">sub/</a>
-			<a href="?C=M;O=A">Last modified</a>
-			<a href="https://evil.example/x.7z.003">x</a>
-			<a href="0bee.7z.001">duplicate</a>
-			</body></html>"#;
-		let names: Vec<_> = parse_index(&listing, html)
-			.into_iter()
-			.map(|f| f.name)
-			.collect();
-		assert_eq!(names, ["0bee.7z.001", "0bee.7z.002", "release notes.txt"]);
 	}
 
 	#[test]
@@ -921,7 +628,7 @@ mod tests {
 		let http = http_mirror("https://m/".into());
 		assert_eq!(
 			release_file_path(&http, "abc", "x y.7z.001"),
-			"0bee89b07a248e27c83fc3d5951213c1/x%20y.7z.001"
+			"0bee89b07a248e27c83fc3d5951213c1/x y.7z.001"
 		);
 		let rclone = Mirror {
 			kind: MirrorKind::Rclone {
@@ -934,38 +641,6 @@ mod tests {
 			release_file_path(&rclone, "Game v1+2", "a.7z.001"),
 			"Game v1+2/a.7z.001"
 		);
-	}
-
-	#[tokio::test]
-	async fn lists_http_release_folder() {
-		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-		let addr = listener.local_addr().unwrap();
-		let (tx, rx) = tokio::sync::oneshot::channel();
-		tokio::spawn(async move {
-			let (mut s, _) = listener.accept().await.unwrap();
-			let mut buf = vec![0u8; 4096];
-			let n = s.read(&mut buf).await.unwrap();
-			let _ = tx.send(String::from_utf8_lossy(&buf[..n]).into_owned());
-			let body = r#"<a href="0bee.7z.001">x</a><a href="0bee.7z.002">y</a>"#;
-			let head = format!(
-				"HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-				body.len()
-			);
-			s.write_all(head.as_bytes()).await.unwrap();
-			s.write_all(body.as_bytes()).await.unwrap();
-		});
-		let files = Fetcher::new(None)
-			.unwrap()
-			.list_release(&http_mirror(format!("http://{addr}/files")), "abc")
-			.await
-			.unwrap();
-		assert_eq!(files.len(), 2);
-		let request = rx.await.unwrap();
-		assert!(
-			request.starts_with("GET /files/0bee89b07a248e27c83fc3d5951213c1/ "),
-			"{request}"
-		);
-		assert!(request.to_ascii_lowercase().contains("x-test: yes"));
 	}
 
 	#[tokio::test]
@@ -997,7 +672,6 @@ mod tests {
 				config_file: config,
 				remote: "vrp".into(),
 			},
-			headers: Vec::new(),
 			..http_mirror("https://unused/".into())
 		};
 		let mut files = Fetcher::new(None)
@@ -1019,6 +693,112 @@ mod tests {
 				},
 			]
 		);
+	}
+
+	fn have_rclone() -> bool {
+		let found = std::process::Command::new("rclone")
+			.arg("version")
+			.output()
+			.is_ok();
+		if !found {
+			eprintln!("rclone not installed, skipping");
+		}
+		found
+	}
+
+	/// A key-protected HTTP mirror under `/files/`: `meta.7z` and one release
+	/// folder with an autoindex page; 403 without `X-API-Key: secret`.
+	async fn http_mirror_server() -> String {
+		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+		let addr = listener.local_addr().unwrap();
+		let hash = release_hash("Game v1");
+		tokio::spawn(async move {
+			while let Ok((mut s, _)) = listener.accept().await {
+				let hash = hash.clone();
+				tokio::spawn(async move {
+					let mut req = Vec::new();
+					let mut buf = [0u8; 4096];
+					while !req.windows(4).any(|w| w == b"\r\n\r\n") {
+						match s.read(&mut buf).await {
+							Ok(0) | Err(_) => return,
+							Ok(n) => req.extend_from_slice(&buf[..n]),
+						}
+					}
+					let req = String::from_utf8_lossy(&req).into_owned();
+					let mut first = req.lines().next().unwrap_or("").split(' ');
+					let (method, path) = (first.next().unwrap_or(""), first.next().unwrap_or(""));
+					let authorized = req
+						.lines()
+						.any(|l| l.to_ascii_lowercase().trim() == "x-api-key: secret");
+					let listing = format!("<a href=\"Game%20v1.7z.001\">Game v1.7z.001</a>");
+					let (status, payload): (&str, Vec<u8>) = if !authorized {
+						("403 Forbidden", Vec::new())
+					} else if path == "/files/meta.7z" {
+						("200 OK", b"meta bytes".to_vec())
+					} else if path == format!("/files/{hash}/") {
+						("200 OK", listing.into_bytes())
+					} else if path == format!("/files/{hash}/Game%20v1.7z.001") {
+						("200 OK", b"part one".to_vec())
+					} else {
+						("404 Not Found", Vec::new())
+					};
+					let kind = if path.ends_with('/') { "text/html" } else { "application/octet-stream" };
+					let head = format!(
+						"HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: {kind}\r\nLast-Modified: Mon, 01 Jan 2024 00:00:00 GMT\r\nConnection: close\r\n\r\n",
+						payload.len()
+					);
+					let _ = s.write_all(head.as_bytes()).await;
+					if method != "HEAD" {
+						let _ = s.write_all(&payload).await;
+					}
+				});
+			}
+		});
+		format!("http://{addr}/files/")
+	}
+
+	/// HTTP mirrors go through rclone's http backend with the key in
+	/// `RCLONE_HEADER`; skipped when rclone isn't installed.
+	#[tokio::test]
+	async fn http_mirror_goes_through_rclone() {
+		if !have_rclone() {
+			return;
+		}
+		let mirror = http_mirror(http_mirror_server().await);
+		let dir = tempfile::tempdir().unwrap();
+		let dest = dir.path().join("meta.7z");
+
+		let refused = Fetcher::new(None)
+			.unwrap()
+			.with_api_key(None)
+			.download_file(&mirror, "meta.7z", &dest, &|_, _| {})
+			.await;
+		assert!(
+			matches!(refused, Err(CatalogError::Status { status: 403, .. })),
+			"{refused:?}"
+		);
+
+		let fetcher = Fetcher::new(None).unwrap().with_api_key(Some("secret"));
+		fetcher
+			.download_file(&mirror, "meta.7z", &dest, &|_, _| {})
+			.await
+			.unwrap();
+		assert_eq!(std::fs::read(&dest).unwrap(), b"meta bytes");
+
+		let files = fetcher.list_release(&mirror, "Game v1").await.unwrap();
+		assert_eq!(files.len(), 1, "{files:?}");
+		assert_eq!(files[0].name, "Game v1.7z.001");
+		let part = dir.path().join("part");
+		fetcher
+			.download_file(
+				&mirror,
+				&release_file_path(&mirror, "Game v1", &files[0].name),
+				&part,
+				&|_, _| {},
+			)
+			.await
+			.unwrap();
+		assert_eq!(std::fs::read(&part).unwrap(), b"part one");
 	}
 
 	#[test]
@@ -1068,7 +848,6 @@ mod tests {
 				},
 				"RSL-gameuploads",
 				"",
-				&[],
 				&file,
 				&|_, _| {},
 			)

@@ -234,8 +234,8 @@ set.rclone_binary:
   en: "rclone binary"
   ru: "Программа rclone"
 set.rclone_hint:
-  en: "rclone from PATH (only for rclone mirrors)"
-  ru: "rclone из PATH (только для rclone-зеркал)"
+  en: "rclone from PATH (used for all mirrors)"
+  ru: "rclone из PATH (нужен для всех зеркал)"
 set.theme:
   en: "Theme"
   ru: "Тема"
@@ -749,9 +749,6 @@ mir.no_remotes:
 mir.cannot_read:
   en: "cannot read %{path}: %{error}"
   ru: "не удалось прочитать %{path}: %{error}"
-mir.headers_count:
-  en: "%{base} · %{n} header(s)"
-  ru: "%{base} · заголовков: %{n}"
 mir.heading:
   en: "Mirrors"
   ru: "Зеркала"
@@ -806,15 +803,6 @@ mir.remote:
 mir.archive_password_hint:
   en: "base64 archive password"
   ru: "пароль архивов в base64"
-mir.headers:
-  en: "Headers"
-  ru: "Заголовки"
-mir.header_value:
-  en: "value"
-  ru: "значение"
-mir.add_header:
-  en: "Add header"
-  ru: "Добавить заголовок"
 mir.add:
   en: "Add"
   ru: "Добавить"
@@ -861,8 +849,8 @@ rclone.title:
   en: "rclone not found"
   ru: "rclone не найден"
 rclone.text:
-  en: "This mirror needs rclone. The app can download the official build from rclone.org into its data folder, check it against the published checksum and use it. You can also install rclone yourself and set its path in Settings."
-  ru: "Этому зеркалу нужен rclone. Приложение может скачать официальную сборку с rclone.org в свою папку данных, сверить её с опубликованной контрольной суммой и пользоваться ею. Или установите rclone сами и укажите путь к нему в Настройках."
+  en: "Mirrors are read through rclone. The app can download the official build from rclone.org into its data folder, check it against the published checksum and use it. You can also install rclone yourself and set its path in Settings."
+  ru: "Зеркала читаются через rclone. Приложение может скачать официальную сборку с rclone.org в свою папку данных, сверить её с опубликованной контрольной суммой и пользоваться ею. Или установите rclone сами и укажите путь к нему в Настройках."
 rclone.no_build:
   en: "rclone.org has no build for this system, so rclone has to be installed by hand."
   ru: "На rclone.org нет сборки для этой системы, поэтому rclone придётся установить вручную."

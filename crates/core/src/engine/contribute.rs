@@ -186,7 +186,6 @@ async fn run(upload: &Upload, tracker: &Tracker) -> Result<(), String> {
 			},
 			&upload.target.remote,
 			&upload.target.dir,
-			&[],
 			&zip_path,
 			&progress,
 		)

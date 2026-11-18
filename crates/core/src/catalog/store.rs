@@ -307,7 +307,6 @@ mod tests {
 			name: "t".into(),
 			kind: super::super::MirrorKind::Http { base_uri: base },
 			password: "aHVudGVyMg==".into(),
-			headers: Vec::new(),
 		};
 		let catalog = sync(&Fetcher::new(None).unwrap(), &mirror, &root, &|_| {})
 			.await
@@ -330,7 +329,6 @@ mod tests {
 			name: "t".into(),
 			kind: super::super::MirrorKind::Http { base_uri: base },
 			password: "d3Jvbmc=".into(),
-			headers: Vec::new(),
 		};
 		let err = sync(&Fetcher::new(None).unwrap(), &mirror, &root, &|_| {})
 			.await
@@ -373,7 +371,6 @@ mod tests {
 				remote: "vrp".into(),
 			},
 			password: "aHVudGVyMg==".into(),
-			headers: Vec::new(),
 		};
 		let root = dir.path().join("catalog");
 		let catalog = sync(&Fetcher::new(None).unwrap(), &mirror, &root, &|_| {})

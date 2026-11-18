@@ -2,7 +2,7 @@ use rust_i18n::t;
 use std::path::{Path, PathBuf};
 
 use quest_sideloader_core::Settings;
-use quest_sideloader_core::catalog::{Header, Mirror, MirrorKind, rclone_remotes};
+use quest_sideloader_core::catalog::{Mirror, MirrorKind, rclone_remotes};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FormKind {
@@ -19,7 +19,6 @@ pub struct MirrorForm {
 	json: String,
 	base_uri: String,
 	password: String,
-	headers: Vec<(String, String)>,
 	rclone_file: Option<PathBuf>,
 	remotes: Vec<String>,
 	remote: String,
@@ -35,23 +34,11 @@ impl MirrorForm {
 			json: String::new(),
 			base_uri: String::new(),
 			password: String::new(),
-			headers: Vec::new(),
 			rclone_file: None,
 			remotes: Vec::new(),
 			remote: String::new(),
 			error: None,
 		}
-	}
-
-	fn headers(&self) -> Vec<Header> {
-		self.headers
-			.iter()
-			.filter(|(name, _)| !name.trim().is_empty())
-			.map(|(name, value)| Header {
-				name: name.trim().to_owned(),
-				value: value.trim().to_owned(),
-			})
-			.collect()
 	}
 
 	fn name_or(&self, fallback: &str) -> String {
@@ -66,11 +53,8 @@ impl MirrorForm {
 	fn build(&self, rclone_dir: &Path) -> Result<Mirror, String> {
 		let mirror = match self.kind {
 			FormKind::VrpJson => {
-				let mut mirror =
-					Mirror::from_vrp_json(&self.name_or(&t!("mir.default_name")), &self.json)
-						.map_err(|e| e.to_string())?;
-				mirror.headers = self.headers();
-				mirror
+				Mirror::from_vrp_json(&self.name_or(&t!("mir.default_name")), &self.json)
+					.map_err(|e| e.to_string())?
 			}
 			FormKind::Http => Mirror {
 				id: Mirror::new_id(),
@@ -79,7 +63,6 @@ impl MirrorForm {
 					base_uri: self.base_uri.trim().to_owned(),
 				},
 				password: self.password.trim().to_owned(),
-				headers: self.headers(),
 			},
 			FormKind::Rclone => {
 				let source = self
@@ -95,7 +78,6 @@ impl MirrorForm {
 					},
 					id,
 					password: self.password.trim().to_owned(),
-					headers: self.headers(),
 				};
 				mirror.validate().map_err(|e| e.to_string())?;
 				if let MirrorKind::Rclone { config_file, .. } = &mirror.kind {
@@ -158,16 +140,12 @@ pub fn remove_unused_rclone_configs(settings: &Settings, rclone_dir: &Path) {
 }
 
 fn describe(mirror: &Mirror) -> String {
-	let base = match &mirror.kind {
+	match &mirror.kind {
 		MirrorKind::Http { base_uri } => {
 			let host = reqwest_host(base_uri).unwrap_or_else(|| base_uri.clone());
 			format!("HTTP · {host}")
 		}
 		MirrorKind::Rclone { remote, .. } => format!("rclone · {remote}"),
-	};
-	match mirror.headers.len() {
-		0 => base,
-		n => t!("mir.headers_count", base = base, n = n).into_owned(),
 	}
 }
 
@@ -322,35 +300,6 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 						ui.end_row();
 					}
 				}
-
-				ui.label(t!("mir.headers"));
-				ui.vertical(|ui| {
-					let mut drop_header = None;
-					for (i, (name, value)) in form.headers.iter_mut().enumerate() {
-						ui.horizontal(|ui| {
-							ui.add(
-								egui::TextEdit::singleline(name)
-									.hint_text("X-Api-Key")
-									.desired_width(140.0),
-							);
-							ui.add(
-								egui::TextEdit::singleline(value)
-									.hint_text(t!("mir.header_value"))
-									.desired_width(220.0),
-							);
-							if ui.small_button("✕").clicked() {
-								drop_header = Some(i);
-							}
-						});
-					}
-					if let Some(i) = drop_header {
-						form.headers.remove(i);
-					}
-					if ui.small_button(t!("mir.add_header")).clicked() {
-						form.headers.push((String::new(), String::new()));
-					}
-				});
-				ui.end_row();
 			});
 
 		if let Some(error) = &form.error {
@@ -403,7 +352,6 @@ mod tests {
 		form.kind = FormKind::Rclone;
 		form.load_rclone_file(source);
 		form.password = "aGk=".into();
-		form.headers = vec![("X-Api-Key".into(), "k".into())];
 		let rclone_dir = dir.path().join("cfg/rclone");
 		let mirror = form.build(&rclone_dir).unwrap();
 		let MirrorKind::Rclone {
@@ -414,7 +362,6 @@ mod tests {
 			panic!()
 		};
 		assert_eq!(remote, "vrp");
-		assert_eq!(mirror.headers.len(), 1);
 		assert_eq!(mirror.name, "vrp");
 		assert!(config_file.starts_with(&rclone_dir));
 		#[cfg(unix)]
@@ -430,23 +377,5 @@ mod tests {
 		remove_unused_rclone_configs(&settings, &rclone_dir);
 		assert!(!config_file.exists());
 		settings.mirrors.push(mirror);
-	}
-
-	#[test]
-	fn json_form_keeps_headers() {
-		let mut form = MirrorForm::new();
-		form.json = r#"{"baseUri":"https://e.org/","password":"aGk="}"#.into();
-		form.headers = vec![
-			("X-Api-Key".into(), " secret ".into()),
-			(String::new(), "ignored".into()),
-		];
-		let mirror = form.build(Path::new("/unused")).unwrap();
-		assert_eq!(
-			&mirror.headers,
-			&[Header {
-				name: "X-Api-Key".into(),
-				value: "secret".into()
-			}]
-		);
 	}
 }

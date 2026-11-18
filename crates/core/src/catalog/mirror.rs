@@ -8,12 +8,6 @@ use serde::{Deserialize, Serialize};
 use super::CatalogError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Header {
-	pub name: String,
-	pub value: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum MirrorKind {
 	/// Plain HTTP server laid out like the VRP public mirror.
@@ -33,9 +27,6 @@ pub struct Mirror {
 	pub kind: MirrorKind,
 	/// Archive password, base64-encoded as in VRP configs.
 	pub password: String,
-	/// Sent with every request, e.g. an `X-API-Key` the mirror requires.
-	#[serde(default, skip_serializing_if = "Vec::is_empty")]
-	pub headers: Vec<Header>,
 }
 
 impl Mirror {
@@ -71,7 +62,6 @@ impl Mirror {
 				base_uri: config.base_uri,
 			},
 			password: config.password,
-			headers: Vec::new(),
 		};
 		mirror.validate()?;
 		Ok(mirror)
@@ -96,16 +86,6 @@ impl Mirror {
 					return Err(CatalogError::Config(t!("mir.choose_remote").into_owned()));
 				}
 			}
-		}
-		for header in &self.headers {
-			reqwest::header::HeaderName::from_bytes(header.name.as_bytes()).map_err(|_| {
-				CatalogError::Config(
-					t!("mir.bad_header_name", name = format!("{:?}", header.name)).into_owned(),
-				)
-			})?;
-			reqwest::header::HeaderValue::from_str(&header.value).map_err(|_| {
-				CatalogError::Config(t!("mir.bad_header_value", name = header.name).into_owned())
-			})?;
 		}
 		Ok(())
 	}
@@ -171,10 +151,6 @@ mod tests {
 				remote: "VRP".into(),
 			},
 			password: "aGk=".into(),
-			headers: vec![Header {
-				name: "X-Api-Key".into(),
-				value: "k".into(),
-			}],
 		};
 		#[derive(Serialize, Deserialize)]
 		struct Wrap {
@@ -189,9 +165,9 @@ mod tests {
 		assert_eq!(back.mirrors, [mirror]);
 	}
 
-	/// Settings written before headers moved out of the HTTP variant.
+	/// Older settings could carry custom headers per mirror; they are ignored now.
 	#[test]
-	fn reads_older_http_mirror_with_headers() {
+	fn reads_older_mirror_with_headers() {
 		let text = r#"
 			[[mirrors]]
 			id = "m1"
@@ -209,28 +185,9 @@ mod tests {
 			mirrors: Vec<Mirror>,
 		}
 		let wrap: Wrap = toml::from_str(text).unwrap();
-		assert_eq!(wrap.mirrors[0].headers[0].value, "secret");
 		assert!(
 			matches!(&wrap.mirrors[0].kind, MirrorKind::Http { base_uri } if base_uri == "https://e.org/")
 		);
-	}
-
-	#[test]
-	fn invalid_header_is_rejected_for_any_kind() {
-		let mirror = Mirror {
-			id: "m".into(),
-			name: "r".into(),
-			kind: MirrorKind::Rclone {
-				config_file: "/c".into(),
-				remote: "vrp".into(),
-			},
-			password: "aGk=".into(),
-			headers: vec![Header {
-				name: "Bad Name".into(),
-				value: "v".into(),
-			}],
-		};
-		assert!(mirror.validate().is_err());
 	}
 
 	#[test]

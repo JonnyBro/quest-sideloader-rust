@@ -77,7 +77,7 @@ pub async fn install(
 
 pub(crate) fn http_client() -> Result<reqwest::Client, String> {
 	reqwest::Client::builder()
-		.user_agent(concat!("quest-sideloader/", env!("CARGO_PKG_VERSION")))
+		.user_agent(concat!("quest-sideloader-rust/", env!("CARGO_PKG_VERSION")))
 		.connect_timeout(Duration::from_secs(20))
 		.read_timeout(Duration::from_secs(60))
 		.build()

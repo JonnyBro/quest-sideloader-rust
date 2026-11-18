@@ -1,6 +1,7 @@
 rust_i18n::i18n!("locales", fallback = "en");
 
 pub mod adb;
+pub mod api_key;
 pub mod archive;
 pub mod catalog;
 pub mod contribute;

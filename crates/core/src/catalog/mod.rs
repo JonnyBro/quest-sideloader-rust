@@ -6,14 +6,12 @@ mod list;
 mod mirror;
 mod rclone_config;
 mod store;
-mod throttle;
 
 use std::path::PathBuf;
 
-pub(crate) use fetch::header_names;
 pub use fetch::{FetchProgress, Fetcher, RcloneAccess, RemoteFile, release_file_path};
 pub use list::{BadHeader, Game, parse_game_list};
-pub use mirror::{Header, Mirror, MirrorKind, rclone_remotes, release_hash};
+pub use mirror::{Mirror, MirrorKind, rclone_remotes, release_hash};
 pub use rclone_config::check_mirror_rclone_config;
 pub use store::{Catalog, SyncStage, UploadTarget, sync};
 

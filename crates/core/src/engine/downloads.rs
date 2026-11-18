@@ -754,7 +754,6 @@ mod tests {
 					base_uri: "https://m/".into(),
 				},
 				password: "aGk=".into(),
-				headers: Vec::new(),
 			};
 			let game = Game {
 				name: format!("G{id}"),
@@ -815,7 +814,12 @@ mod tests {
 							}
 						}
 						let req = String::from_utf8_lossy(&req).into_owned();
-						let path = req.split(' ').nth(1).unwrap_or("/").to_owned();
+						let head_only = req.starts_with("HEAD ");
+						let raw = req.split(' ').nth(1).unwrap_or("/");
+						let path = percent_encoding::percent_decode_str(raw)
+							.decode_utf8_lossy()
+							.into_owned();
+						let listing = path.ends_with('/');
 						let body = if let Some(body) = files.get(&path) {
 							Some(body.clone())
 						} else if path.ends_with('/') {
@@ -828,14 +832,17 @@ mod tests {
 						} else {
 							None
 						};
+						let kind = if listing { "text/html" } else { "application/octet-stream" };
 						let response = match body {
 							Some(body) => {
 								let mut r = format!(
-									"HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+									"HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: {kind}\r\nLast-Modified: Mon, 01 Jan 2024 00:00:00 GMT\r\nConnection: close\r\n\r\n",
 									body.len()
 								)
 								.into_bytes();
-								r.extend(body);
+								if !head_only {
+									r.extend(body);
+								}
 								r
 							}
 							None => b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec(),
@@ -848,6 +855,18 @@ mod tests {
 		}
 
 		const RELEASE: &str = "Demo Game v1 +1";
+
+		/// The mirror is read through rclone, so these tests need it.
+		fn have_rclone() -> bool {
+			let found = std::process::Command::new("rclone")
+				.arg("version")
+				.output()
+				.is_ok();
+			if !found {
+				eprintln!("rclone not installed, skipping");
+			}
+			found
+		}
 
 		/// The release as a mirror stores it: an encrypted, split 7z with a
 		/// nested unencrypted `_data.7z` next to install.txt.
@@ -902,7 +921,6 @@ mod tests {
 				name: "test".into(),
 				kind: MirrorKind::Http { base_uri: base },
 				password: "aHVudGVyMg==".into(),
-				headers: Vec::new(),
 			});
 			settings.normalize();
 			let engine =
@@ -948,6 +966,9 @@ mod tests {
 
 		#[test]
 		fn downloads_unpacks_and_installs() {
+			if !have_rclone() {
+				return;
+			}
 			let s = setup(2);
 			s.engine.send(Command::Download {
 				game: game(RELEASE),
@@ -980,6 +1001,9 @@ mod tests {
 
 		#[test]
 		fn download_only_keeps_unpacked_files() {
+			if !have_rclone() {
+				return;
+			}
 			let s = setup(1);
 			s.engine.send(Command::Download {
 				game: game(RELEASE),
@@ -1016,6 +1040,9 @@ mod tests {
 
 		#[test]
 		fn queued_job_can_be_cancelled_and_missing_release_fails() {
+			if !have_rclone() {
+				return;
+			}
 			let s = setup(1);
 			s.engine.send(Command::Download {
 				game: game("Not On Mirror v1"),

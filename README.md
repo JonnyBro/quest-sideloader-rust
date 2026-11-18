@@ -46,11 +46,13 @@ or finished.
 The library is optional. Mirrors are added in the Mirrors section of Settings:
 
 - a VRP-style server config, `{"baseUri": "https://.../", "password": "<base64>"}`;
-- an rclone config with a remote that has a `Quest Games` folder (needs `rclone`).
+- an rclone config with a remote that has a `Quest Games` folder.
 
-Any mirror can have extra HTTP headers, such as an `X-API-Key` it requires,
-and they go with every request. rclone gets them through `RCLONE_HEADER`, so
-they don't appear on its command line.
+Both kinds are read through `rclone`; a server config uses its `http` backend,
+since some servers only answer rclone. Official builds send an API key to
+mirrors as an `X-API-Key` header. rclone gets it through `RCLONE_HEADER`, so it
+doesn't appear on its command line, and the logs only say whether a key was
+sent. Uploads go to the mirror's upload server without it.
 
 The mirror's `meta.7z` is unpacked under the data directory, and game notes
 come only from it.
@@ -103,6 +105,13 @@ cargo build --release
 The binary is `target/release/quest-sideloader` (`quest-sideloader.exe` on Windows).
 `cargo run --release` builds and starts it in one step.
 
+A build made this way has no API key, so mirrors that require one refuse it.
+The key is never in the repository: official builds get it at compile time
+from the `API_KEY` environment variable, set from a CI secret. For local builds
+it can also live in an `api_key.txt` in the repository root, which git ignores;
+after creating that file, run `touch crates/core/build.rs` once so cargo
+notices it.
+
 To run the tests and lints:
 
 ```bash
@@ -110,9 +119,9 @@ cargo test
 cargo clippy --all-targets
 ```
 
-Tests use fake adb servers and never talk to a connected headset. A few also
-run the real `7z` and `rclone` binaries and are skipped when those aren't
-installed.
+Tests use fake adb servers and never talk to a connected headset. The mirror
+and download tests run the real `rclone`, and a few use `7z`; they are skipped
+when those aren't installed.
 
 ### Running
 
@@ -128,7 +137,7 @@ To run the app you need:
 - Linux: a desktop with Wayland or X11, a Vulkan or OpenGL driver, and
   `xdg-desktop-portal` for file dialogs. The headset needs udev rules for USB
   access (for example the `android-udev` package).
-- `rclone`, only for rclone mirrors. If a sync fails because
+- `rclone`, for any mirror. If a sync fails because
   rclone is missing, the app offers to download the official build from
   rclone.org and checks it against the published SHA-256 sums before using it.
 
