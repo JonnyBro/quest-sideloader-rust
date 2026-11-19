@@ -224,6 +224,9 @@ eng.screenshot_saved:
 eng.screenshot_failed:
   en: "screenshot: %{error}"
   ru: "скриншот: %{error}"
+eng.shell_stopped:
+  en: "Stopped"
+  ru: "Остановлено"
 eng.tweak_reset:
   en: "%{property} reset"
   ru: "%{property} сброшено"

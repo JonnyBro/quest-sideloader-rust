@@ -13,16 +13,18 @@ pub enum Tab {
 	Library,
 	Downloads,
 	Tasks,
+	Console,
 	Settings,
 }
 
 impl Tab {
-	const ALL: [Tab; 6] = [
+	const ALL: [Tab; 7] = [
 		Tab::Devices,
 		Tab::Headset,
 		Tab::Library,
 		Tab::Downloads,
 		Tab::Tasks,
+		Tab::Console,
 		Tab::Settings,
 	];
 
@@ -33,6 +35,7 @@ impl Tab {
 			Tab::Library => t!("tab.library"),
 			Tab::Downloads => t!("tab.downloads"),
 			Tab::Tasks => t!("tab.tasks"),
+			Tab::Console => t!("tab.console"),
 			Tab::Settings => t!("tab.settings"),
 		}
 	}
@@ -50,6 +53,7 @@ pub struct SideloaderApp {
 	status: Option<Status>,
 	devices_view: ui::devices::DevicesView,
 	tasks_view: ui::tasks::TasksView,
+	console_view: ui::console::ConsoleView,
 	downloads_view: ui::downloads::DownloadsView,
 	headset_view: ui::headset::HeadsetView,
 	logs_view: ui::logs::LogsView,
@@ -95,6 +99,13 @@ impl SideloaderApp {
 		if let Some(prefs) = cc.storage.and_then(|s| eframe::get_value(s, LIBRARY_KEY)) {
 			library_view.restore(prefs);
 		}
+		let mut devices_view = ui::devices::DevicesView::new();
+		if let Some(address) = cc
+			.storage
+			.and_then(|s| eframe::get_value::<String>(s, WIRELESS_KEY))
+		{
+			devices_view.restore_wireless(address);
+		}
 		Ok(Self {
 			title: base_title(paths.portable_root().is_some()).to_owned(),
 			engine,
@@ -102,8 +113,9 @@ impl SideloaderApp {
 			tab: Tab::Devices,
 			status: load_error
 				.map(|e| Status::Error(t!("app.settings_load_error", error = e).into_owned())),
-			devices_view: ui::devices::DevicesView::new(),
+			devices_view,
 			tasks_view: ui::tasks::TasksView::new(),
+			console_view: ui::console::ConsoleView::new(),
 			downloads_view: ui::downloads::DownloadsView::new(),
 			headset_view: ui::headset::HeadsetView::new(),
 			logs_view: ui::logs::LogsView::new(log_buffer, logs_dir),
@@ -133,7 +145,9 @@ impl SideloaderApp {
 				if matches!(status, quest_sideloader_core::AdbStatus::Missing(_)) {
 					self.adb_setup.on_missing();
 				}
-				self.devices_view.on_adb_status(status);
+				if let Some(address) = self.devices_view.on_adb_status(status) {
+					self.engine.send(Command::Reconnect(address));
+				}
 			}
 			Event::DevicesChanged(devices) => self.devices_view.on_devices_changed(devices),
 			Event::DeviceInfo { serial, info } => self.devices_view.on_info(serial, info),
@@ -177,6 +191,7 @@ impl SideloaderApp {
 				title,
 				analysis,
 			} => self.review_dialog.push(task, title, analysis),
+			Event::Shell { id, output } => self.console_view.on_output(id, output),
 			Event::Notice(message) => {
 				tracing::info!("{message}");
 				self.status = Some(Status::Info(message));
@@ -267,10 +282,14 @@ impl SideloaderApp {
 }
 
 const LIBRARY_KEY: &str = "library";
+const WIRELESS_KEY: &str = "wireless_address";
 
 impl eframe::App for SideloaderApp {
 	fn save(&mut self, storage: &mut dyn eframe::Storage) {
 		eframe::set_value(storage, LIBRARY_KEY, &self.library_view.prefs());
+		if let Some(address) = self.devices_view.last_wireless() {
+			eframe::set_value(storage, WIRELESS_KEY, &address);
+		}
 	}
 
 	fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -350,6 +369,14 @@ impl eframe::App for SideloaderApp {
 					.map(|d| (d.serial.clone(), d.display_name()));
 				let target = target.as_ref().map(|(s, n)| (s.as_str(), n.as_str()));
 				self.tasks_view.show(ui, target, &mut commands);
+			}
+			Tab::Console => {
+				let target = self
+					.devices_view
+					.install_target()
+					.map(|d| (d.serial.clone(), d.display_name()));
+				let target = target.as_ref().map(|(s, n)| (s.as_str(), n.as_str()));
+				self.console_view.show(ui, target, &mut commands);
 			}
 			Tab::Settings => {
 				let default_downloads = self.paths.default_downloads_dir();

@@ -167,6 +167,10 @@ async fn try_serve(s: &mut TcpStream, rec: &Shared) -> std::io::Result<()> {
 				s.write_all(reply.as_bytes()).await?;
 			} else if let Some(command) = service.strip_prefix("shell,v2,raw:") {
 				rec.lock().unwrap().shell.push(command.to_owned());
+				// `Device::push` into Android/data or obb ends with `mv TMP DEST`.
+				if command.starts_with("mkdir -p ") {
+					apply_move(command, &mut rec.lock().unwrap().pushed);
+				}
 				if command.starts_with("pm path ") {
 					s.write_all(&packet(1, b"package:/data/app/~~x/pkg-1/base.apk\n"))
 						.await?;
@@ -214,6 +218,23 @@ async fn try_serve(s: &mut TcpStream, rec: &Shared) -> std::io::Result<()> {
 		}
 	}
 	Ok(())
+}
+
+fn apply_move(command: &str, pushed: &mut [(String, Vec<u8>)]) {
+	let words = shell_words::split(command).unwrap_or_default();
+	let Some(mv) = words.iter().position(|w| w == "mv") else {
+		return;
+	};
+	let mut args = words[mv + 1..].iter().filter(|w| *w != "-f");
+	let (Some(from), Some(to)) = (args.next(), args.next()) else {
+		return;
+	};
+	let to = to.trim_end_matches(';');
+	for (path, _) in pushed.iter_mut() {
+		if let Some(rest) = path.strip_prefix(from.as_str()) {
+			*path = format!("{to}{rest}");
+		}
+	}
 }
 
 /// Records each pushed file before acknowledging it. The client waits for that

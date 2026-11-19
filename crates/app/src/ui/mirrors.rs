@@ -164,26 +164,40 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 	if draft.mirrors.is_empty() {
 		ui.weak(t!("mir.none"));
 	}
-	egui::Grid::new("mirrors_grid")
-		.num_columns(3)
-		.spacing([12.0, 6.0])
-		.show(ui, |ui| {
-			let mut activate = None;
+	let mut activate = None;
+	egui_extras::TableBuilder::new(ui)
+		.id_salt("mirrors_table")
+		.vscroll(false)
+		.cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+		.column(egui_extras::Column::auto().at_most(240.0).clip(true))
+		.column(egui_extras::Column::remainder().at_least(120.0).clip(true))
+		.column(egui_extras::Column::auto())
+		.body(|mut body| {
 			for mirror in &draft.mirrors {
-				let active = draft.active_mirror.as_deref() == Some(mirror.id.as_str());
-				if ui.selectable_label(active, &mirror.name).clicked() {
-					activate = Some(mirror.id.clone());
-				}
-				ui.weak(describe(mirror));
-				if ui.small_button(t!("mir.remove")).clicked() {
-					remove = Some(mirror.id.clone());
-				}
-				ui.end_row();
-			}
-			if let Some(id) = activate {
-				draft.active_mirror = Some(id);
+				body.row(24.0, |mut row| {
+					let active = draft.active_mirror.as_deref() == Some(mirror.id.as_str());
+					row.col(|ui| {
+						if ui.selectable_label(active, &mirror.name).clicked() {
+							activate = Some(mirror.id.clone());
+						}
+					});
+					row.col(|ui| {
+						ui.add(
+							egui::Label::new(egui::RichText::new(describe(mirror)).weak())
+								.truncate(),
+						);
+					});
+					row.col(|ui| {
+						if ui.small_button(t!("mir.remove")).clicked() {
+							remove = Some(mirror.id.clone());
+						}
+					});
+				});
 			}
 		});
+	if let Some(id) = activate {
+		draft.active_mirror = Some(id);
+	}
 	if let Some(id) = remove {
 		draft.mirrors.retain(|m| m.id != id);
 		draft.normalize();

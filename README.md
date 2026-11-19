@@ -41,6 +41,14 @@ on in Settings, and each can be installed again, opened or deleted. Tasks lists
 the downloads, installs, uploads and backups started in this session, running
 or finished.
 
+## Console tab
+
+The Console tab runs shell commands on the selected headset, the same as
+`adb shell <command>` (a leading `adb shell` is dropped). Output appears as it
+arrives, so `logcat` works and can be stopped. Up and Down go through earlier
+commands, and the last 20,000 lines are kept. Commands run as typed and can
+change or delete anything the shell user can reach.
+
 ## Library mirrors
 
 The library is optional. Mirrors are added in the Mirrors section of Settings:
@@ -184,8 +192,11 @@ its window is in the background; this can be turned off in Settings.
 
 Settings and data go to the platform's user folders: on Windows the settings
 are in `%APPDATA%\quest-sideloader\config` and everything else in
-`%APPDATA%\quest-sideloader\data`. The window size and the library's sort
-and filter are kept in `ui.ron` next to the settings. For a portable copy, put an empty
+`%APPDATA%\quest-sideloader\data`. The window size, the library's sort
+and filter, and the address of the last headset connected over Wi-Fi are
+kept in `ui.ron` next to the settings. On start the app tries that address
+once; if the headset is off or has another address, nothing is shown except
+a line in the log. For a portable copy, put an empty
 `portable.txt` next to the executable. The app then keeps everything, including
 screenshots, in a `userdata` folder beside it. Paths in the settings are stored
 relative to that folder, so the copy still works from another drive letter or

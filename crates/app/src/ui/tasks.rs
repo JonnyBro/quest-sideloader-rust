@@ -134,70 +134,32 @@ fn task_row(
 	commands: &mut Vec<Command>,
 	dismiss: &mut Vec<TaskId>,
 ) {
+	// The buttons go in first, so a long title is cut short instead of
+	// pushing them off the row.
 	ui.horizontal(|ui| {
-		ui.label(egui::RichText::new(&task.title).strong());
-		ui.weak(match (task.kind, &task.serial) {
-			(TaskKind::Download, Some(serial)) => {
-				t!("tasks.kind_download_install", serial = serial)
-			}
-			(TaskKind::Download, None) => t!("tasks.kind_download"),
-			(TaskKind::Install, Some(serial)) => t!("tasks.kind_install_on", serial = serial),
-			(TaskKind::Install, None) => t!("tasks.kind_install"),
-			(TaskKind::Upload, Some(serial)) => t!("tasks.kind_upload_on", serial = serial),
-			(TaskKind::Upload, None) => t!("tasks.kind_upload"),
-			(TaskKind::Backup, _) => t!("tasks.kind_backup"),
-			(TaskKind::Restore, _) => t!("tasks.kind_restore"),
-			(TaskKind::Uninstall, _) => t!("tasks.kind_uninstall"),
-			(TaskKind::AdbSetup, _) => t!("tasks.kind_adb"),
-			(TaskKind::RcloneSetup, _) => t!("tasks.kind_rclone"),
-		});
 		ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-			if task.state.is_finished() {
-				if ui
-					.small_button("✕")
-					.on_hover_text(t!("tasks.dismiss"))
-					.clicked()
-				{
-					dismiss.push(task.id);
-				}
-				if let (Some(path), Some((serial, name))) = (&task.output, install_target)
-					&& ui
-						.small_button(t!("common.install"))
-						.on_hover_text(t!("common.install_on", name = name))
-						.clicked()
-				{
-					commands.push(Command::Install {
-						serial: serial.to_owned(),
-						path: path.clone(),
-					});
-				}
-				return;
-			}
-			if ui.small_button(t!("common.cancel")).clicked() {
-				commands.push(Command::CancelTask(task.id));
-			}
-			if let Some(position) = queued.iter().position(|id| *id == task.id) {
-				if ui
-					.add_enabled(position + 1 < queued.len(), egui::Button::new("⏷").small())
-					.on_hover_text(t!("tasks.later"))
-					.clicked()
-				{
-					commands.push(Command::MoveDownload {
-						task: task.id,
-						delta: 1,
-					});
-				}
-				if ui
-					.add_enabled(position > 0, egui::Button::new("⏶").small())
-					.on_hover_text(t!("tasks.sooner"))
-					.clicked()
-				{
-					commands.push(Command::MoveDownload {
-						task: task.id,
-						delta: -1,
-					});
-				}
-			}
+			task_buttons(ui, task, queued, install_target, commands, dismiss);
+			ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+				ui.add(egui::Label::new(egui::RichText::new(&task.title).strong()).truncate());
+				let kind = match (task.kind, &task.serial) {
+					(TaskKind::Download, Some(serial)) => {
+						t!("tasks.kind_download_install", serial = serial)
+					}
+					(TaskKind::Download, None) => t!("tasks.kind_download"),
+					(TaskKind::Install, Some(serial)) => {
+						t!("tasks.kind_install_on", serial = serial)
+					}
+					(TaskKind::Install, None) => t!("tasks.kind_install"),
+					(TaskKind::Upload, Some(serial)) => t!("tasks.kind_upload_on", serial = serial),
+					(TaskKind::Upload, None) => t!("tasks.kind_upload"),
+					(TaskKind::Backup, _) => t!("tasks.kind_backup"),
+					(TaskKind::Restore, _) => t!("tasks.kind_restore"),
+					(TaskKind::Uninstall, _) => t!("tasks.kind_uninstall"),
+					(TaskKind::AdbSetup, _) => t!("tasks.kind_adb"),
+					(TaskKind::RcloneSetup, _) => t!("tasks.kind_rclone"),
+				};
+				ui.add(egui::Label::new(egui::RichText::new(kind).weak()).truncate());
+			});
 		});
 	});
 
@@ -229,7 +191,10 @@ fn task_row(
 			ui.horizontal(|ui| {
 				ui.colored_label(egui::Color32::from_rgb(90, 180, 110), &task.stage);
 				if let Some(path) = &task.output {
-					ui.weak(path.display().to_string());
+					ui.add(
+						egui::Label::new(egui::RichText::new(path.display().to_string()).weak())
+							.truncate(),
+					);
 				}
 			});
 		}
@@ -265,5 +230,61 @@ fn task_row(
 					ui.small(warning);
 				}
 			});
+	}
+}
+
+fn task_buttons(
+	ui: &mut egui::Ui,
+	task: &TaskSnapshot,
+	queued: &[TaskId],
+	install_target: Option<(&str, &str)>,
+	commands: &mut Vec<Command>,
+	dismiss: &mut Vec<TaskId>,
+) {
+	if task.state.is_finished() {
+		if ui
+			.small_button("✕")
+			.on_hover_text(t!("tasks.dismiss"))
+			.clicked()
+		{
+			dismiss.push(task.id);
+		}
+		if let (Some(path), Some((serial, name))) = (&task.output, install_target)
+			&& ui
+				.small_button(t!("common.install"))
+				.on_hover_text(t!("common.install_on", name = name))
+				.clicked()
+		{
+			commands.push(Command::Install {
+				serial: serial.to_owned(),
+				path: path.clone(),
+			});
+		}
+		return;
+	}
+	if ui.small_button(t!("common.cancel")).clicked() {
+		commands.push(Command::CancelTask(task.id));
+	}
+	if let Some(position) = queued.iter().position(|id| *id == task.id) {
+		if ui
+			.add_enabled(position + 1 < queued.len(), egui::Button::new("⏷").small())
+			.on_hover_text(t!("tasks.later"))
+			.clicked()
+		{
+			commands.push(Command::MoveDownload {
+				task: task.id,
+				delta: 1,
+			});
+		}
+		if ui
+			.add_enabled(position > 0, egui::Button::new("⏶").small())
+			.on_hover_text(t!("tasks.sooner"))
+			.clicked()
+		{
+			commands.push(Command::MoveDownload {
+				task: task.id,
+				delta: -1,
+			});
+		}
 	}
 }

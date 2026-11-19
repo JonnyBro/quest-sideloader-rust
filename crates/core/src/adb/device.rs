@@ -1,5 +1,6 @@
 use rust_i18n::t;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -13,6 +14,9 @@ use super::sync::{IO_TIMEOUT, Progress, SyncSession, list_files, timed};
 
 /// Package manager may spend minutes optimizing a large APK after receiving it.
 const INSTALL_RESULT_TIMEOUT: Duration = Duration::from_secs(600);
+/// Copying a large OBB between folders on the headset takes a while.
+const MOVE_TIMEOUT: Duration = Duration::from_secs(1800);
+const PUSH_TMP: &str = "/sdcard/quest-sideloader-tmp";
 
 #[derive(Debug, Clone)]
 pub struct Device {
@@ -25,6 +29,13 @@ pub struct ShellOutput {
 	pub stdout: String,
 	pub stderr: String,
 	pub exit_code: Option<u8>,
+}
+
+/// Which output of a streamed shell command a piece of text came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputStream {
+	Stdout,
+	Stderr,
 }
 
 impl ShellOutput {
@@ -85,6 +96,31 @@ impl Device {
 		tokio::time::timeout(timeout, fut)
 			.await
 			.map_err(|_| AdbError::Timeout)?
+	}
+
+	/// Runs `command` with no time limit and hands its output to `on_output`
+	/// as it arrives; returns the exit code. Dropping the future closes the
+	/// connection, which ends the command on the device.
+	pub async fn shell_streaming(
+		&self,
+		command: &str,
+		mut on_output: impl FnMut(OutputStream, String),
+	) -> Result<Option<u8>, AdbError> {
+		let mut stream = self.open(&format!("shell,v2,raw:{command}")).await?;
+		let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+		while let Some(packet) = read_shell_packet(&mut stream).await? {
+			let (pending, kind) = match packet.id {
+				shell_v2::STDOUT => (&mut stdout, OutputStream::Stdout),
+				shell_v2::STDERR => (&mut stderr, OutputStream::Stderr),
+				shell_v2::EXIT => return Ok(packet.data.first().copied()),
+				_ => continue,
+			};
+			let text = decode_utf8(pending, &packet.data);
+			if !text.is_empty() {
+				on_output(kind, text);
+			}
+		}
+		Ok(None)
 	}
 
 	pub(crate) async fn shell_ok(&self, command: &str) -> Result<String, AdbError> {
@@ -192,13 +228,29 @@ impl Device {
 		progress: Progress<'_>,
 	) -> Result<(), AdbError> {
 		let remote = remote.trim_end_matches('/');
-		let metadata = tokio::fs::metadata(local)
+		let is_dir = tokio::fs::metadata(local)
 			.await
 			.map_err(|source| AdbError::LocalIo {
 				path: local.to_path_buf(),
 				source,
-			})?;
-		let files = if metadata.is_dir() {
+			})?
+			.is_dir();
+		if is_protected(remote) {
+			self.push_through_temp(local, is_dir, remote, progress)
+				.await
+		} else {
+			self.send(local, is_dir, remote, progress).await
+		}
+	}
+
+	async fn send(
+		&self,
+		local: &Path,
+		is_dir: bool,
+		remote: &str,
+		progress: Progress<'_>,
+	) -> Result<(), AdbError> {
+		let files = if is_dir {
 			let root = local.to_path_buf();
 			let files = tokio::task::spawn_blocking(move || list_files(&root))
 				.await
@@ -221,6 +273,60 @@ impl Device {
 			session.send_file(path, target, progress).await?;
 		}
 		session.quit().await
+	}
+
+	/// Newer headsets refuse adbd creating folders inside another app's
+	/// `Android/data` or `Android/obb` ("secure_mkdirs failed: Operation not
+	/// permitted"), while the shell still may. So the files go to a temporary
+	/// folder first and the shell moves them into place.
+	async fn push_through_temp(
+		&self,
+		local: &Path,
+		is_dir: bool,
+		remote: &str,
+		progress: Progress<'_>,
+	) -> Result<(), AdbError> {
+		static NEXT: AtomicU64 = AtomicU64::new(0);
+		let q = |s: &str| shell_words::quote(s).into_owned();
+		let tmp_root = format!(
+			"{PUSH_TMP}/{}-{}",
+			std::process::id(),
+			NEXT.fetch_add(1, Ordering::Relaxed)
+		);
+		let tmp = format!("{tmp_root}/item");
+		let result = async {
+			self.send(local, is_dir, &tmp, progress).await?;
+			let parent = remote.rsplit_once('/').map_or("/", |(p, _)| p);
+			// An existing folder keeps its other files, so it is merged into;
+			// anything else is moved, which is quick on the same storage.
+			let command = if is_dir {
+				format!(
+					"mkdir -p {parent} && if [ -d {dest} ]; then cp -R {tmp}/. {dest}; else mv {tmp} {dest}; fi",
+					parent = q(parent),
+					dest = q(remote),
+					tmp = q(&tmp),
+				)
+			} else {
+				format!(
+					"mkdir -p {parent} && mv -f {tmp} {dest}",
+					parent = q(parent),
+					dest = q(remote),
+					tmp = q(&tmp),
+				)
+			};
+			let out = self.shell_with_timeout(&command, MOVE_TIMEOUT).await?;
+			if out.success() {
+				Ok(())
+			} else {
+				Err(AdbError::PushFailed {
+					remote: remote.to_owned(),
+					message: out.stderr.trim().to_owned(),
+				})
+			}
+		}
+		.await;
+		let _ = self.shell(&format!("rm -rf {}", q(&tmp_root))).await;
+		result
 	}
 
 	/// Streams the APK straight into the package manager (`-S <size>`), so no
@@ -284,6 +390,26 @@ impl Device {
 	}
 }
 
+fn is_protected(remote: &str) -> bool {
+	["/sdcard/Android/data/", "/sdcard/Android/obb/"]
+		.iter()
+		.any(|dir| remote.starts_with(dir))
+}
+
+/// Packets can split a character in two, so an incomplete one at the end
+/// waits in `pending` for the next packet.
+fn decode_utf8(pending: &mut Vec<u8>, data: &[u8]) -> String {
+	pending.extend_from_slice(data);
+	let keep = match std::str::from_utf8(pending) {
+		Err(e) if e.error_len().is_none() => pending.len() - e.valid_up_to(),
+		_ => 0,
+	};
+	let tail = pending.split_off(pending.len() - keep);
+	let text = String::from_utf8_lossy(pending).into_owned();
+	*pending = tail;
+	text
+}
+
 #[cfg(test)]
 mod tests {
 	use std::net::SocketAddr;
@@ -332,6 +458,33 @@ mod tests {
 		assert_eq!(out.stdout, "Quest 3\n");
 		assert_eq!(out.stderr, "warn");
 		assert!(out.success());
+	}
+
+	#[tokio::test]
+	async fn streaming_shell_passes_output_through() {
+		let word = "привет".as_bytes();
+		let mut reply = packet(shell_v2::STDOUT, &word[..3]);
+		reply.extend(packet(shell_v2::STDOUT, &word[3..]));
+		reply.extend(packet(shell_v2::STDERR, b"oops"));
+		reply.extend(packet(shell_v2::EXIT, &[2]));
+		let (addr, server) = fake_server("SER1", reply).await;
+
+		let device = AdbServer::with_addr(addr).device("SER1");
+		let mut got = Vec::new();
+		let code = device
+			.shell_streaming("echo", |stream, text| got.push((stream, text)))
+			.await
+			.unwrap();
+		assert_eq!(server.await.unwrap(), "shell,v2,raw:echo");
+		assert_eq!(code, Some(2));
+		assert_eq!(
+			got,
+			[
+				(OutputStream::Stdout, "п".to_owned()),
+				(OutputStream::Stdout, "ривет".to_owned()),
+				(OutputStream::Stderr, "oops".to_owned()),
+			]
+		);
 	}
 
 	#[tokio::test]
@@ -389,7 +542,7 @@ mod tests {
 		};
 		AdbServer::with_addr(addr)
 			.device("SER1")
-			.push(&obb, "/sdcard/Android/obb/com.example.game/", &progress)
+			.push(&obb, "/sdcard/Download/com.example.game/", &progress)
 			.await
 			.unwrap();
 		server.await.unwrap();
@@ -398,16 +551,55 @@ mod tests {
 		assert_eq!(files.len(), 2);
 		assert_eq!(
 			files[0].0,
-			"/sdcard/Android/obb/com.example.game/main.1.com.example.game.obb"
+			"/sdcard/Download/com.example.game/main.1.com.example.game.obb"
 		);
 		assert_eq!(files[0].1, "33188");
 		assert_eq!(files[0].2, big);
 		assert_eq!(
 			files[1].0,
-			"/sdcard/Android/obb/com.example.game/sub/extra.bin"
+			"/sdcard/Download/com.example.game/sub/extra.bin"
 		);
 		assert_eq!(files[1].2, b"extra");
 		assert_eq!(sent.into_inner(), big.len() as u64 + 5);
+	}
+
+	#[tokio::test]
+	async fn obb_and_data_go_through_a_temp_folder() {
+		let dir = tempfile::tempdir().unwrap();
+		std::fs::write(dir.path().join("main.obb"), b"0123456789").unwrap();
+		let fake = crate::adb::testing::FakeAdb::start().await;
+
+		let sent = AtomicU64::new(0);
+		let progress = |n: u64| {
+			sent.fetch_add(n, Ordering::Relaxed);
+		};
+		AdbServer::with_addr(([127, 0, 0, 1], fake.port).into())
+			.device("SER1")
+			.push(dir.path(), "/sdcard/Android/obb/com.x", &progress)
+			.await
+			.unwrap();
+
+		let rec = fake.recorded.lock().unwrap();
+		// The fake applies the move, so the file ends up where it was meant to.
+		assert_eq!(
+			rec.pushed,
+			[(
+				"/sdcard/Android/obb/com.x/main.obb".to_owned(),
+				b"0123456789".to_vec()
+			)]
+		);
+		let [moved, removed] = rec.shell.as_slice() else {
+			panic!("{:?}", rec.shell);
+		};
+		let tmp = removed.strip_prefix("rm -rf ").unwrap();
+		assert!(tmp.starts_with("/sdcard/quest-sideloader-tmp/"));
+		assert_eq!(
+			moved,
+			&format!(
+				"mkdir -p /sdcard/Android/obb && if [ -d /sdcard/Android/obb/com.x ]; then cp -R {tmp}/item/. /sdcard/Android/obb/com.x; else mv {tmp}/item /sdcard/Android/obb/com.x; fi"
+			)
+		);
+		assert_eq!(sent.into_inner(), 10);
 	}
 
 	#[tokio::test]

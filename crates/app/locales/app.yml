@@ -14,6 +14,9 @@ tab.downloads:
 tab.tasks:
   en: "Tasks"
   ru: "Задачи"
+tab.console:
+  en: "Console"
+  ru: "Консоль"
 tab.settings:
   en: "Settings"
   ru: "Настройки"
@@ -944,3 +947,36 @@ welcome.finish:
 welcome.add_mirror:
   en: "Add a mirror"
   ru: "Добавить зеркало"
+console.on:
+  en: "adb shell on %{name}"
+  ru: "adb shell на %{name}"
+console.no_headset:
+  en: "Connect a headset to run commands on it."
+  ru: "Подключите шлем, чтобы выполнять на нём команды."
+console.hint:
+  en: "Shell command, for example pm list packages -3"
+  ru: "Команда shell, например pm list packages -3"
+console.run:
+  en: "Run"
+  ru: "Выполнить"
+console.stop:
+  en: "Stop"
+  ru: "Стоп"
+console.clear:
+  en: "Clear"
+  ru: "Очистить"
+console.copy:
+  en: "Copy all"
+  ru: "Копировать всё"
+console.empty:
+  en: "Commands run on the headset as with adb shell. Up and Down go through earlier commands."
+  ru: "Команды выполняются на шлеме, как через adb shell. Стрелки вверх и вниз листают прошлые команды."
+console.exit_code:
+  en: "exit code %{code}"
+  ru: "код выхода %{code}"
+console.ended:
+  en: "connection closed"
+  ru: "соединение закрыто"
+console.only_shell:
+  en: "Only shell commands run here; for other adb commands use the Devices and Headset tabs."
+  ru: "Здесь выполняются только команды shell; для других команд adb есть вкладки Устройства и Шлем."

@@ -18,6 +18,10 @@ pub struct DevicesView {
 	info: HashMap<String, InfoState>,
 	selected: Option<String>,
 	wireless_address: String,
+	/// The last headset seen connected over Wi-Fi, kept between runs.
+	last_wireless: Option<String>,
+	/// Reconnecting to it is tried once, when adb first starts.
+	reconnect: bool,
 	package_filter: String,
 }
 
@@ -29,15 +33,44 @@ impl DevicesView {
 			info: HashMap::new(),
 			selected: None,
 			wireless_address: String::new(),
+			last_wireless: None,
+			reconnect: false,
 			package_filter: String::new(),
 		}
 	}
 
-	pub fn on_adb_status(&mut self, status: AdbStatus) {
+	/// Returns the address to reconnect to the first time adb is running.
+	pub fn on_adb_status(&mut self, status: AdbStatus) -> Option<String> {
+		let running = matches!(status, AdbStatus::Running { .. });
 		self.adb_status = status;
+		if !(running && std::mem::take(&mut self.reconnect)) {
+			return None;
+		}
+		self.last_wireless.clone()
+	}
+
+	pub fn last_wireless(&self) -> Option<&str> {
+		self.last_wireless.as_deref()
+	}
+
+	pub fn restore_wireless(&mut self, address: String) {
+		self.wireless_address = address.clone();
+		self.last_wireless = Some(address);
+		self.reconnect = true;
 	}
 
 	pub fn on_devices_changed(&mut self, devices: Vec<DeviceEntry>) {
+		// mDNS serials (`adb-...`) can't be typed into the connect field.
+		if let Some(device) = devices.iter().find(|d| {
+			d.state == DeviceState::Online
+				&& d.serial.contains(':')
+				&& !d.serial.starts_with("adb-")
+		}) {
+			self.last_wireless = Some(device.serial.clone());
+			if self.wireless_address.trim().is_empty() {
+				self.wireless_address = device.serial.clone();
+			}
+		}
 		self.info.retain(|serial, _| {
 			devices
 				.iter()
@@ -385,11 +418,13 @@ fn packages(ui: &mut egui::Ui, info: &DeviceInfo, filter: &mut String) {
 		.show_rows(ui, row_height, rows.len(), |ui, range| {
 			for package in &rows[range] {
 				ui.horizontal(|ui| {
-					ui.label(&package.name);
 					ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
 						if let Some(code) = package.version_code {
 							ui.weak(code.to_string());
 						}
+						ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+							ui.add(egui::Label::new(&package.name).truncate());
+						});
 					});
 				});
 			}

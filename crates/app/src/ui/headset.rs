@@ -453,49 +453,70 @@ impl HeadsetView {
 			ui.weak(t!("hs.no_backups"));
 			return;
 		}
-		egui::Grid::new("headset_backups")
-			.num_columns(4)
+		let mut delete = None;
+		egui_extras::TableBuilder::new(ui)
+			.id_salt("headset_backups")
 			.striped(true)
-			.spacing([12.0, 4.0])
-			.show(ui, |ui| {
+			.vscroll(false)
+			.cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+			.column(egui_extras::Column::remainder().at_least(200.0).clip(true))
+			.column(egui_extras::Column::auto())
+			.column(egui_extras::Column::auto())
+			.column(egui_extras::Column::auto())
+			.body(|mut body| {
 				for backup in &self.backups {
-					ui.vertical(|ui| {
-						ui.label(&backup.meta.name);
-						ui.small(&backup.meta.package);
-					});
-					ui.label(super::format_unix_time(backup.meta.created));
-					let private = if backup.meta.private_files > 0 {
-						t!("hs.incl_private")
-					} else {
-						"".into()
-					};
-					ui.label(t!(
-						"hs.backup_info",
-						size = format_bytes(backup.meta.bytes),
-						n = backup.meta.files,
-						private = private
-					));
-					ui.horizontal(|ui| {
-						if ui
-							.small_button(t!("hs.restore"))
-							.on_hover_text(t!("hs.restore_hint"))
-							.clicked()
-						{
-							commands.push(Command::RestoreBackup {
-								serial: target.serial.to_owned(),
-								backup: backup.clone(),
+					body.row(40.0, |mut row| {
+						row.col(|ui| {
+							ui.vertical(|ui| {
+								ui.add(egui::Label::new(&backup.meta.name).truncate());
+								ui.add(
+									egui::Label::new(
+										egui::RichText::new(&backup.meta.package).small(),
+									)
+									.truncate(),
+								);
 							});
-						}
-						if ui.small_button(t!("common.open")).clicked() {
-							super::open_folder(&backup.dir);
-						}
-						if ui.small_button(t!("hs.delete_button")).clicked() {
-							self.dialog = Some(Dialog::DeleteBackup(backup.clone()));
-						}
+						});
+						row.col(|ui| {
+							ui.label(super::format_unix_time(backup.meta.created));
+						});
+						row.col(|ui| {
+							let private = if backup.meta.private_files > 0 {
+								t!("hs.incl_private")
+							} else {
+								"".into()
+							};
+							ui.label(t!(
+								"hs.backup_info",
+								size = format_bytes(backup.meta.bytes),
+								n = backup.meta.files,
+								private = private
+							));
+						});
+						row.col(|ui| {
+							if ui
+								.small_button(t!("hs.restore"))
+								.on_hover_text(t!("hs.restore_hint"))
+								.clicked()
+							{
+								commands.push(Command::RestoreBackup {
+									serial: target.serial.to_owned(),
+									backup: backup.clone(),
+								});
+							}
+							if ui.small_button(t!("common.open")).clicked() {
+								super::open_folder(&backup.dir);
+							}
+							if ui.small_button(t!("hs.delete_button")).clicked() {
+								delete = Some(backup.clone());
+							}
+						});
 					});
-					ui.end_row();
 				}
 			});
+		if let Some(backup) = delete {
+			self.dialog = Some(Dialog::DeleteBackup(backup));
+		}
 	}
 
 	fn dialog(&mut self, ctx: &egui::Context, serial: &str, commands: &mut Vec<Command>) {

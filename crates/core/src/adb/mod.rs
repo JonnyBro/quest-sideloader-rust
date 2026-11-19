@@ -12,7 +12,7 @@ mod sync;
 pub(crate) mod testing;
 
 pub use actions::{AppUsage, DeviceDetails, RebootMode, Tweak};
-pub use device::{Device, ShellOutput};
+pub use device::{Device, OutputStream, ShellOutput};
 pub use error::AdbError;
 pub use parse::{Battery, DeviceEntry, DeviceInfo, DeviceState, Package, Storage};
 pub use server::{AdbServer, DEFAULT_PORT, DeviceTracker};

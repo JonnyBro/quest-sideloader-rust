@@ -1,6 +1,7 @@
 //! Background side of the app: the UI sends [`Command`]s, the engine works on a
 //! tokio runtime in its own thread and reports back with [`Event`]s.
 
+mod console;
 mod contribute;
 mod devices;
 mod downloads;
@@ -25,6 +26,7 @@ use crate::paths::AppPaths;
 use crate::settings::Settings;
 use crate::sideload::script::ScriptAnalysis;
 
+pub use console::ShellEvent;
 pub use install::ReviewDecision;
 pub use library::CatalogStatus;
 pub use task::{SignatureConflict, TaskId, TaskKind, TaskSnapshot, TaskState};
@@ -83,6 +85,9 @@ pub enum Command {
 	RefreshDevice(String),
 	/// `host` or `host:port`.
 	ConnectWireless(String),
+	/// Like [`Command::ConnectWireless`], for the headset of the last run: the
+	/// headset may be off or have another address, so failing isn't an error.
+	Reconnect(String),
 	DisconnectWireless(String),
 	/// Install an APK, a release folder or a ZIP on the headset.
 	Install {
@@ -121,6 +126,15 @@ pub enum Command {
 	InstallAdb,
 	/// Download rclone from rclone.org into the data folder and use it.
 	InstallRclone,
+	/// Run a command typed in the console; output comes back as
+	/// [`Event::Shell`] with the same `id`.
+	Shell {
+		id: u64,
+		serial: String,
+		command: String,
+	},
+	/// Stop a console command; the headset ends it when the connection closes.
+	StopShell(u64),
 }
 
 /// An app on the headset, as the UI knows it.
@@ -191,6 +205,10 @@ pub enum Event {
 	RcloneMissing,
 	/// Release folders in the downloads folder.
 	Downloads(Vec<crate::downloaded::DownloadedRelease>),
+	Shell {
+		id: u64,
+		output: ShellEvent,
+	},
 	Notice(String),
 	Error(String),
 }
@@ -297,6 +315,7 @@ struct State {
 	upload_lock: Arc<tokio::sync::Mutex<()>>,
 	/// Reports a tool that finished downloading.
 	tool_installed: mpsc::UnboundedSender<Tool>,
+	shells: HashMap<u64, tokio::task::AbortHandle>,
 }
 
 impl State {
@@ -604,6 +623,7 @@ async fn run(
 		queue: downloads::Queue::new(slot_tx),
 		upload_lock: Arc::default(),
 		tool_installed: tool_tx,
+		shells: HashMap::new(),
 	};
 
 	loop {
@@ -635,11 +655,33 @@ async fn run(
 			Command::SaveSettings(settings) => state.save_settings(settings).await,
 			Command::InstallAdb => state.install_tool(Tool::Adb(PathBuf::new())),
 			Command::InstallRclone => state.install_tool(Tool::Rclone(PathBuf::new())),
+			Command::Shell {
+				id,
+				serial,
+				command,
+			} => {
+				state.shells.retain(|_, shell| !shell.is_finished());
+				let device = state.adb.device(serial);
+				let shell = console::spawn(id, device, command, state.sink.clone());
+				state.shells.insert(id, shell);
+			}
+			Command::StopShell(id) => {
+				if let Some(shell) = state.shells.remove(&id) {
+					shell.abort();
+					state.sink.emit(Event::Shell {
+						id,
+						output: ShellEvent::Failed(t!("eng.shell_stopped").into_owned()),
+					});
+				}
+			}
 			Command::RefreshDevice(serial) => {
 				devices::spawn_fetch_info(state.adb.device(serial), state.sink.clone());
 			}
 			Command::ConnectWireless(address) => {
-				devices::spawn_connect(state.adb.clone(), address, state.sink.clone());
+				devices::spawn_connect(state.adb.clone(), address, false, state.sink.clone());
+			}
+			Command::Reconnect(address) => {
+				devices::spawn_connect(state.adb.clone(), address, true, state.sink.clone());
 			}
 			Command::DisconnectWireless(address) => {
 				devices::spawn_disconnect(state.adb.clone(), address, state.sink.clone());

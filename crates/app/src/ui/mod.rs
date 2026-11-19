@@ -1,3 +1,4 @@
+pub mod console;
 pub mod contribute;
 pub mod devices;
 pub mod downloads;

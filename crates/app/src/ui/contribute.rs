@@ -113,19 +113,29 @@ impl ContributeView {
 					ui.weak(t!("con.nothing"));
 					return;
 				}
-				egui::ScrollArea::vertical()
-					.max_height(360.0)
-					.show(ui, |ui| {
-						egui::Grid::new("contribute_grid")
-							.num_columns(3)
-							.striped(true)
-							.spacing([12.0, 6.0])
-							.show(ui, |ui| {
-								for candidate in &candidates {
+				egui_extras::TableBuilder::new(ui)
+					.id_salt("contribute_table")
+					.striped(true)
+					.max_scroll_height(360.0)
+					.cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+					.column(egui_extras::Column::remainder().at_least(180.0).clip(true))
+					.column(egui_extras::Column::auto())
+					.column(egui_extras::Column::auto())
+					.body(|mut body| {
+						for candidate in &candidates {
+							body.row(40.0, |mut row| {
+								row.col(|ui| {
 									ui.vertical(|ui| {
-										ui.label(&candidate.name);
-										ui.small(&candidate.package);
+										ui.add(egui::Label::new(&candidate.name).truncate());
+										ui.add(
+											egui::Label::new(
+												egui::RichText::new(&candidate.package).small(),
+											)
+											.truncate(),
+										);
 									});
+								});
+								row.col(|ui| {
 									ui.label(match &candidate.reason {
 										Reason::NotInLibrary => t!(
 											"con.not_in_library",
@@ -137,21 +147,21 @@ impl ContributeView {
 											library = library_version
 										),
 									});
-									ui.horizontal(|ui| {
-										if self.requested.contains(&candidate.package) {
-											ui.weak(t!("con.queued"));
-										} else {
-											if ui.button(t!("con.upload")).clicked() {
-												send = Some(candidate.clone());
-											}
-											if ui.small_button(t!("con.ignore")).clicked() {
-												ignore = Some(candidate.package.clone());
-											}
+								});
+								row.col(|ui| {
+									if self.requested.contains(&candidate.package) {
+										ui.weak(t!("con.queued"));
+									} else {
+										if ui.button(t!("con.upload")).clicked() {
+											send = Some(candidate.clone());
 										}
-									});
-									ui.end_row();
-								}
+										if ui.small_button(t!("con.ignore")).clicked() {
+											ignore = Some(candidate.package.clone());
+										}
+									}
+								});
 							});
+						}
 					});
 			});
 		self.open = open;

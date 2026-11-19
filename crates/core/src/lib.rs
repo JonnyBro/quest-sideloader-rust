@@ -17,8 +17,8 @@ pub mod settings;
 pub mod sideload;
 
 pub use engine::{
-	AdbStatus, AppInfo, CatalogStatus, Command, Engine, Event, ReviewDecision, SignatureConflict,
-	TaskId, TaskKind, TaskSnapshot, TaskState,
+	AdbStatus, AppInfo, CatalogStatus, Command, Engine, Event, ReviewDecision, ShellEvent,
+	SignatureConflict, TaskId, TaskKind, TaskSnapshot, TaskState,
 };
 pub use error::{Error, Result};
 pub use format::format_bytes;
