@@ -149,9 +149,8 @@ impl SideloaderApp {
 					)),
 					_ => None,
 				};
-				if self.tasks_view.on_update(snapshot)
-					&& notify && let Some((title, body)) = summary
-				{
+				let finished = self.tasks_view.on_update(snapshot);
+				if let Some((title, body)) = summary.filter(|_| finished && notify) {
 					crate::notify::send(title, body);
 				}
 			}

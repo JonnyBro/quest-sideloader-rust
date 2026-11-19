@@ -46,13 +46,3 @@ jobs:
       - name: Tests
         run: cargo test --locked
 
-      - name: Release build
-        run: cargo build --release --locked
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: quest-sideloader-${{ runner.os }}
-          path: |
-            target/release/quest-sideloader
-            target/release/quest-sideloader.exe
-          if-no-files-found: error
