@@ -194,6 +194,9 @@ tasks.warnings:
 tasks.more:
   en: "+%{n} more"
   ru: "ещё %{n}"
+tasks.title_active:
+  en: "%{n} active"
+  ru: "активных: %{n}"
 set.general:
   en: "General"
   ru: "Общие"
@@ -734,6 +737,9 @@ lib.col_updated:
 lib.col_status:
   en: "Status"
   ru: "Статус"
+lib.col_popularity:
+  en: "Popularity"
+  ru: "Популярность"
 lib.download_update:
   en: "Download and update"
   ru: "Скачать и обновить"
@@ -905,3 +911,36 @@ rclone.no_build:
 tasks.kind_rclone:
   en: "rclone setup"
   ru: "установка rclone"
+welcome.title:
+  en: "Welcome to Quest Sideloader"
+  ru: "Добро пожаловать в Quest Sideloader"
+welcome.step:
+  en: "Step %{n} of %{total}"
+  ru: "Шаг %{n} из %{total}"
+welcome.intro:
+  en: "A few settings to start with. All of them can be changed later in Settings."
+  ru: "Несколько настроек для начала. Все их можно поменять потом в Настройках."
+welcome.folder_text:
+  en: "Games are downloaded and unpacked into this folder. Large games take tens of GB, so pick a drive with enough space."
+  ru: "Игры скачиваются и распаковываются в эту папку. Большие игры занимают десятки ГБ, так что выберите диск, где хватит места."
+welcome.headset_text:
+  en: "Turn on developer mode in the Meta Horizon app, then connect the headset with a USB cable and allow USB debugging when the headset asks. It then shows up on the Devices tab."
+  ru: "Включите режим разработчика в приложении Meta Horizon, потом подключите шлем USB-кабелем и разрешите отладку по USB, когда шлем спросит. После этого он появится на вкладке Устройства."
+welcome.mirror_text:
+  en: "The library is optional. To download games from it, add a mirror in Settings."
+  ru: "Библиотека необязательна. Чтобы скачивать из неё игры, добавьте зеркало в Настройках."
+welcome.skip:
+  en: "Skip"
+  ru: "Пропустить"
+welcome.back:
+  en: "Back"
+  ru: "Назад"
+welcome.next:
+  en: "Next"
+  ru: "Далее"
+welcome.finish:
+  en: "Finish"
+  ru: "Готово"
+welcome.add_mirror:
+  en: "Add a mirror"
+  ru: "Добавить зеркало"

@@ -9,6 +9,7 @@ pub mod review;
 pub mod settings;
 pub mod tasks;
 pub mod tool_setup;
+pub mod welcome;
 
 pub use quest_sideloader_core::format_bytes;
 

@@ -1,4 +1,5 @@
 use rust_i18n::t;
+use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -132,6 +133,8 @@ struct RowsKey {
 pub struct LibraryView {
 	catalog: Option<Arc<Catalog>>,
 	lowercase_names: Vec<String>,
+	/// Popularity rank of each game, `#1` being the most downloaded.
+	ranks: Vec<Option<u32>>,
 	status: CatalogStatus,
 	search: String,
 	filter: Filter,
@@ -157,6 +160,7 @@ impl LibraryView {
 		Self {
 			catalog: None,
 			lowercase_names: Vec::new(),
+			ranks: Vec::new(),
 			status: CatalogStatus::Idle,
 			search: String::new(),
 			filter: Filter::All,
@@ -193,6 +197,10 @@ impl LibraryView {
 		self.lowercase_names = catalog
 			.as_ref()
 			.map(|c| c.games.iter().map(|g| g.name.to_lowercase()).collect())
+			.unwrap_or_default();
+		self.ranks = catalog
+			.as_ref()
+			.map(|c| popularity_ranks(&c.games))
 			.unwrap_or_default();
 		self.catalog = catalog;
 		self.selected = None;
@@ -280,6 +288,7 @@ impl LibraryView {
 			&mut rows,
 			games,
 			&self.lowercase_names,
+			&self.ranks,
 			sort,
 			descending,
 			rank,
@@ -325,11 +334,12 @@ impl LibraryView {
 			&& let Some(game) = catalog.games.get(index)
 		{
 			let mut close = false;
+			let rank = self.ranks.get(index).copied().flatten();
 			egui::Panel::right("game_details")
 				.resizable(true)
 				.default_size(320.0)
 				.show(ui, |ui| {
-					close = details(ui, &catalog, game, installed, commands)
+					close = details(ui, &catalog, game, rank, installed, commands)
 				});
 			if close {
 				self.selected = None;
@@ -565,6 +575,7 @@ impl LibraryView {
 		table
 			.column(Column::auto().at_least(70.0))
 			.column(Column::auto().at_least(120.0))
+			.column(Column::auto().at_least(60.0))
 			.column(Column::auto().at_least(100.0))
 			.header(22.0, |mut header| {
 				header.col(|_| {});
@@ -578,6 +589,7 @@ impl LibraryView {
 				columns.extend([
 					(Some(Sort::Size), t!("lib.col_size")),
 					(Some(Sort::Updated), t!("lib.col_updated")),
+					(Some(Sort::Popularity), t!("lib.col_popularity")),
 					(Some(Sort::Status), t!("lib.col_status")),
 				]);
 				for (sort, title) in columns {
@@ -632,6 +644,9 @@ impl LibraryView {
 					});
 					row.col(|ui| {
 						ui.label(short_date(&game.last_updated));
+					});
+					row.col(|ui| {
+						ui.label(rank_text(self.ranks[index]));
 					});
 					row.col(|ui| {
 						if let Some(apps) = installed {
@@ -732,6 +747,7 @@ fn sort_rows(
 	rows: &mut [usize],
 	games: &[Game],
 	names: &[String],
+	ranks: &[Option<u32>],
 	sort: Sort,
 	descending: bool,
 	rank: impl Fn(usize) -> u8,
@@ -748,10 +764,8 @@ fn sort_rows(
 				.size_mb
 				.unwrap_or(0.0)
 				.total_cmp(&gb.size_mb.unwrap_or(0.0)),
-			Sort::Popularity => ga
-				.downloads
-				.unwrap_or(0.0)
-				.total_cmp(&gb.downloads.unwrap_or(0.0)),
+			// A better rank is a smaller number; unranked games are the lowest.
+			Sort::Popularity => ranks[a].map(Reverse).cmp(&ranks[b].map(Reverse)),
 			Sort::Status => rank(a).cmp(&rank(b)),
 		};
 		// Ties stay A to Z whichever way the main key goes.
@@ -764,6 +778,33 @@ fn sort_rows(
 			.then_with(|| by_name(a, b))
 			.then_with(|| ga.release_name.cmp(&gb.release_name))
 	});
+}
+
+/// Ranks packages by their best download score, like androidsideloader;
+/// every release of a package gets the package's rank, and a score of 0 none.
+fn popularity_ranks(games: &[Game]) -> Vec<Option<u32>> {
+	let mut best: HashMap<&str, f64> = HashMap::new();
+	for game in games {
+		if let Some(score) = game.downloads.filter(|s| *s > 0.0) {
+			let entry = best.entry(game.package.as_str()).or_insert(score);
+			*entry = entry.max(score);
+		}
+	}
+	let mut order: Vec<(&str, f64)> = best.into_iter().collect();
+	order.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+	let ranks: HashMap<&str, u32> = order
+		.iter()
+		.zip(1..)
+		.map(|((package, _), rank)| (*package, rank))
+		.collect();
+	games
+		.iter()
+		.map(|g| ranks.get(g.package.as_str()).copied())
+		.collect()
+}
+
+fn rank_text(rank: Option<u32>) -> String {
+	rank.map(|r| format!("#{r}")).unwrap_or_default()
 }
 
 fn install_label(status: Option<GameStatus>) -> std::borrow::Cow<'static, str> {
@@ -889,6 +930,7 @@ fn details(
 	ui: &mut egui::Ui,
 	catalog: &Catalog,
 	game: &Game,
+	rank: Option<u32>,
 	installed: Option<&InstalledApps<'_>>,
 	commands: &mut Vec<Command>,
 ) -> bool {
@@ -953,6 +995,7 @@ fn details(
 					),
 					(t!("lib.col_size"), size_text(game)),
 					(t!("lib.col_updated"), game.last_updated.clone()),
+					(t!("lib.col_popularity"), rank_text(rank)),
 				] {
 					ui.label(label);
 					ui.add(egui::Label::new(value).wrap());
@@ -1080,9 +1123,10 @@ mod tests {
 		games[0].size_mb = Some(500.0);
 		games[2].size_mb = Some(10.0);
 		let names: Vec<String> = games.iter().map(|g| g.name.to_lowercase()).collect();
+		let ranks = [Some(2), None, Some(1)];
 		let order = |sort, descending, rank: &dyn Fn(usize) -> u8| {
 			let mut rows = vec![0, 1, 2];
-			sort_rows(&mut rows, &games, &names, sort, descending, rank);
+			sort_rows(&mut rows, &games, &names, &ranks, sort, descending, rank);
 			rows
 		};
 		let none = |_| 2;
@@ -1093,8 +1137,29 @@ mod tests {
 		// Equal versions fall back to the name; a missing version is lowest.
 		assert_eq!(order(Sort::Version, true, &none), [2, 0, 1]);
 		assert_eq!(order(Sort::Size, true, &none), [0, 2, 1]);
+		// Best rank first when descending, unranked last.
+		assert_eq!(order(Sort::Popularity, true, &none), [2, 0, 1]);
 		let rank = |i| [1, 2, 0][i];
 		assert_eq!(order(Sort::Status, false, &rank), [2, 0, 1]);
+	}
+
+	#[test]
+	fn ranks_packages_by_their_best_score() {
+		let mut games = vec![
+			game("com.a", None),
+			game("com.b", None),
+			game("com.a", None),
+			game("com.c", None),
+			game("com.d", None),
+		];
+		games[0].downloads = Some(5.0);
+		games[1].downloads = Some(7.5);
+		games[2].downloads = Some(9.0);
+		games[3].downloads = Some(0.0);
+		assert_eq!(
+			popularity_ranks(&games),
+			[Some(1), Some(2), Some(1), None, None]
+		);
 	}
 
 	#[test]

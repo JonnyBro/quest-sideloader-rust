@@ -58,6 +58,17 @@ pub struct SideloaderApp {
 	review_dialog: ui::review::ReviewDialog,
 	library_view: ui::library::LibraryView,
 	settings_view: ui::settings::SettingsView,
+	welcome: ui::welcome::Welcome,
+	/// Last title sent to the window, so it is only sent on changes.
+	title: String,
+}
+
+pub fn base_title(portable: bool) -> &'static str {
+	if portable {
+		"Quest Sideloader (portable)"
+	} else {
+		"Quest Sideloader"
+	}
 }
 
 impl SideloaderApp {
@@ -66,6 +77,7 @@ impl SideloaderApp {
 		paths: AppPaths,
 		settings: Settings,
 		load_error: Option<String>,
+		first_run: bool,
 		log_buffer: crate::logbuf::LogBuffer,
 	) -> Result<Self, quest_sideloader_core::Error> {
 		let ctx = cc.egui_ctx.clone();
@@ -84,6 +96,7 @@ impl SideloaderApp {
 			library_view.restore(prefs);
 		}
 		Ok(Self {
+			title: base_title(paths.portable_root().is_some()).to_owned(),
 			engine,
 			paths,
 			tab: Tab::Devices,
@@ -98,6 +111,7 @@ impl SideloaderApp {
 			rclone_setup: ui::tool_setup::RcloneSetup::default(),
 			review_dialog: ui::review::ReviewDialog::new(),
 			library_view,
+			welcome: ui::welcome::Welcome::new(first_run, &settings),
 			settings_view: ui::settings::SettingsView::new(settings),
 		})
 	}
@@ -209,6 +223,18 @@ impl SideloaderApp {
 				serial: serial.clone(),
 				path,
 			});
+		}
+	}
+
+	fn update_title(&mut self, ctx: &egui::Context) {
+		let base = base_title(self.paths.portable_root().is_some());
+		let title = match self.tasks_view.title_prefix() {
+			Some(prefix) => format!("{prefix} - {base}"),
+			None => base.to_owned(),
+		};
+		if title != self.title {
+			ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
+			self.title = title;
 		}
 	}
 
@@ -336,10 +362,20 @@ impl eframe::App for SideloaderApp {
 			}
 		});
 		let ctx = ui.ctx().clone();
+		self.update_title(&ctx);
 		self.review_dialog.show(&ctx, &mut commands);
 		self.logs_view.window(&ctx);
-		self.adb_setup.show(&ctx, &mut commands);
-		self.rclone_setup.show(&ctx, &mut commands);
+		let default_downloads = self.paths.default_downloads_dir();
+		if self.welcome.show(&ctx, &default_downloads, &mut commands)
+			== Some(ui::welcome::Outcome::OpenMirrors)
+		{
+			self.tab = Tab::Settings;
+		}
+		// Waits for the wizard, so two dialogs don't open over each other.
+		if !self.welcome.is_open() {
+			self.adb_setup.show(&ctx, &mut commands);
+			self.rclone_setup.show(&ctx, &mut commands);
+		}
 		self.handle_file_drop(&ctx, &mut commands);
 
 		for command in commands {
@@ -364,7 +400,7 @@ fn drop_overlay(ctx: &egui::Context, text: &str) {
 	);
 }
 
-fn apply_theme(ctx: &egui::Context, theme: Theme) {
+pub(crate) fn apply_theme(ctx: &egui::Context, theme: Theme) {
 	ctx.set_theme(match theme {
 		Theme::System => egui::ThemePreference::System,
 		Theme::Dark => egui::ThemePreference::Dark,
@@ -372,7 +408,7 @@ fn apply_theme(ctx: &egui::Context, theme: Theme) {
 	});
 }
 
-fn apply_language(language: Language) {
+pub(crate) fn apply_language(language: Language) {
 	let russian = match language {
 		Language::Russian => true,
 		Language::English => false,

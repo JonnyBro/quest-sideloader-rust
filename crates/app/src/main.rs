@@ -19,6 +19,8 @@ fn main() -> eframe::Result {
 	let log_buffer = logbuf::LogBuffer::default();
 	let _log_guard = init_logging(&paths, log_buffer.clone());
 
+	// Checked before anything saves the settings.
+	let first_run = !paths.settings_file().exists();
 	let (settings, load_error) = match Settings::load(&paths) {
 		Ok(settings) => (settings, None),
 		Err(e) => {
@@ -29,11 +31,7 @@ fn main() -> eframe::Result {
 
 	let options = eframe::NativeOptions {
 		viewport: egui::ViewportBuilder::default()
-			.with_title(if paths.portable_root().is_some() {
-				"Quest Sideloader (portable)"
-			} else {
-				"Quest Sideloader"
-			})
+			.with_title(app::base_title(paths.portable_root().is_some()))
 			.with_inner_size([1100.0, 720.0])
 			.with_min_inner_size([800.0, 520.0]),
 		persistence_path: Some(paths.ui_state_file()),
@@ -44,7 +42,8 @@ fn main() -> eframe::Result {
 		"quest-sideloader",
 		options,
 		Box::new(move |cc| {
-			let app = app::SideloaderApp::new(cc, paths, settings, load_error, log_buffer)?;
+			let app =
+				app::SideloaderApp::new(cc, paths, settings, load_error, first_run, log_buffer)?;
 			Ok(Box::new(app))
 		}),
 	)

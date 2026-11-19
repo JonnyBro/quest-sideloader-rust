@@ -58,7 +58,9 @@ The mirror's `meta.7z` is unpacked under the data directory, and game notes
 come only from it.
 
 The Library tab shows the games as a list or as a grid of covers, sorted by
-any column (click a header to sort, click again to reverse). With a headset
+any column (click a header to sort, click again to reverse). The Popularity
+column ranks games by the mirror's download counts, `#1` being the most
+downloaded. With a headset
 connected it also shows the installed version and warns when a game is larger
 than the free space. `Ctrl+F` jumps to the search, `Enter` there selects the
 first result, the arrow, Page Up/Down and Home/End keys move the selection, and
@@ -169,6 +171,10 @@ To run the app you need:
 - `rclone`, for any mirror. If a sync fails because
   rclone is missing, the app offers to download the official build from
   rclone.org and checks it against the published SHA-256 sums before using it.
+
+On the first start, a short setup asks for the language, theme and downloads
+folder and explains how to connect the headset and add a mirror. It saves
+the settings whether you finish it or skip it, and doesn't open again.
 
 Logs go to the platform data directory (`~/.local/share/quest-sideloader/logs`
 on Linux). The Logs button in the status bar shows them in the app and turns red

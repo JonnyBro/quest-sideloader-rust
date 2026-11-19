@@ -31,14 +31,29 @@ impl TasksView {
 		self.tasks.iter().filter(|t| !t.state.is_finished())
 	}
 
-	/// One line for the bottom bar; returns true when clicked.
-	pub fn summary(&self, ui: &mut egui::Ui) -> bool {
+	/// The running task, or the first queued one, and how many are active.
+	fn current(&self) -> Option<(&TaskSnapshot, usize)> {
 		let active: Vec<_> = self.active().collect();
-		let Some(current) = active
+		let current = active
 			.iter()
 			.find(|t| t.state == TaskState::Running)
-			.or(active.first())
-		else {
+			.or(active.first())?;
+		Some((current, active.len()))
+	}
+
+	/// Goes in front of the window title: the current task's progress, or
+	/// the number of active tasks when it has none.
+	pub fn title_prefix(&self) -> Option<String> {
+		let (current, active) = self.current()?;
+		Some(match current.progress {
+			Some(p) => format!("{:.0}%", p * 100.0),
+			None => t!("tasks.title_active", n = active).into_owned(),
+		})
+	}
+
+	/// One line for the bottom bar; returns true when clicked.
+	pub fn summary(&self, ui: &mut egui::Ui) -> bool {
+		let Some((current, active)) = self.current() else {
 			return false;
 		};
 		let mut clicked = false;
@@ -54,8 +69,8 @@ impl TasksView {
 			}
 			let text = format!("{}: {}", current.title, current.stage);
 			clicked |= ui.link(text).clicked();
-			if active.len() > 1 {
-				ui.weak(t!("tasks.more", n = active.len() - 1));
+			if active > 1 {
+				ui.weak(t!("tasks.more", n = active - 1));
 			}
 		});
 		clicked
