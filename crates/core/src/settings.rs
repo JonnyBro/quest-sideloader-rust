@@ -267,7 +267,12 @@ mod tests {
 		let paths = AppPaths::portable(&old);
 		let mut settings = Settings::defaults_for(&paths);
 		settings.adb_path = Some(paths.platform_tools_dir().join("adb"));
-		settings.rclone_path = Some("/usr/bin/rclone".into());
+		let outside = PathBuf::from(if cfg!(windows) {
+			r"C:\Tools\rclone.exe"
+		} else {
+			"/usr/bin/rclone"
+		});
+		settings.rclone_path = Some(outside.clone());
 		settings.save(&paths).unwrap();
 
 		let text = std::fs::read_to_string(paths.settings_file()).unwrap();
@@ -283,7 +288,7 @@ mod tests {
 			loaded.adb_path,
 			Some(moved.platform_tools_dir().join("adb"))
 		);
-		assert_eq!(loaded.rclone_path, Some("/usr/bin/rclone".into()));
+		assert_eq!(loaded.rclone_path, Some(outside));
 	}
 
 	#[test]

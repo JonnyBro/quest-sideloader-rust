@@ -150,7 +150,8 @@ impl Fetcher {
 			.arg("copy")
 			.arg(file)
 			.arg(format!("{remote}:{}", dir.trim_matches('/')))
-			.args(["--checkers", "1", "--retries", "2", "--inplace"]);
+			.args(["--checkers", "1", "--retries", "2"])
+			.env("RCLONE_INPLACE", "true");
 		self.run_rclone(command, progress).await
 	}
 
@@ -218,6 +219,7 @@ impl Fetcher {
 		let stderr = child.stderr.take().expect("stderr is piped");
 		let mut lines = BufReader::new(stderr).lines();
 		let mut last_error = None;
+		let mut plain_error = None;
 		while let Some(line) = lines
 			.next_line()
 			.await
@@ -229,7 +231,13 @@ impl Fetcher {
 					tracing::debug!(%message, "rclone error");
 					last_error = Some(message);
 				}
-				None => tracing::debug!(line = %rclone_log_text(&line), "rclone"),
+				None => {
+					tracing::debug!(line = %rclone_log_text(&line), "rclone");
+					// Startup errors such as an unknown flag aren't JSON.
+					if !line.trim_start().starts_with('{') && !line.trim().is_empty() {
+						plain_error = Some(line.trim().to_owned());
+					}
+				}
 			}
 		}
 		let status = child
@@ -240,9 +248,11 @@ impl Fetcher {
 		if status.success() {
 			Ok(())
 		} else {
-			Err(CatalogError::Rclone(last_error.unwrap_or_else(|| {
-				t!("cat.rclone_exit", status = status).into_owned()
-			})))
+			Err(CatalogError::Rclone(
+				last_error
+					.or(plain_error)
+					.unwrap_or_else(|| t!("cat.rclone_exit", status = status).into_owned()),
+			))
 		}
 	}
 
