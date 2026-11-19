@@ -187,6 +187,29 @@ impl SettingsView {
 					ui.selectable_value(language, Language::Russian, "Русский");
 				});
 				ui.end_row();
+
+				// Applied at once and kept by egui with the window state, like
+				// its own Ctrl+Plus/Minus/0 shortcuts, so it isn't in the draft.
+				ui.label(t!("set.scale"));
+				ui.horizontal(|ui| {
+					let zoom = ui.ctx().zoom_factor();
+					let step = |z: f32| ((z * 10.0).round() / 10.0).clamp(0.5, 3.0);
+					if ui.button("-").clicked() {
+						ui.ctx().set_zoom_factor(step(zoom - 0.1));
+					}
+					ui.label(format!("{:.0}%", zoom * 100.0));
+					if ui.button("+").clicked() {
+						ui.ctx().set_zoom_factor(step(zoom + 0.1));
+					}
+					if ui
+						.add_enabled(zoom != 1.0, egui::Button::new(t!("set.scale_reset")))
+						.clicked()
+					{
+						ui.ctx().set_zoom_factor(1.0);
+					}
+					ui.weak(t!("set.scale_hint"));
+				});
+				ui.end_row();
 			});
 	}
 

@@ -8,15 +8,17 @@ use quest_sideloader_core::catalog::{Catalog, Game};
 use quest_sideloader_core::{CatalogStatus, Command, format_bytes};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 enum Filter {
+	#[default]
 	All,
 	Installed,
 	Updates,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 enum Sort {
+	#[default]
 	Name,
 	Package,
 	Version,
@@ -83,13 +85,25 @@ pub struct InstalledApps<'a> {
 	pub free_bytes: Option<u64>,
 }
 
-/// The library's sort and filter, kept between runs.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+enum View {
+	#[default]
+	List,
+	Grid,
+}
+
+/// The library's sort, filter and view, kept between runs.
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct LibraryPrefs {
 	sort: Sort,
 	descending: bool,
 	filter: Filter,
+	view: View,
 }
+
+const SEARCH_ID: &str = "library_search";
+const CARD_WIDTH: f32 = 200.0;
 
 impl InstalledApps<'_> {
 	fn status(&self, game: &Game) -> GameStatus {
@@ -123,9 +137,17 @@ pub struct LibraryView {
 	filter: Filter,
 	sort: Sort,
 	descending: bool,
+	view: View,
 	selected: Option<usize>,
 	rows: Vec<usize>,
 	rows_key: Option<RowsKey>,
+	/// Position in `rows` to bring into view, after a keyboard move.
+	scroll_to: Option<usize>,
+	/// Enter in the search box: select the first result once rows are ready.
+	select_first: bool,
+	grid_columns: usize,
+	/// Scroll offset and visible height of the grid in the last frame.
+	grid_view: (f32, f32),
 	contribute: super::contribute::ContributeView,
 	names: HashMap<String, String>,
 }
@@ -140,9 +162,14 @@ impl LibraryView {
 			filter: Filter::All,
 			sort: Sort::Name,
 			descending: false,
+			view: View::List,
 			selected: None,
 			rows: Vec::new(),
 			rows_key: None,
+			scroll_to: None,
+			select_first: false,
+			grid_columns: 1,
+			grid_view: (0.0, 0.0),
 			contribute: super::contribute::ContributeView::new(),
 			names: HashMap::new(),
 		}
@@ -181,6 +208,7 @@ impl LibraryView {
 			sort: self.sort,
 			descending: self.descending,
 			filter: self.filter,
+			view: self.view,
 		}
 	}
 
@@ -188,6 +216,7 @@ impl LibraryView {
 		self.sort = prefs.sort;
 		self.descending = prefs.descending;
 		self.filter = prefs.filter;
+		self.view = prefs.view;
 	}
 
 	/// Filter, sort and direction in effect. Without a headset to compare
@@ -290,6 +319,7 @@ impl LibraryView {
 			return;
 		};
 		self.refresh_rows(installed);
+		self.keyboard(ui.ctx());
 
 		if let Some(index) = self.selected
 			&& let Some(game) = catalog.games.get(index)
@@ -306,7 +336,81 @@ impl LibraryView {
 			}
 		}
 
-		egui::CentralPanel::default().show(ui, |ui| self.table(ui, &catalog, installed));
+		egui::CentralPanel::default().show(ui, |ui| match self.view {
+			View::List => self.table(ui, &catalog, installed, commands),
+			View::Grid => self.grid(ui, &catalog, installed, commands),
+		});
+	}
+
+	/// Ctrl+F focuses the search, Escape closes the details or clears the
+	/// search, Enter in the search picks the first result, and the arrow,
+	/// Page and Home/End keys move the selection.
+	fn keyboard(&mut self, ctx: &egui::Context) {
+		use egui::{Key, Modifiers};
+		let search = egui::Id::unique(SEARCH_ID);
+		let search_focused = ctx.memory(|m| m.has_focus(search));
+		if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::F)) {
+			ctx.memory_mut(|m| m.request_focus(search));
+		}
+		if ctx.input(|i| i.key_pressed(Key::Escape)) {
+			if self.selected.is_some() && !search_focused {
+				self.selected = None;
+			} else {
+				self.search.clear();
+			}
+		}
+		if std::mem::take(&mut self.select_first) && !self.rows.is_empty() {
+			self.selected = Some(self.rows[0]);
+			self.scroll_to = Some(0);
+		}
+		// Other text fields keep their keys; the search box gives up only
+		// the keys it has no use for.
+		if ctx.egui_wants_keyboard_input() && !search_focused {
+			return;
+		}
+		let (line, page) = match self.view {
+			View::List => (1, 10),
+			View::Grid => (self.grid_columns.max(1), self.grid_columns.max(1) * 3),
+		};
+		let last = self.rows.len().saturating_sub(1) as isize;
+		let step = ctx.input_mut(|i| {
+			let mut take = |key| i.consume_key(Modifiers::NONE, key);
+			if take(Key::ArrowDown) {
+				Some(line as isize)
+			} else if take(Key::ArrowUp) {
+				Some(-(line as isize))
+			} else if take(Key::PageDown) {
+				Some(page as isize)
+			} else if take(Key::PageUp) {
+				Some(-(page as isize))
+			} else if search_focused {
+				None
+			} else if self.view == View::Grid && take(Key::ArrowRight) {
+				Some(1)
+			} else if self.view == View::Grid && take(Key::ArrowLeft) {
+				Some(-1)
+			} else if take(Key::Home) {
+				Some(-last - 1)
+			} else if take(Key::End) {
+				Some(last + 1)
+			} else {
+				None
+			}
+		});
+		let Some(step) = step else { return };
+		if self.rows.is_empty() {
+			return;
+		}
+		let current = self
+			.selected
+			.and_then(|s| self.rows.iter().position(|&r| r == s));
+		let next = match current {
+			Some(pos) => (pos as isize + step).clamp(0, last) as usize,
+			None if step < 0 => last as usize,
+			None => 0,
+		};
+		self.selected = Some(self.rows[next]);
+		self.scroll_to = Some(next);
 	}
 
 	fn toolbar(
@@ -317,11 +421,15 @@ impl LibraryView {
 		commands: &mut Vec<Command>,
 	) {
 		ui.horizontal(|ui| {
-			ui.add(
+			let search = ui.add(
 				egui::TextEdit::singleline(&mut self.search)
-					.hint_text(t!("lib.search"))
+					.id(egui::Id::unique(SEARCH_ID))
+					.hint_text(t!("lib.search_keys"))
 					.desired_width(240.0),
 			);
+			if search.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+				self.select_first = true;
+			}
 			let (filter, sort, descending) = self.effective(installed.is_some());
 			if ui
 				.selectable_label(filter == Filter::All, t!("lib.all"))
@@ -365,6 +473,10 @@ impl LibraryView {
 				self.sort = sort;
 				self.descending = !descending;
 			}
+
+			ui.separator();
+			ui.selectable_value(&mut self.view, View::List, t!("lib.view_list"));
+			ui.selectable_value(&mut self.view, View::Grid, t!("lib.view_grid"));
 
 			ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
 				let syncing = matches!(self.status, CatalogStatus::Syncing { .. });
@@ -425,6 +537,7 @@ impl LibraryView {
 		ui: &mut egui::Ui,
 		catalog: &Catalog,
 		installed: Option<&InstalledApps<'_>>,
+		commands: &mut Vec<Command>,
 	) {
 		if self.rows.is_empty() {
 			ui.centered_and_justified(|ui| ui.weak(t!("lib.no_match")));
@@ -432,6 +545,7 @@ impl LibraryView {
 		}
 		let row_height = 44.0;
 		let mut clicked = None;
+		let mut opened = None;
 		let mut sort_click = None;
 		let (_, current, descending) = self.effective(installed.is_some());
 		let mut table = TableBuilder::new(ui)
@@ -441,6 +555,9 @@ impl LibraryView {
 			.column(Column::exact(80.0))
 			.column(Column::remainder().at_least(200.0).clip(true))
 			.column(Column::auto().at_least(80.0));
+		if let Some(position) = self.scroll_to.take() {
+			table = table.scroll_to_row(position, None);
+		}
 		// The installed version only means something with a headset.
 		if installed.is_some() {
 			table = table.column(Column::auto().at_least(80.0));
@@ -521,21 +638,91 @@ impl LibraryView {
 							status_label(ui, apps.status(game));
 						}
 					});
-					if row.response().clicked() {
+					let response = row.response();
+					if response.clicked() {
 						clicked = Some(index);
 					}
+					response.context_menu(|ui| {
+						if game_menu(ui, game, installed, commands) {
+							opened = Some(index);
+						}
+					});
 				});
 			});
 		if let Some(sort) = sort_click {
 			self.set_sort(sort);
 		}
-		if let Some(index) = clicked {
+		self.pick(clicked, opened);
+	}
+
+	/// A click toggles the details; "Details" in a menu always opens them.
+	fn pick(&mut self, clicked: Option<usize>, opened: Option<usize>) {
+		if let Some(index) = opened {
+			self.selected = Some(index);
+		} else if let Some(index) = clicked {
 			self.selected = if self.selected == Some(index) {
 				None
 			} else {
 				Some(index)
 			};
 		}
+	}
+
+	fn grid(
+		&mut self,
+		ui: &mut egui::Ui,
+		catalog: &Catalog,
+		installed: Option<&InstalledApps<'_>>,
+		commands: &mut Vec<Command>,
+	) {
+		if self.rows.is_empty() {
+			ui.centered_and_justified(|ui| ui.weak(t!("lib.no_match")));
+			return;
+		}
+		let spacing = ui.spacing().item_spacing;
+		let thumb = egui::vec2(CARD_WIDTH - 12.0, (CARD_WIDTH - 12.0) * 0.5625);
+		let card = egui::vec2(CARD_WIDTH, thumb.y + 66.0);
+		let columns = (((ui.available_width() + spacing.x) / (card.x + spacing.x)) as usize).max(1);
+		self.grid_columns = columns;
+		let lines = self.rows.len().div_ceil(columns);
+		let line_height = card.y + spacing.y;
+
+		let mut area = egui::ScrollArea::vertical().auto_shrink(false);
+		if let Some(position) = self.scroll_to.take() {
+			let top = (position / columns) as f32 * line_height;
+			let (offset, height) = self.grid_view;
+			if top < offset {
+				area = area.vertical_scroll_offset(top);
+			} else if top + line_height > offset + height {
+				area = area.vertical_scroll_offset(top + line_height - height);
+			}
+		}
+		let mut clicked = None;
+		let mut opened = None;
+		let output = area.show_rows(ui, card.y, lines, |ui, range| {
+			for line in range {
+				ui.horizontal(|ui| {
+					let start = line * columns;
+					let end = (start + columns).min(self.rows.len());
+					for &index in &self.rows[start..end] {
+						let game = &catalog.games[index];
+						let selected = self.selected == Some(index);
+						let response =
+							game_card(ui, catalog, game, installed, selected, card, thumb);
+						if response.clicked() {
+							clicked = Some(index);
+						}
+						response.context_menu(|ui| {
+							if game_menu(ui, game, installed, commands) {
+								opened = Some(index);
+							}
+						});
+					}
+				});
+			}
+		});
+		self.grid_view = (output.state.clamped_offset().y, output.inner_rect.height());
+		self.pick(clicked, opened);
 	}
 }
 
@@ -577,6 +764,101 @@ fn sort_rows(
 			.then_with(|| by_name(a, b))
 			.then_with(|| ga.release_name.cmp(&gb.release_name))
 	});
+}
+
+fn install_label(status: Option<GameStatus>) -> std::borrow::Cow<'static, str> {
+	match status {
+		Some(GameStatus::UpdateAvailable) => t!("lib.download_update"),
+		Some(GameStatus::Installed) => t!("lib.download_reinstall"),
+		_ => t!("lib.download_install"),
+	}
+}
+
+/// The right-click menu of a game. Returns true when "Details" was picked.
+fn game_menu(
+	ui: &mut egui::Ui,
+	game: &Game,
+	installed: Option<&InstalledApps<'_>>,
+	commands: &mut Vec<Command>,
+) -> bool {
+	let mut details = false;
+	if ui.button(t!("lib.menu_details")).clicked() {
+		details = true;
+		ui.close();
+	}
+	ui.separator();
+	if let Some(apps) = installed
+		&& ui.button(install_label(Some(apps.status(game)))).clicked()
+	{
+		commands.push(Command::Download {
+			game: game.clone(),
+			serial: Some(apps.serial.to_owned()),
+		});
+		ui.close();
+	}
+	if ui.button(t!("lib.download_only")).clicked() {
+		commands.push(Command::Download {
+			game: game.clone(),
+			serial: None,
+		});
+		ui.close();
+	}
+	ui.separator();
+	for (label, text) in [
+		(t!("lib.copy_name"), &game.name),
+		(t!("lib.copy_release"), &game.release_name),
+		(t!("lib.copy_package"), &game.package),
+	] {
+		if ui.button(label).clicked() {
+			ui.ctx().copy_text(text.clone());
+			ui.close();
+		}
+	}
+	details
+}
+
+/// One game in the grid view: cover, name, version and size, status.
+fn game_card(
+	ui: &mut egui::Ui,
+	catalog: &Catalog,
+	game: &Game,
+	installed: Option<&InstalledApps<'_>>,
+	selected: bool,
+	size: egui::Vec2,
+	thumb: egui::Vec2,
+) -> egui::Response {
+	let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
+	let visuals = ui.visuals();
+	let fill = if selected {
+		visuals.selection.bg_fill
+	} else if response.hovered() {
+		visuals.widgets.hovered.weak_bg_fill
+	} else {
+		visuals.faint_bg_color
+	};
+	ui.painter().rect_filled(rect, 4.0, fill);
+	let mut content = ui.new_child(
+		egui::UiBuilder::new()
+			.max_rect(rect.shrink(6.0))
+			.layout(egui::Layout::top_down(egui::Align::Min)),
+	);
+	// The card takes the clicks, so its text must not.
+	content.style_mut().interaction.selectable_labels = false;
+	thumbnail(&mut content, catalog, game, thumb);
+	content.add(egui::Label::new(egui::RichText::new(&game.name).strong()).truncate());
+	let mut line = Vec::new();
+	if let Some(version) = game.version_code {
+		line.push(format!("v{version}"));
+	}
+	let size_text = size_text(game);
+	if !size_text.is_empty() {
+		line.push(size_text);
+	}
+	content.add(egui::Label::new(egui::RichText::new(line.join(", ")).small()).truncate());
+	if let Some(apps) = installed {
+		status_label(&mut content, apps.status(game));
+	}
+	response
 }
 
 /// A label that shortens itself with an ellipsis instead of drawing over the
@@ -623,12 +905,7 @@ fn details(
 		});
 	});
 	ui.horizontal_wrapped(|ui| {
-		let label = match status {
-			Some(GameStatus::UpdateAvailable) => t!("lib.download_update"),
-			Some(GameStatus::Installed) => t!("lib.download_reinstall"),
-			_ => t!("lib.download_install"),
-		};
-		let install = ui.add_enabled(target.is_some(), egui::Button::new(label));
+		let install = ui.add_enabled(target.is_some(), egui::Button::new(install_label(status)));
 		let install = match target {
 			Some((_, name)) => install.on_hover_text(t!("lib.installs_on", name = name)),
 			None => install.on_disabled_hover_text(t!("lib.connect_install")),
@@ -849,11 +1126,54 @@ mod tests {
 			sort: Sort::Status,
 			descending: true,
 			filter: Filter::Updates,
+			view: View::Grid,
 		});
 		assert_eq!(view.effective(false), (Filter::All, Sort::Name, false));
 		assert_eq!(view.effective(true), (Filter::Updates, Sort::Status, true));
 		let prefs = view.prefs();
 		assert_eq!((prefs.sort, prefs.filter), (Sort::Status, Filter::Updates));
+	}
+
+	fn press(view: &mut LibraryView, ctx: &egui::Context, key: egui::Key) {
+		let input = egui::RawInput {
+			events: vec![egui::Event::Key {
+				key,
+				physical_key: None,
+				pressed: true,
+				repeat: false,
+				modifiers: egui::Modifiers::NONE,
+			}],
+			..Default::default()
+		};
+		let mut output = ctx.run_ui(input, |ui| view.keyboard(ui.ctx()));
+		// No renderer here to take the font texture.
+		output.textures_delta.clear();
+	}
+
+	#[test]
+	fn keys_move_the_selection() {
+		let ctx = egui::Context::default();
+		let mut view = LibraryView::new();
+		view.rows = vec![5, 3, 8, 1, 7];
+		press(&mut view, &ctx, egui::Key::ArrowDown);
+		assert_eq!((view.selected, view.scroll_to), (Some(5), Some(0)));
+		press(&mut view, &ctx, egui::Key::ArrowDown);
+		assert_eq!(view.selected, Some(3));
+		press(&mut view, &ctx, egui::Key::End);
+		assert_eq!(view.selected, Some(7));
+		press(&mut view, &ctx, egui::Key::ArrowDown);
+		assert_eq!(view.selected, Some(7), "stops at the end");
+		view.view = View::Grid;
+		view.grid_columns = 2;
+		press(&mut view, &ctx, egui::Key::ArrowUp);
+		assert_eq!(view.selected, Some(8), "a grid line up");
+		press(&mut view, &ctx, egui::Key::ArrowLeft);
+		assert_eq!(view.selected, Some(3));
+		press(&mut view, &ctx, egui::Key::Escape);
+		assert_eq!(view.selected, None, "Escape closes the details first");
+		view.search = "beat".into();
+		press(&mut view, &ctx, egui::Key::Escape);
+		assert!(view.search.is_empty(), "then clears the search");
 	}
 
 	#[test]

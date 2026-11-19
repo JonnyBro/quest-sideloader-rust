@@ -254,6 +254,15 @@ set.theme_light:
 set.language:
   en: "Language"
   ru: "Язык"
+set.scale:
+  en: "Interface scale"
+  ru: "Масштаб интерфейса"
+set.scale_reset:
+  en: "Reset"
+  ru: "Сбросить"
+set.scale_hint:
+  en: "or Ctrl + Plus, Ctrl + Minus, Ctrl + 0"
+  ru: "или Ctrl + Плюс, Ctrl + Минус, Ctrl + 0"
 set.language_system:
   en: "System"
   ru: "Системный"
@@ -629,9 +638,27 @@ lib.load_failed:
 lib.empty:
   en: "The game list is empty. Press Sync."
   ru: "Список игр пуст. Нажмите \"Синхронизировать\"."
-lib.search:
-  en: "Search games or packages"
-  ru: "Поиск игр или пакетов"
+lib.search_keys:
+  en: "Search games or packages (Ctrl+F)"
+  ru: "Поиск игр или пакетов (Ctrl+F)"
+lib.view_list:
+  en: "List"
+  ru: "Список"
+lib.view_grid:
+  en: "Grid"
+  ru: "Сетка"
+lib.menu_details:
+  en: "Details"
+  ru: "Подробнее"
+lib.copy_name:
+  en: "Copy name"
+  ru: "Копировать название"
+lib.copy_release:
+  en: "Copy release name"
+  ru: "Копировать имя релиза"
+lib.copy_package:
+  en: "Copy package name"
+  ru: "Копировать имя пакета"
 lib.all:
   en: "All"
   ru: "Все"

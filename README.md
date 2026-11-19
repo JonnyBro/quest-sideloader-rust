@@ -57,6 +57,16 @@ sent. Uploads go to the mirror's upload server without it.
 The mirror's `meta.7z` is unpacked under the data directory, and game notes
 come only from it.
 
+The Library tab shows the games as a list or as a grid of covers, sorted by
+any column (click a header to sort, click again to reverse). With a headset
+connected it also shows the installed version and warns when a game is larger
+than the free space. `Ctrl+F` jumps to the search, `Enter` there selects the
+first result, the arrow, Page Up/Down and Home/End keys move the selection, and
+`Escape` closes the details or clears the search. Right-clicking a game opens
+a menu with the download actions and copies of its name, release and package.
+`Ctrl+Plus`, `Ctrl+Minus` and `Ctrl+0` change the interface scale, which can
+also be set in Settings.
+
 ### Going easy on mirrors
 
 Mirrors are run by volunteers, so the app limits how hard it hits them:
