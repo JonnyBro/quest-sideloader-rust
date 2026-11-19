@@ -1,0 +1,44 @@
+# git-cliff config: release notes from conventional commits.
+# Preview the next release's notes with `git cliff --unreleased --strip header`.
+
+[changelog]
+header = """
+# Changelog\n
+"""
+body = """
+{% if version %}\
+    ## {{ version | trim_start_matches(pat="v") }} ({{ timestamp | date(format="%Y-%m-%d") }})
+{% else %}\
+    ## Unreleased
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | striptags | trim | upper_first }}
+    {% for commit in commits %}
+        - {% if commit.scope %}**{{ commit.scope }}:** {% endif %}\
+            {{ commit.message | upper_first }}\
+            {% if commit.breaking %} (**breaking**){% endif %} \
+            ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/JonnyBro/quest-sideloader-rust/commit/{{ commit.id }}))\
+    {% endfor %}
+{% endfor %}\n
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = true
+filter_commits = false
+tag_pattern = "v[0-9]+\\.[0-9]+\\.[0-9]+"
+sort_commits = "oldest"
+# The HTML comments only order the groups and are stripped from the output.
+commit_parsers = [
+	{ message = "\\[skip changelog\\]", skip = true },
+	{ message = "^feat", group = "<!-- 0 -->Features" },
+	{ message = "^fix", group = "<!-- 1 -->Fixes" },
+	{ message = "^perf", group = "<!-- 2 -->Performance" },
+	{ message = "^refactor", group = "<!-- 3 -->Refactoring" },
+	{ message = "^docs", group = "<!-- 4 -->Documentation" },
+	{ message = "^(chore|ci|style|test|build)", skip = true },
+	{ message = ".*", group = "<!-- 5 -->Other" },
+]

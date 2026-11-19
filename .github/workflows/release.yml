@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: windows-x86_64
+            os: windows-latest
+            targets: x86_64-pc-windows-msvc
+          # The oldest available runner, so the binary works with older glibc.
+          - name: linux-x86_64
+            os: ubuntu-22.04
+            targets: x86_64-unknown-linux-gnu
+          # Built for both architectures and merged into one universal binary.
+          - name: macos-universal
+            os: macos-latest
+            targets: aarch64-apple-darwin x86_64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag matches Cargo.toml version
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match the workspace version $version"
+            exit 1
+          fi
+
+      - name: Check API key secret
+        shell: bash
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          if [ -z "$API_KEY" ]; then
+            echo "::error::The API_KEY secret isn't set; a release without it can't use the mirror"
+            exit 1
+          fi
+
+      - name: Install Rust
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add ${{ matrix.targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.name }}
+
+      - name: Build
+        shell: bash
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          for target in ${{ matrix.targets }}; do
+            cargo build --release --locked --target "$target" -p quest-sideloader
+          done
+
+      - name: Package
+        shell: bash
+        run: |
+          name="quest-sideloader-$GITHUB_REF_NAME-${{ matrix.name }}"
+          mkdir -p "dist/$name"
+          cp LICENSE README.md "dist/$name/"
+          case "${{ matrix.name }}" in
+            windows-*)
+              cp target/x86_64-pc-windows-msvc/release/quest-sideloader.exe "dist/$name/"
+              cd dist && 7z a -tzip "$name.zip" "$name" > /dev/null
+              ;;
+            linux-*)
+              cp target/x86_64-unknown-linux-gnu/release/quest-sideloader "dist/$name/"
+              tar -C dist -czf "dist/$name.tar.gz" "$name"
+              ;;
+            macos-*)
+              lipo -create -output "dist/$name/quest-sideloader" \
+                target/aarch64-apple-darwin/release/quest-sideloader \
+                target/x86_64-apple-darwin/release/quest-sideloader
+              tar -C dist -czf "dist/$name.tar.gz" "$name"
+              ;;
+          esac
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        id: cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: RELEASE_NOTES.md
+          GITHUB_REPO: ${{ github.repository }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
+          files: dist/*
