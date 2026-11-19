@@ -3561,6 +3561,7 @@ dependencies = [
  "base64",
  "directories",
  "fs4",
+ "futures-util",
  "md-5",
  "percent-encoding",
  "reqwest",

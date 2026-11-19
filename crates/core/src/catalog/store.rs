@@ -160,7 +160,7 @@ pub async fn sync(
 	let archive = mirror_dir.join("meta.7z");
 	let progress: FetchProgress<'_> = &|done, total| stage(SyncStage::Downloading { done, total });
 	fetcher
-		.download_file(mirror, "meta.7z", &archive, progress)
+		.download_file(mirror, "meta.7z", &archive, progress, 1)
 		.await?;
 	tracing::debug!(size = ?std::fs::metadata(&archive).map(|m| m.len()).ok(), "meta.7z downloaded, unpacking");
 
@@ -276,32 +276,44 @@ mod tests {
 		std::fs::read(out).unwrap()
 	}
 
-	async fn serve_once(body: Vec<u8>) -> String {
+	/// Serves `body` for every request; rclone sends a HEAD before the GET.
+	async fn serve_meta(body: Vec<u8>) -> String {
 		use tokio::io::{AsyncReadExt, AsyncWriteExt};
 		let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
 		let addr = listener.local_addr().unwrap();
+		let body = std::sync::Arc::new(body);
 		tokio::spawn(async move {
-			let (mut s, _) = listener.accept().await.unwrap();
-			let mut buf = vec![0u8; 4096];
-			let _ = s.read(&mut buf).await;
-			let head = format!(
-				"HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-				body.len()
-			);
-			s.write_all(head.as_bytes()).await.unwrap();
-			s.write_all(&body).await.unwrap();
+			while let Ok((mut s, _)) = listener.accept().await {
+				let body = body.clone();
+				tokio::spawn(async move {
+					let mut buf = vec![0u8; 4096];
+					let n = s.read(&mut buf).await.unwrap_or(0);
+					let head_only = buf[..n].starts_with(b"HEAD ");
+					let head = format!(
+						"HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/octet-stream\r\nLast-Modified: Mon, 01 Jan 2024 00:00:00 GMT\r\nConnection: close\r\n\r\n",
+						body.len()
+					);
+					let _ = s.write_all(head.as_bytes()).await;
+					if !head_only {
+						let _ = s.write_all(&body).await;
+					}
+				});
+			}
 		});
 		format!("http://{addr}/")
 	}
 
 	#[tokio::test(flavor = "multi_thread")]
 	async fn sync_over_http_replaces_previous_catalog() {
+		if !crate::catalog::fetch::tests::have_rclone() {
+			return;
+		}
 		let dir = tempfile::tempdir().unwrap();
 		let root = dir.path().join("catalog");
 		std::fs::create_dir_all(root.join("m1/current")).unwrap();
 		std::fs::write(root.join("m1/current/old-marker"), b"").unwrap();
 
-		let base = serve_once(packed_meta(dir.path(), "hunter2")).await;
+		let base = serve_meta(packed_meta(dir.path(), "hunter2")).await;
 		let mirror = Mirror {
 			id: "m1".into(),
 			name: "t".into(),
@@ -320,10 +332,13 @@ mod tests {
 
 	#[tokio::test(flavor = "multi_thread")]
 	async fn failed_sync_keeps_old_catalog() {
+		if !crate::catalog::fetch::tests::have_rclone() {
+			return;
+		}
 		let dir = tempfile::tempdir().unwrap();
 		let root = dir.path().join("catalog");
 		write_meta(&root.join("m1/current"));
-		let base = serve_once(packed_meta(dir.path(), "right")).await;
+		let base = serve_meta(packed_meta(dir.path(), "right")).await;
 		let mirror = Mirror {
 			id: "m1".into(),
 			name: "t".into(),

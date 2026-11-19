@@ -103,12 +103,15 @@ impl Fetcher {
 	}
 
 	/// Downloads `remote_path` (relative to the mirror root) to `dest`.
+	/// `concurrent` is how many files this download fetches at once, for
+	/// splitting the bandwidth limit.
 	pub async fn download_file(
 		&self,
 		mirror: &Mirror,
 		remote_path: &str,
 		dest: &Path,
 		progress: FetchProgress<'_>,
+		concurrent: usize,
 	) -> Result<(), CatalogError> {
 		if let Some(parent) = dest.parent() {
 			tokio::fs::create_dir_all(parent)
@@ -122,8 +125,11 @@ impl Fetcher {
 			.arg(at.path(remote_path))
 			.arg(dest)
 			.args(&at.flags)
+			// One connection per file: rclone splits files over 256M into
+			// parallel streams otherwise.
+			.args(["--multi-thread-streams", "0"])
 			.args(["--retries", "3", "--low-level-retries", "10"])
-			.args(self.rclone_bwlimit());
+			.args(self.rclone_bwlimit(concurrent));
 		self.run_rclone(command, progress)
 			.await
 			.map_err(|e| with_status(e, &at.shown))
@@ -240,7 +246,11 @@ impl Fetcher {
 		}
 	}
 
-	pub(crate) fn rclone_command(&self, config_file: &Path, send_key: bool) -> tokio::process::Command {
+	pub(crate) fn rclone_command(
+		&self,
+		config_file: &Path,
+		send_key: bool,
+	) -> tokio::process::Command {
 		let mut command = tokio::process::Command::new(&self.rclone);
 		// Through the environment rather than `--header`, so the key doesn't
 		// show up in other users' process lists.
@@ -255,8 +265,8 @@ impl Fetcher {
 			.arg(config_file)
 			// Never stop to ask for a config password on a terminal.
 			.arg("--ask-password=false")
-			// Keep request bursts small; mirrors ask clients to be gentle.
-			.args(["--tpslimit", "2", "--tpslimit-burst", "4"])
+			// Same request pacing as other clients of these mirrors.
+			.args(["--tpslimit", "1", "--tpslimit-burst", "3"])
 			.stdin(Stdio::null())
 			.kill_on_drop(true);
 		#[cfg(windows)]
@@ -268,10 +278,12 @@ impl Fetcher {
 	}
 
 	/// rclone can't share a limit between processes, so each one gets the full
-	/// limit divided by the most downloads that may run at once. The `B`
-	/// suffix keeps it in plain bytes, whatever unit the user picked.
-	fn rclone_bwlimit(&self) -> Vec<String> {
-		let parallel = u64::from(self.parallel.load(Ordering::Relaxed).max(1));
+	/// limit divided by the most that may run at once: `concurrent` files per
+	/// download, times the downloads. The `B` suffix keeps it in plain bytes,
+	/// whatever unit the user picked.
+	fn rclone_bwlimit(&self, concurrent: usize) -> Vec<String> {
+		let parallel =
+			u64::from(self.parallel.load(Ordering::Relaxed).max(1)) * (concurrent.max(1) as u64);
 		match self.limit.load(Ordering::Relaxed) {
 			0 => Vec::new(),
 			bytes => vec![
@@ -454,7 +466,9 @@ fn parse_rclone_log(line: &str) -> Option<RcloneLog> {
 	let msg = value.get("msg")?.as_str()?.trim();
 	// A failed `copyto` ends with a notice ("Failed to copyto: ...") and may
 	// log nothing at error level.
-	if level == "error" || level == "critical" || (level == "notice" && msg.starts_with("Failed to"))
+	if level == "error"
+		|| level == "critical"
+		|| (level == "notice" && msg.starts_with("Failed to"))
 	{
 		return Some(RcloneLog::Error(msg.to_owned()));
 	}
@@ -462,7 +476,7 @@ fn parse_rclone_log(line: &str) -> Option<RcloneLog> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
 	use tokio::io::{AsyncReadExt, AsyncWriteExt};
 	use tokio::net::TcpListener;
 
@@ -496,7 +510,10 @@ mod tests {
 			))
 		);
 		let failed = r#"{"level":"notice","msg":"Failed to copyto: failed to stat: HTTP Error: 403 Forbidden"}"#;
-		assert!(matches!(parse_rclone_log(failed), Some(RcloneLog::Error(_))));
+		assert!(matches!(
+			parse_rclone_log(failed),
+			Some(RcloneLog::Error(_))
+		));
 		assert_eq!(parse_rclone_log(r#"{"level":"info","msg":"hi"}"#), None);
 		assert_eq!(parse_rclone_log("not json"), None);
 	}
@@ -593,7 +610,7 @@ mod tests {
 		let denied = Fetcher::new(None)
 			.unwrap()
 			.with_api_key(None)
-			.download_file(&mirror, "meta.7z", &dest, &|_, _| {})
+			.download_file(&mirror, "meta.7z", &dest, &|_, _| {}, 1)
 			.await;
 		assert!(
 			denied.is_err(),
@@ -603,7 +620,7 @@ mod tests {
 		Fetcher::new(None)
 			.unwrap()
 			.with_api_key(Some("secret"))
-			.download_file(&mirror, "meta.7z", &dest, &|_, _| {})
+			.download_file(&mirror, "meta.7z", &dest, &|_, _| {}, 1)
 			.await
 			.unwrap();
 		assert_eq!(std::fs::read(&dest).unwrap(), b"meta archive bytes");
@@ -695,7 +712,7 @@ mod tests {
 		);
 	}
 
-	fn have_rclone() -> bool {
+	pub(crate) fn have_rclone() -> bool {
 		let found = std::process::Command::new("rclone")
 			.arg("version")
 			.output()
@@ -730,7 +747,7 @@ mod tests {
 					let authorized = req
 						.lines()
 						.any(|l| l.to_ascii_lowercase().trim() == "x-api-key: secret");
-					let listing = format!("<a href=\"Game%20v1.7z.001\">Game v1.7z.001</a>");
+					let listing = "<a href=\"Game%20v1.7z.001\">Game v1.7z.001</a>".to_string();
 					let (status, payload): (&str, Vec<u8>) = if !authorized {
 						("403 Forbidden", Vec::new())
 					} else if path == "/files/meta.7z" {
@@ -742,7 +759,11 @@ mod tests {
 					} else {
 						("404 Not Found", Vec::new())
 					};
-					let kind = if path.ends_with('/') { "text/html" } else { "application/octet-stream" };
+					let kind = if path.ends_with('/') {
+						"text/html"
+					} else {
+						"application/octet-stream"
+					};
 					let head = format!(
 						"HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: {kind}\r\nLast-Modified: Mon, 01 Jan 2024 00:00:00 GMT\r\nConnection: close\r\n\r\n",
 						payload.len()
@@ -771,7 +792,7 @@ mod tests {
 		let refused = Fetcher::new(None)
 			.unwrap()
 			.with_api_key(None)
-			.download_file(&mirror, "meta.7z", &dest, &|_, _| {})
+			.download_file(&mirror, "meta.7z", &dest, &|_, _| {}, 1)
 			.await;
 		assert!(
 			matches!(refused, Err(CatalogError::Status { status: 403, .. })),
@@ -780,7 +801,7 @@ mod tests {
 
 		let fetcher = Fetcher::new(None).unwrap().with_api_key(Some("secret"));
 		fetcher
-			.download_file(&mirror, "meta.7z", &dest, &|_, _| {})
+			.download_file(&mirror, "meta.7z", &dest, &|_, _| {}, 1)
 			.await
 			.unwrap();
 		assert_eq!(std::fs::read(&dest).unwrap(), b"meta bytes");
@@ -795,6 +816,7 @@ mod tests {
 				&release_file_path(&mirror, "Game v1", &files[0].name),
 				&part,
 				&|_, _| {},
+				1,
 			)
 			.await
 			.unwrap();
@@ -804,12 +826,17 @@ mod tests {
 	#[test]
 	fn rclone_limit_is_split_in_bytes() {
 		let fetcher = Fetcher::new(None).unwrap();
-		assert!(fetcher.rclone_bwlimit().is_empty());
+		assert!(fetcher.rclone_bwlimit(1).is_empty());
 		fetcher.set_bandwidth_limit(3_000_000, 3);
-		assert_eq!(fetcher.rclone_bwlimit(), ["--bwlimit", "1000000B"]);
+		assert_eq!(fetcher.rclone_bwlimit(1), ["--bwlimit", "1000000B"]);
+		assert_eq!(
+			fetcher.rclone_bwlimit(4),
+			["--bwlimit", "250000B"],
+			"split between parts too"
+		);
 		fetcher.clone().set_bandwidth_limit(1000, 0);
 		assert_eq!(
-			fetcher.rclone_bwlimit(),
+			fetcher.rclone_bwlimit(1),
 			["--bwlimit", "1000B"],
 			"clones share the limit"
 		);

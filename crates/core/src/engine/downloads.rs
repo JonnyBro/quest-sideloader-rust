@@ -6,7 +6,9 @@ use rust_i18n::t;
 use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+use futures_util::stream::{self, StreamExt, TryStreamExt};
 
 use tokio::sync::{mpsc, oneshot};
 
@@ -422,30 +424,47 @@ async fn download(
 	}
 
 	tracker.stage(t!("dl.downloading_n", n = files.len()));
-	let mut done_before = 0u64;
-	for file in &files {
-		let dest = archive_dir.join(&file.name);
-		let existing = tokio::fs::metadata(&dest).await.ok().map(|m| m.len());
-		let complete = match (existing, file.size) {
-			(Some(have), Some(want)) => have == want,
-			(Some(_), None) => true,
-			(None, _) => false,
-		};
-		if !complete {
-			let path = release_file_path(&job.mirror, release, &file.name);
-			let base = done_before;
-			let total = estimate;
-			let stage = t!("dl.downloading_file", name = file.name);
-			let progress: FetchProgress<'_> = &|done, _| tracker.bytes(base + done, total);
-			with_retries(tracker, &stage, || {
-				deps.fetcher
-					.download_file(&job.mirror, &path, &dest, progress)
-			})
-			.await?;
-		}
-		done_before += tokio::fs::metadata(&dest).await.map_or(0, |m| m.len());
-		tracker.bytes(done_before, estimate);
+	let concurrent = files.len().min(PARTS_AT_ONCE);
+	// Bytes on disk per part; progress is their sum.
+	let done: Vec<AtomicU64> = files.iter().map(|_| AtomicU64::new(0)).collect();
+	let report = || {
+		let sum = done.iter().map(|d| d.load(Ordering::Relaxed)).sum();
+		tracker.bytes(sum, estimate);
+	};
+	let (done, report) = (&done, &report);
+	let mut parts = Vec::with_capacity(files.len());
+	for (i, file) in files.iter().enumerate() {
+		parts.push(async move {
+			let dest = archive_dir.join(&file.name);
+			let existing = tokio::fs::metadata(&dest).await.ok().map(|m| m.len());
+			let complete = match (existing, file.size) {
+				(Some(have), Some(want)) => have == want,
+				(Some(_), None) => true,
+				(None, _) => false,
+			};
+			if !complete {
+				let path = release_file_path(&job.mirror, release, &file.name);
+				let stage = t!("dl.downloading_file", name = file.name);
+				let progress: FetchProgress<'_> = &|bytes, _| {
+					done[i].store(bytes, Ordering::Relaxed);
+					report();
+				};
+				with_retries(tracker, &stage, || {
+					deps.fetcher
+						.download_file(&job.mirror, &path, &dest, progress, concurrent)
+				})
+				.await?;
+			}
+			let size = tokio::fs::metadata(&dest).await.map_or(0, |m| m.len());
+			done[i].store(size, Ordering::Relaxed);
+			report();
+			Ok::<_, JobError>(())
+		});
 	}
+	stream::iter(parts)
+		.buffer_unordered(PARTS_AT_ONCE)
+		.try_collect::<Vec<()>>()
+		.await?;
 	Ok(())
 }
 
@@ -475,6 +494,9 @@ fn finalize(staging: &Path, files_dir: &Path, work_dir: &Path) -> Result<(), Job
 
 /// Pauses between attempts after a network hiccup; downloads resume from
 /// the partial file, so a retry only fetches what's missing.
+/// Release parts fetched at the same time, like other clients of these mirrors.
+const PARTS_AT_ONCE: usize = 4;
+
 const RETRY_DELAYS: [u64; 3] = [5, 15, 45];
 
 fn retryable(e: &CatalogError) -> bool {
@@ -832,7 +854,11 @@ mod tests {
 						} else {
 							None
 						};
-						let kind = if listing { "text/html" } else { "application/octet-stream" };
+						let kind = if listing {
+							"text/html"
+						} else {
+							"application/octet-stream"
+						};
 						let response = match body {
 							Some(body) => {
 								let mut r = format!(

@@ -68,8 +68,7 @@ Mirrors are run by volunteers, so the app limits how hard it hits them:
 - the game list is refreshed at most once a day automatically, and a manual
   sync is refused if the last one was less than 10 minutes ago;
 - interrupted downloads resume where they stopped; network errors are retried
-  a few times with growing pauses, and refused requests (403, 404) not at all;
-- rclone requests are rate-limited with `--tpslimit`.
+  a few times with growing pauses, and refused requests (403, 404) not at all.
 
 ### Sharing new app versions
 
@@ -122,6 +121,26 @@ cargo clippy --all-targets
 Tests use fake adb servers and never talk to a connected headset. The mirror
 and download tests run the real `rclone`, and a few use `7z`; they are skipped
 when those aren't installed.
+
+### Windows builds
+
+On Windows, `cargo build --release` is enough. `.cargo/config.toml` links the
+C runtime statically, so the exe runs without the Visual C++ Redistributable.
+The same file hides linker warning LNK4099 (missing `.pdb` files for prebuilt
+libraries), which only affects debugging symbols.
+
+From Linux, build with [cargo-xwin](https://github.com/rust-cross/cargo-xwin),
+which downloads the MSVC CRT and Windows SDK on first use (this means
+accepting Microsoft's license for them). It also needs `clang` and `lld`:
+
+```bash
+rustup target add x86_64-pc-windows-msvc
+cargo install --locked cargo-xwin
+cargo xwin build --release --target x86_64-pc-windows-msvc
+```
+
+The exe is `target/x86_64-pc-windows-msvc/release/quest-sideloader.exe`. The
+API key is picked up the same way as in a native build.
 
 ### Running
 
