@@ -21,11 +21,9 @@ jobs:
           - name: windows-x86_64
             os: windows-latest
             targets: x86_64-pc-windows-msvc
-          # The oldest available runner, so the binary works with older glibc.
           - name: linux-x86_64
             os: ubuntu-22.04
             targets: x86_64-unknown-linux-gnu
-          # Built for both architectures and merged into one universal binary.
           - name: macos-universal
             os: macos-latest
             targets: aarch64-apple-darwin x86_64-apple-darwin
