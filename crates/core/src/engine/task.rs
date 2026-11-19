@@ -264,7 +264,7 @@ mod tests {
 		assert_eq!(format_duration(3725), "1 h 2 min");
 		assert_eq!(
 			describe_rate(2.0 * 1024.0 * 1024.0, Some(4 * 1024 * 1024)),
-			"2.0 MiB/s · 2 s left"
+			"2.0 MiB/s, 2 s left"
 		);
 		assert_eq!(describe_rate(0.0, Some(10)), "0 B/s");
 	}

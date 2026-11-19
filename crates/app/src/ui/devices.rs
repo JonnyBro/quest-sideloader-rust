@@ -100,6 +100,7 @@ impl DevicesView {
 				.iter()
 				.map(|p| (p.name.as_str(), p.version_code))
 				.collect(),
+			free_bytes: info.storage.as_ref().map(|s| s.free_bytes),
 		})
 	}
 
@@ -190,7 +191,7 @@ impl DevicesView {
 				let selected = self.selected.as_deref() == Some(device.serial.as_str());
 				let mut title = device.display_name();
 				if device.is_wireless() {
-					title.push_str(" · Wi-Fi");
+					title.push_str(" (Wi-Fi)");
 				}
 				let response = ui.selectable_label(selected, title);
 				ui.horizontal(|ui| {

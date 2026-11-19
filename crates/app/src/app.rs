@@ -79,6 +79,10 @@ impl SideloaderApp {
 		egui_extras::install_image_loaders(&cc.egui_ctx);
 
 		let logs_dir = paths.logs_dir();
+		let mut library_view = ui::library::LibraryView::new();
+		if let Some(prefs) = cc.storage.and_then(|s| eframe::get_value(s, LIBRARY_KEY)) {
+			library_view.restore(prefs);
+		}
 		Ok(Self {
 			engine,
 			paths,
@@ -93,7 +97,7 @@ impl SideloaderApp {
 			adb_setup: ui::tool_setup::AdbSetup::default(),
 			rclone_setup: ui::tool_setup::RcloneSetup::default(),
 			review_dialog: ui::review::ReviewDialog::new(),
-			library_view: ui::library::LibraryView::new(),
+			library_view,
 			settings_view: ui::settings::SettingsView::new(settings),
 		})
 	}
@@ -220,7 +224,10 @@ impl SideloaderApp {
 						Status::Info(text) => ui.label(text),
 						Status::Error(text) => ui.colored_label(ui.visuals().error_fg_color, text),
 					};
-					dismiss = ui.small_button("✕").clicked();
+					dismiss = ui
+						.small_button("✕")
+						.on_hover_text(t!("common.close"))
+						.clicked();
 				}
 			}
 			ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -233,7 +240,13 @@ impl SideloaderApp {
 	}
 }
 
+const LIBRARY_KEY: &str = "library";
+
 impl eframe::App for SideloaderApp {
+	fn save(&mut self, storage: &mut dyn eframe::Storage) {
+		eframe::set_value(storage, LIBRARY_KEY, &self.library_view.prefs());
+	}
+
 	fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
 		let events: Vec<Event> = self.engine.poll_events().collect();
 		for event in events {

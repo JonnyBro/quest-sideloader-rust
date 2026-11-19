@@ -36,6 +36,7 @@ fn main() -> eframe::Result {
 			})
 			.with_inner_size([1100.0, 720.0])
 			.with_min_inner_size([800.0, 520.0]),
+		persistence_path: Some(paths.ui_state_file()),
 		..Default::default()
 	};
 

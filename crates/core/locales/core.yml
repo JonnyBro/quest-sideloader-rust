@@ -9,8 +9,8 @@ task.queued:
   en: "Queued"
   ru: "В очереди"
 task.queued_pos:
-  en: "Queued · #%{pos}"
-  ru: "В очереди · №%{pos}"
+  en: "Queued, #%{pos}"
+  ru: "В очереди, #%{pos}"
 task.cancelled:
   en: "Cancelled"
   ru: "Отменено"
@@ -24,8 +24,8 @@ task.installed:
   en: "Installed"
   ru: "Установлено"
 task.rate_left:
-  en: "%{speed} · %{left} left"
-  ru: "%{speed} · осталось %{left}"
+  en: "%{speed}, %{left} left"
+  ru: "%{speed}, осталось %{left}"
 time.secs:
   en: "%{n} s"
   ru: "%{n} с"

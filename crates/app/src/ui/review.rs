@@ -184,7 +184,7 @@ fn script_line(ui: &mut egui::Ui, line: &ScriptLine) {
 		if let Some(reason) = reason {
 			ui.horizontal(|ui| {
 				ui.add_space(40.0);
-				ui.label(egui::RichText::new(format!("⚠ {reason}")).small().strong());
+				ui.label(egui::RichText::new(reason).small().strong());
 			});
 		}
 	});

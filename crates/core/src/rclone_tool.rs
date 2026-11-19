@@ -110,7 +110,7 @@ async fn get_text(client: &reqwest::Client, url: &str) -> Result<String, String>
 		.map_err(|e| t!("err.cat_http", error = e).into_owned())
 }
 
-/// The rclone executable inside a release zip (`rclone-v…/rclone`).
+/// The rclone executable inside a release zip (`rclone-v.../rclone`).
 fn extract_binary(zip_path: &Path) -> Result<Vec<u8>, String> {
 	let unreadable = |e: &dyn std::fmt::Display| t!("rc.zip_unreadable", error = e).into_owned();
 	let file = std::fs::File::open(zip_path).map_err(|e| e.to_string())?;

@@ -59,12 +59,15 @@ common.install:
 common.install_on:
   en: "Install on %{name}"
   ru: "Установить на %{name}"
+common.close:
+  en: "Close"
+  ru: "Закрыть"
 common.refresh:
   en: "Refresh"
   ru: "Обновить"
 common.browse:
-  en: "Browse…"
-  ru: "Обзор…"
+  en: "Browse..."
+  ru: "Обзор..."
 common.yes:
   en: "Yes"
   ru: "Да"
@@ -72,8 +75,8 @@ logs.button:
   en: "Logs"
   ru: "Логи"
 logs.button_errors:
-  en: "Logs ● %{n}"
-  ru: "Логи ● %{n}"
+  en: "Logs (%{n})"
+  ru: "Логи (%{n})"
 logs.button_hint:
   en: "Recent log lines. Turns red when something fails."
   ru: "Последние строки лога. Кнопка краснеет, если что-то пошло не так."
@@ -112,7 +115,7 @@ dl.summary:
   ru: "релизов: %{n}, %{size}"
 dl.empty:
   en: "No downloaded releases. Games downloaded from the Library are kept here when \"Keep downloaded files\" is on in Settings."
-  ru: "Скачанных релизов нет. Игры из Библиотеки остаются здесь, если в Настройках включено «Сохранять скачанные файлы»."
+  ru: "Скачанных релизов нет. Игры из Библиотеки остаются здесь, если в Настройках включено \"Сохранять скачанные файлы\"."
 dl.col_release:
   en: "Release"
   ru: "Релиз"
@@ -141,20 +144,20 @@ tasks.empty:
   en: "No tasks yet. Download games from the Library, or drop files onto the window. Downloaded files are listed under Downloads."
   ru: "Задач пока нет. Скачайте игры из Библиотеки или перетащите файлы в окно. Скачанные файлы видны во вкладке Загрузки."
 tasks.kind_download_install:
-  en: "download and install · %{serial}"
-  ru: "загрузка и установка · %{serial}"
+  en: "download and install, %{serial}"
+  ru: "загрузка и установка, %{serial}"
 tasks.kind_download:
   en: "download only"
   ru: "только загрузка"
 tasks.kind_install_on:
-  en: "install · %{serial}"
-  ru: "установка · %{serial}"
+  en: "install, %{serial}"
+  ru: "установка, %{serial}"
 tasks.kind_install:
   en: "install"
   ru: "установка"
 tasks.kind_upload_on:
-  en: "upload to the library · %{serial}"
-  ru: "отправка в библиотеку · %{serial}"
+  en: "upload to the library, %{serial}"
+  ru: "отправка в библиотеку, %{serial}"
 tasks.kind_upload:
   en: "upload to the library"
   ru: "отправка в библиотеку"
@@ -306,8 +309,8 @@ con.banner:
   en: "%{n} app(s) on %{device} are missing from the library or newer than its version."
   ru: "Приложений на %{device}, которых нет в библиотеке или которые новее её версии: %{n}."
 con.review:
-  en: "Review and share…"
-  ru: "Посмотреть и поделиться…"
+  en: "Review and share..."
+  ru: "Посмотреть и поделиться..."
 con.title:
   en: "Share app versions with the library"
   ru: "Поделиться версиями приложений с библиотекой"
@@ -316,16 +319,16 @@ con.intro:
   ru: "Этих приложений с %{device} ещё нет в библиотеке, или они новее её копии. Отправка поможет всем, кто пользуется этим зеркалом."
 con.privacy:
   en: "An upload sends the app's APK and OBB files, the headset model, and an anonymous headset id (a SHA-256 hash of its serial number) to the mirror. Nothing is uploaded until you press Upload, and nothing on the headset changes."
-  ru: "Отправляются APK и OBB-файлы приложения, модель шлема и анонимный идентификатор шлема (SHA-256 от серийного номера). Ничего не отправится, пока вы не нажмёте «Отправить», и на самом шлеме ничего не меняется."
+  ru: "Отправляются APK и OBB-файлы приложения, модель шлема и анонимный идентификатор шлема (SHA-256 от серийного номера). Ничего не отправится, пока вы не нажмёте \"Отправить\", и на самом шлеме ничего не меняется."
 con.nothing:
   en: "Nothing left to share."
   ru: "Больше нечем поделиться."
 con.not_in_library:
-  en: "v%{version} · not in the library"
-  ru: "v%{version} · нет в библиотеке"
+  en: "v%{version}, not in the library"
+  ru: "v%{version}, нет в библиотеке"
 con.newer:
-  en: "v%{version} · library has v%{library}"
-  ru: "v%{version} · в библиотеке v%{library}"
+  en: "v%{version}, library has v%{library}"
+  ru: "v%{version}, в библиотеке v%{library}"
 con.queued:
   en: "sent to the queue"
   ru: "отправлено в очередь"
@@ -342,8 +345,8 @@ dev.none:
   en: "No devices. Connect the headset with a USB cable and enable developer mode."
   ru: "Устройств нет. Подключите шлем USB-кабелем и включите режим разработчика."
 dev.starting:
-  en: "Starting ADB…"
-  ru: "Запуск ADB…"
+  en: "Starting ADB..."
+  ru: "Запуск ADB..."
 dev.running:
   en: "ADB server running (protocol %{version})"
   ru: "Сервер ADB работает (протокол %{version})"
@@ -363,20 +366,20 @@ dev.disconnect:
   en: "Disconnect"
   ru: "Отключить"
 dev.install_file:
-  en: "Install APK or ZIP…"
-  ru: "Установить APK или ZIP…"
+  en: "Install APK or ZIP..."
+  ru: "Установить APK или ZIP..."
 dev.apk_or_zip:
   en: "APK or ZIP"
   ru: "APK или ZIP"
 dev.install_folder:
-  en: "Install folder…"
-  ru: "Установить папку…"
+  en: "Install folder..."
+  ru: "Установить папку..."
 dev.or_drop:
   en: "or drop files onto the window"
   ru: "или перетащите файлы в окно"
 dev.reading:
-  en: "Reading device info…"
-  ru: "Чтение данных устройства…"
+  en: "Reading device info..."
+  ru: "Чтение данных устройства..."
 dev.state_online:
   en: "connected"
   ru: "подключено"
@@ -399,8 +402,8 @@ dev.hint_unauthorized:
   en: "Put on the headset and allow USB debugging for this computer."
   ru: "Наденьте шлем и разрешите отладку по USB для этого компьютера."
 dev.hint_waiting:
-  en: "Waiting for the device…"
-  ru: "Ожидание устройства…"
+  en: "Waiting for the device..."
+  ru: "Ожидание устройства..."
 dev.hint_offline:
   en: "The device is offline. Reconnect the cable or restart the headset."
   ru: "Устройство не в сети. Переподключите кабель или перезагрузите шлем."
@@ -484,10 +487,10 @@ hs.screenshot:
   ru: "Скриншот"
 hs.screenshot_hint:
   en: "Saved to your Pictures folder"
-  ru: "Сохраняется в папку «Изображения»"
+  ru: "Сохраняется в папку \"Изображения\""
 hs.restart_menu:
-  en: "Restart…"
-  ru: "Перезагрузка…"
+  en: "Restart..."
+  ru: "Перезагрузка..."
 hs.restart:
   en: "Restart"
   ru: "Перезагрузить"
@@ -552,20 +555,20 @@ hs.back_up_hint:
   en: "Copies its Android/data folder, plus its private data if the app allows it"
   ru: "Копирует папку Android/data, а если приложение позволяет, то и приватные данные"
 hs.uninstall_button:
-  en: "Uninstall…"
-  ru: "Удалить…"
+  en: "Uninstall..."
+  ru: "Удалить..."
 hs.backups:
   en: "Save backups (%{n})"
   ru: "Бэкапы сохранений (%{n})"
 hs.no_backups:
   en: "No backups yet. Use \"Back up saves\" on an app above."
-  ru: "Бэкапов пока нет. Нажмите «Бэкап сохранений» у приложения выше."
+  ru: "Бэкапов пока нет. Нажмите \"Бэкап сохранений\" у приложения выше."
 hs.incl_private:
-  en: " · incl. private data"
-  ru: " · с приватными данными"
+  en: ", incl. private data"
+  ru: ", с приватными данными"
 hs.backup_info:
-  en: "%{size} · %{n} file(s)%{private}"
-  ru: "%{size} · файлов: %{n}%{private}"
+  en: "%{size}, %{n} file(s)%{private}"
+  ru: "%{size}, файлов: %{n}%{private}"
 hs.restore:
   en: "Restore"
   ru: "Восстановить"
@@ -573,8 +576,8 @@ hs.restore_hint:
   en: "Copies these saves to the headset, over what's there"
   ru: "Копирует эти сохранения на шлем поверх текущих"
 hs.delete_button:
-  en: "Delete…"
-  ru: "Удалить…"
+  en: "Delete..."
+  ru: "Удалить..."
 hs.uninstall_title:
   en: "Uninstall %{name}?"
   ru: "Удалить %{name}?"
@@ -616,16 +619,16 @@ hs.uptime_dh:
   ru: "%{d} д %{h} ч"
 lib.no_mirror:
   en: "No mirror yet. Add one in the Mirrors section of Settings."
-  ru: "Зеркала пока нет. Добавьте его в разделе «Зеркала» в Настройках."
+  ru: "Зеркала пока нет. Добавьте его в разделе \"Зеркала\" в Настройках."
 lib.downloading_list:
-  en: "Downloading the game list…"
-  ru: "Загрузка списка игр…"
+  en: "Downloading the game list..."
+  ru: "Загрузка списка игр..."
 lib.load_failed:
   en: "Could not load the game list. Check the mirror settings and press Sync."
-  ru: "Не удалось загрузить список игр. Проверьте настройки зеркала и нажмите «Синхронизировать»."
+  ru: "Не удалось загрузить список игр. Проверьте настройки зеркала и нажмите \"Синхронизировать\"."
 lib.empty:
   en: "The game list is empty. Press Sync."
-  ru: "Список игр пуст. Нажмите «Синхронизировать»."
+  ru: "Список игр пуст. Нажмите \"Синхронизировать\"."
 lib.search:
   en: "Search games or packages"
   ru: "Поиск игр или пакетов"
@@ -653,6 +656,24 @@ lib.sort_size:
 lib.sort_popularity:
   en: "Popularity"
   ru: "Популярность"
+lib.sort_package:
+  en: "Package name"
+  ru: "Имя пакета"
+lib.sort_version:
+  en: "Version"
+  ru: "Версия"
+lib.sort_status:
+  en: "Status on the headset"
+  ru: "Статус на шлеме"
+lib.col_installed:
+  en: "Installed"
+  ru: "Установлена"
+lib.low_space:
+  en: "Not enough space on the headset: the game needs about %{needed}, %{free} is free."
+  ru: "На шлеме мало места: игре нужно около %{needed}, свободно %{free}."
+lib.sort_by_column:
+  en: "Sort by this column; click again to reverse"
+  ru: "Сортировать по этой колонке, повторный клик меняет порядок"
 lib.reverse:
   en: "Reverse order"
   ru: "Обратный порядок"
@@ -663,11 +684,11 @@ lib.sync_failed:
   en: "Sync failed"
   ru: "Синхронизация не удалась"
 lib.synced:
-  en: "%{n} games · synced %{ago}"
-  ru: "игр: %{n} · синхронизировано %{ago}"
+  en: "%{n} games, synced %{ago}"
+  ru: "игр: %{n}, синхронизировано %{ago}"
 lib.comparing:
-  en: "Comparing with %{device} ·"
-  ru: "Сравнение с %{device} ·"
+  en: "Comparing with %{device},"
+  ru: "Сравнение с %{device},"
 lib.no_match:
   en: "Nothing matches the filter."
   ru: "Ничего не подходит под фильтр."
@@ -762,8 +783,8 @@ mir.remove:
   en: "Remove"
   ru: "Удалить"
 mir.add_mirror:
-  en: "Add mirror…"
-  ru: "Добавить зеркало…"
+  en: "Add mirror..."
+  ru: "Добавить зеркало..."
 mir.kind_json:
   en: "Server config (JSON)"
   ru: "Конфиг сервера (JSON)"
@@ -777,8 +798,8 @@ mir.config:
   en: "Config"
   ru: "Конфиг"
 mir.load_file:
-  en: "Load from file…"
-  ru: "Загрузить из файла…"
+  en: "Load from file..."
+  ru: "Загрузить из файла..."
 mir.base_uri:
   en: "Base URI"
   ru: "Base URI"
@@ -795,8 +816,8 @@ mir.none_selected:
   en: "none"
   ru: "не выбран"
 mir.choose:
-  en: "Choose…"
-  ru: "Выбрать…"
+  en: "Choose..."
+  ru: "Выбрать..."
 mir.remote:
   en: "Remote"
   ru: "Remote"
@@ -837,11 +858,11 @@ adb.not_now:
   en: "Not now"
   ru: "Не сейчас"
 dev.adb_missing_hint:
-  en: "ADB is not installed. Press \"Set up ADB…\" above, or set the adb path in Settings."
-  ru: "ADB не установлен. Нажмите «Установить ADB…» выше или укажите путь к adb в Настройках."
+  en: "ADB is not installed. Press \"Set up ADB...\" above, or set the adb path in Settings."
+  ru: "ADB не установлен. Нажмите \"Установить ADB...\" выше или укажите путь к adb в Настройках."
 dev.set_up_adb:
-  en: "Set up ADB…"
-  ru: "Установить ADB…"
+  en: "Set up ADB..."
+  ru: "Установить ADB..."
 tasks.kind_adb:
   en: "ADB setup"
   ru: "установка ADB"

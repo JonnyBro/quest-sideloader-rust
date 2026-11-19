@@ -143,9 +143,9 @@ fn describe(mirror: &Mirror) -> String {
 	match &mirror.kind {
 		MirrorKind::Http { base_uri } => {
 			let host = reqwest_host(base_uri).unwrap_or_else(|| base_uri.clone());
-			format!("HTTP · {host}")
+			format!("HTTP: {host}")
 		}
-		MirrorKind::Rclone { remote, .. } => format!("rclone · {remote}"),
+		MirrorKind::Rclone { remote, .. } => format!("rclone: {remote}"),
 	}
 }
 
@@ -220,7 +220,7 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 						ui.vertical(|ui| {
 							ui.add(
 								egui::TextEdit::multiline(&mut form.json)
-									.hint_text(r#"{"baseUri":"https://…/","password":"…"}"#)
+									.hint_text(r#"{"baseUri":"https://.../","password":"..."}"#)
 									.desired_rows(3)
 									.desired_width(420.0)
 									.font(egui::TextStyle::Monospace),

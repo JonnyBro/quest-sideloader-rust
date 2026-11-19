@@ -13,7 +13,7 @@ const WRAPPER_BACKENDS: [&str; 8] = [
 /// Options that make rclone run an external program.
 const COMMAND_OPTIONS: [&str; 3] = ["ssh", "password_command", "command"];
 
-/// Remote sections of an INI rclone config: name → lowercased key → value.
+/// Remote sections of an INI rclone config: name -> lowercased key -> value.
 fn sections(text: &str) -> Vec<(String, Vec<(String, String)>)> {
 	let mut out: Vec<(String, Vec<(String, String)>)> = Vec::new();
 	for line in text.lines() {

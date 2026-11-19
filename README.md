@@ -168,7 +168,8 @@ its window is in the background; this can be turned off in Settings.
 
 Settings and data go to the platform's user folders: on Windows the settings
 are in `%APPDATA%\quest-sideloader\config` and everything else in
-`%APPDATA%\quest-sideloader\data`. For a portable copy, put an empty
+`%APPDATA%\quest-sideloader\data`. The window size and the library's sort
+and filter are kept in `ui.ron` next to the settings. For a portable copy, put an empty
 `portable.txt` next to the executable. The app then keeps everything, including
 screenshots, in a `userdata` folder beside it. Paths in the settings are stored
 relative to that folder, so the copy still works from another drive letter or

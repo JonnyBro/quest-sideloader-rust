@@ -6,20 +6,66 @@ use std::time::SystemTime;
 use egui_extras::{Column, TableBuilder};
 use quest_sideloader_core::catalog::{Catalog, Game};
 use quest_sideloader_core::{CatalogStatus, Command, format_bytes};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 enum Filter {
 	All,
 	Installed,
 	Updates,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 enum Sort {
 	Name,
+	Package,
+	Version,
 	Updated,
 	Size,
 	Popularity,
+	Status,
+}
+
+impl Sort {
+	const ALL: [Sort; 7] = [
+		Sort::Name,
+		Sort::Package,
+		Sort::Version,
+		Sort::Updated,
+		Sort::Size,
+		Sort::Popularity,
+		Sort::Status,
+	];
+
+	fn label(self) -> std::borrow::Cow<'static, str> {
+		match self {
+			Sort::Name => t!("lib.sort_name"),
+			Sort::Package => t!("lib.sort_package"),
+			Sort::Version => t!("lib.sort_version"),
+			Sort::Updated => t!("lib.sort_updated"),
+			Sort::Size => t!("lib.sort_size"),
+			Sort::Popularity => t!("lib.sort_popularity"),
+			Sort::Status => t!("lib.sort_status"),
+		}
+	}
+
+	/// Text sorts A to Z; numbers and dates start with the biggest or newest;
+	/// status starts with available updates.
+	fn starts_descending(self) -> bool {
+		matches!(
+			self,
+			Sort::Version | Sort::Updated | Sort::Size | Sort::Popularity
+		)
+	}
+}
+
+/// Available updates first, then installed, then the rest.
+fn status_rank(status: GameStatus) -> u8 {
+	match status {
+		GameStatus::UpdateAvailable => 0,
+		GameStatus::Installed => 1,
+		GameStatus::NotInstalled => 2,
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +80,15 @@ pub struct InstalledApps<'a> {
 	pub device_name: String,
 	pub serial: &'a str,
 	pub versions: HashMap<&'a str, Option<u64>>,
+	pub free_bytes: Option<u64>,
+}
+
+/// The library's sort and filter, kept between runs.
+#[derive(Serialize, Deserialize)]
+pub struct LibraryPrefs {
+	sort: Sort,
+	descending: bool,
+	filter: Filter,
 }
 
 impl InstalledApps<'_> {
@@ -121,17 +176,53 @@ impl LibraryView {
 		self.status = status;
 	}
 
+	pub fn prefs(&self) -> LibraryPrefs {
+		LibraryPrefs {
+			sort: self.sort,
+			descending: self.descending,
+			filter: self.filter,
+		}
+	}
+
+	pub fn restore(&mut self, prefs: LibraryPrefs) {
+		self.sort = prefs.sort;
+		self.descending = prefs.descending;
+		self.filter = prefs.filter;
+	}
+
+	/// Filter, sort and direction in effect. Without a headset to compare
+	/// against, the headset filters show all games and the status sort falls
+	/// back to names; the choice itself is kept for when one connects.
+	fn effective(&self, connected: bool) -> (Filter, Sort, bool) {
+		let filter = if connected { self.filter } else { Filter::All };
+		match self.sort {
+			Sort::Status if !connected => (filter, Sort::Name, false),
+			sort => (filter, sort, self.descending),
+		}
+	}
+
+	/// Picking the current key again flips the order.
+	fn set_sort(&mut self, sort: Sort) {
+		if self.sort == sort {
+			self.descending = !self.descending;
+		} else {
+			self.sort = sort;
+			self.descending = sort.starts_descending();
+		}
+	}
+
 	fn refresh_rows(&mut self, installed: Option<&InstalledApps<'_>>) {
 		let Some(catalog) = &self.catalog else {
 			self.rows.clear();
 			return;
 		};
+		let (filter, sort, descending) = self.effective(installed.is_some());
 		let key = RowsKey {
 			catalog: Arc::as_ptr(catalog) as usize,
 			search: self.search.trim().to_lowercase(),
-			filter: self.filter,
-			sort: self.sort,
-			descending: self.descending,
+			filter,
+			sort,
+			descending,
 			device: installed.map(|i| (i.serial.to_owned(), i.versions.len())),
 		};
 		if self.rows_key.as_ref() == Some(&key) {
@@ -146,7 +237,7 @@ impl LibraryView {
 					|| self.lowercase_names[i].contains(&key.search)
 					|| game.package.to_lowercase().contains(&key.search);
 				let status = installed.map_or(GameStatus::NotInstalled, |apps| apps.status(game));
-				let matches_filter = match self.filter {
+				let matches_filter = match filter {
 					Filter::All => true,
 					Filter::Installed => status != GameStatus::NotInstalled,
 					Filter::Updates => status == GameStatus::UpdateAvailable,
@@ -155,34 +246,15 @@ impl LibraryView {
 			})
 			.collect();
 
-		let by_name =
-			|a: &usize, b: &usize| self.lowercase_names[*a].cmp(&self.lowercase_names[*b]);
-		match self.sort {
-			Sort::Name => rows.sort_by(by_name),
-			Sort::Updated => rows.sort_by(|a, b| {
-				games[*a]
-					.last_updated
-					.cmp(&games[*b].last_updated)
-					.then(by_name(a, b))
-			}),
-			Sort::Size => rows.sort_by(|a, b| {
-				games[*a]
-					.size_mb
-					.unwrap_or(0.0)
-					.total_cmp(&games[*b].size_mb.unwrap_or(0.0))
-					.then(by_name(a, b))
-			}),
-			Sort::Popularity => rows.sort_by(|a, b| {
-				games[*a]
-					.downloads
-					.unwrap_or(0.0)
-					.total_cmp(&games[*b].downloads.unwrap_or(0.0))
-					.then(by_name(a, b))
-			}),
-		}
-		if self.descending {
-			rows.reverse();
-		}
+		let rank = |i: usize| installed.map_or(2, |apps| status_rank(apps.status(&games[i])));
+		sort_rows(
+			&mut rows,
+			games,
+			&self.lowercase_names,
+			sort,
+			descending,
+			rank,
+		);
 		self.rows = rows;
 		self.rows_key = Some(key);
 	}
@@ -222,14 +294,12 @@ impl LibraryView {
 		if let Some(index) = self.selected
 			&& let Some(game) = catalog.games.get(index)
 		{
-			let status = installed.map(|apps| apps.status(game));
-			let target = installed.map(|apps| (apps.serial, apps.device_name.as_str()));
 			let mut close = false;
 			egui::Panel::right("game_details")
 				.resizable(true)
 				.default_size(320.0)
 				.show(ui, |ui| {
-					close = details(ui, &catalog, game, status, target, commands)
+					close = details(ui, &catalog, game, installed, commands)
 				});
 			if close {
 				self.selected = None;
@@ -252,42 +322,48 @@ impl LibraryView {
 					.hint_text(t!("lib.search"))
 					.desired_width(240.0),
 			);
-			ui.selectable_value(&mut self.filter, Filter::All, t!("lib.all"));
+			let (filter, sort, descending) = self.effective(installed.is_some());
+			if ui
+				.selectable_label(filter == Filter::All, t!("lib.all"))
+				.clicked()
+			{
+				self.filter = Filter::All;
+			}
 			let enabled = installed.is_some();
 			ui.add_enabled_ui(enabled, |ui| {
-				ui.selectable_value(&mut self.filter, Filter::Installed, t!("lib.installed"));
-				ui.selectable_value(&mut self.filter, Filter::Updates, t!("lib.updates"));
+				for (choice, label) in [
+					(Filter::Installed, t!("lib.installed")),
+					(Filter::Updates, t!("lib.updates")),
+				] {
+					if ui.selectable_label(filter == choice, label).clicked() {
+						self.filter = choice;
+					}
+				}
 			})
 			.response
 			.on_disabled_hover_text(t!("lib.connect_compare"));
-			if !enabled && self.filter != Filter::All {
-				self.filter = Filter::All;
-			}
 
 			ui.separator();
 			egui::ComboBox::from_id_salt("library_sort")
-				.selected_text(match self.sort {
-					Sort::Name => t!("lib.sort_name"),
-					Sort::Updated => t!("lib.sort_updated"),
-					Sort::Size => t!("lib.sort_size"),
-					Sort::Popularity => t!("lib.sort_popularity"),
-				})
+				.selected_text(sort.label())
 				.show_ui(ui, |ui| {
-					for (sort, label, descending) in [
-						(Sort::Name, t!("lib.sort_name"), false),
-						(Sort::Updated, t!("lib.sort_updated"), true),
-						(Sort::Size, t!("lib.sort_size"), true),
-						(Sort::Popularity, t!("lib.sort_popularity"), true),
-					] {
-						if ui.selectable_label(self.sort == sort, label).clicked() {
-							self.sort = sort;
-							self.descending = descending;
+					for choice in Sort::ALL {
+						let enabled = choice != Sort::Status || installed.is_some();
+						let item = ui
+							.add_enabled(
+								enabled,
+								egui::Button::selectable(sort == choice, choice.label()),
+							)
+							.on_disabled_hover_text(t!("lib.connect_compare"));
+						if item.clicked() {
+							self.set_sort(choice);
 						}
 					}
 				});
-			let arrow = if self.descending { "⬇" } else { "⬆" };
+			let arrow = if descending { "⬇" } else { "⬆" };
 			if ui.button(arrow).on_hover_text(t!("lib.reverse")).clicked() {
-				self.descending = !self.descending;
+				self.sort = sort;
+				self.descending = !descending;
 			}
 
 			ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -313,7 +389,7 @@ impl LibraryView {
 								ui.spinner();
 							}
 						}
-						ui.label(stage);
+						fit(ui, stage.as_str());
 					}
 					CatalogStatus::Failed(e) => {
 						ui.colored_label(ui.visuals().error_fg_color, t!("lib.sync_failed"))
@@ -321,19 +397,21 @@ impl LibraryView {
 					}
 					CatalogStatus::Idle => {
 						if let Some(catalog) = &self.catalog {
-							ui.weak(t!(
+							let synced = t!(
 								"lib.synced",
 								n = catalog.games.len(),
 								ago = ago(catalog.synced_at)
-							));
+							);
+							fit(ui, egui::RichText::new(synced).weak());
 						}
 					}
 				}
 				if let Some(name) = mirror_name {
-					ui.label(name);
+					fit(ui, name);
 				}
 				if let Some(apps) = installed {
-					ui.weak(t!("lib.comparing", device = apps.device_name));
+					let comparing = t!("lib.comparing", device = apps.device_name);
+					fit(ui, egui::RichText::new(comparing).weak());
 				}
 			});
 		});
@@ -354,27 +432,59 @@ impl LibraryView {
 		}
 		let row_height = 44.0;
 		let mut clicked = None;
-		TableBuilder::new(ui)
+		let mut sort_click = None;
+		let (_, current, descending) = self.effective(installed.is_some());
+		let mut table = TableBuilder::new(ui)
 			.striped(true)
 			.sense(egui::Sense::click())
 			.cell_layout(egui::Layout::left_to_right(egui::Align::Center))
 			.column(Column::exact(80.0))
 			.column(Column::remainder().at_least(200.0).clip(true))
-			.column(Column::auto().at_least(80.0))
+			.column(Column::auto().at_least(80.0));
+		// The installed version only means something with a headset.
+		if installed.is_some() {
+			table = table.column(Column::auto().at_least(80.0));
+		}
+		table
 			.column(Column::auto().at_least(70.0))
 			.column(Column::auto().at_least(120.0))
 			.column(Column::auto().at_least(100.0))
 			.header(22.0, |mut header| {
-				for title in [
-					"".into(),
-					t!("lib.col_game"),
-					t!("lib.col_version"),
-					t!("lib.col_size"),
-					t!("lib.col_updated"),
-					t!("lib.col_status"),
-				] {
+				header.col(|_| {});
+				let mut columns = vec![
+					(Some(Sort::Name), t!("lib.col_game")),
+					(Some(Sort::Version), t!("lib.col_version")),
+				];
+				if installed.is_some() {
+					columns.push((None, t!("lib.col_installed")));
+				}
+				columns.extend([
+					(Some(Sort::Size), t!("lib.col_size")),
+					(Some(Sort::Updated), t!("lib.col_updated")),
+					(Some(Sort::Status), t!("lib.col_status")),
+				]);
+				for (sort, title) in columns {
 					header.col(|ui| {
-						ui.strong(title);
+						let Some(sort) = sort else {
+							ui.strong(title);
+							return;
+						};
+						let text = if current == sort {
+							let arrow = if descending { "⬇" } else { "⬆" };
+							format!("{title} {arrow}")
+						} else {
+							title.into_owned()
+						};
+						let enabled = sort != Sort::Status || installed.is_some();
+						let button =
+							egui::Button::new(egui::RichText::new(text).strong()).frame(false);
+						if ui
+							.add_enabled(enabled, button)
+							.on_hover_text(t!("lib.sort_by_column"))
+							.clicked()
+						{
+							sort_click = Some(sort);
+						}
 					});
 				}
 			})
@@ -393,6 +503,13 @@ impl LibraryView {
 					row.col(|ui| {
 						ui.label(game.version_code.map(|v| v.to_string()).unwrap_or_default());
 					});
+					if let Some(apps) = installed {
+						row.col(|ui| {
+							if let Some(version) = apps.versions.get(game.package.as_str()) {
+								ui.label(version.map(|v| v.to_string()).unwrap_or_default());
+							}
+						});
+					}
 					row.col(|ui| {
 						ui.label(size_text(game));
 					});
@@ -409,6 +526,9 @@ impl LibraryView {
 					}
 				});
 			});
+		if let Some(sort) = sort_click {
+			self.set_sort(sort);
+		}
 		if let Some(index) = clicked {
 			self.selected = if self.selected == Some(index) {
 				None
@@ -417,6 +537,52 @@ impl LibraryView {
 			};
 		}
 	}
+}
+
+/// `names` are the games' lowercase names; `rank` gives each game's
+/// `status_rank` on the compared headset.
+fn sort_rows(
+	rows: &mut [usize],
+	games: &[Game],
+	names: &[String],
+	sort: Sort,
+	descending: bool,
+	rank: impl Fn(usize) -> u8,
+) {
+	let by_name = |a: usize, b: usize| names[a].cmp(&names[b]);
+	rows.sort_by(|&a, &b| {
+		let (ga, gb) = (&games[a], &games[b]);
+		let primary = match sort {
+			Sort::Name => by_name(a, b),
+			Sort::Package => ga.package.cmp(&gb.package),
+			Sort::Version => ga.version_code.cmp(&gb.version_code),
+			Sort::Updated => ga.last_updated.cmp(&gb.last_updated),
+			Sort::Size => ga
+				.size_mb
+				.unwrap_or(0.0)
+				.total_cmp(&gb.size_mb.unwrap_or(0.0)),
+			Sort::Popularity => ga
+				.downloads
+				.unwrap_or(0.0)
+				.total_cmp(&gb.downloads.unwrap_or(0.0)),
+			Sort::Status => rank(a).cmp(&rank(b)),
+		};
+		// Ties stay A to Z whichever way the main key goes.
+		let primary = if descending {
+			primary.reverse()
+		} else {
+			primary
+		};
+		primary
+			.then_with(|| by_name(a, b))
+			.then_with(|| ga.release_name.cmp(&gb.release_name))
+	});
+}
+
+/// A label that shortens itself with an ellipsis instead of drawing over the
+/// toolbar's left side when the window is narrow; hovering shows it all.
+fn fit(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) -> egui::Response {
+	ui.add(egui::Label::new(text).truncate())
 }
 
 fn thumbnail(ui: &mut egui::Ui, catalog: &Catalog, game: &Game, size: egui::Vec2) {
@@ -441,15 +607,19 @@ fn details(
 	ui: &mut egui::Ui,
 	catalog: &Catalog,
 	game: &Game,
-	status: Option<GameStatus>,
-	target: Option<(&str, &str)>,
+	installed: Option<&InstalledApps<'_>>,
 	commands: &mut Vec<Command>,
 ) -> bool {
+	let status = installed.map(|apps| apps.status(game));
+	let target = installed.map(|apps| (apps.serial, apps.device_name.as_str()));
 	let mut close = false;
 	ui.horizontal(|ui| {
 		ui.heading(&game.name);
 		ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-			close = ui.small_button("✕").clicked();
+			close = ui
+				.small_button("✕")
+				.on_hover_text(t!("common.close"))
+				.clicked();
 		});
 	});
 	ui.horizontal_wrapped(|ui| {
@@ -478,6 +648,16 @@ fn details(
 			});
 		}
 	});
+	if let Some((needed, free)) = installed.and_then(|apps| short_of_space(game, apps)) {
+		ui.colored_label(
+			ui.visuals().warn_fg_color,
+			t!(
+				"lib.low_space",
+				needed = format_bytes(needed),
+				free = format_bytes(free)
+			),
+		);
+	}
 	ui.add_space(4.0);
 	egui::ScrollArea::vertical().show(ui, |ui| {
 		let width = ui.available_width();
@@ -506,6 +686,13 @@ fn details(
 					status_label(ui, status);
 					ui.end_row();
 				}
+				if let Some(Some(version)) =
+					installed.and_then(|apps| apps.versions.get(game.package.as_str()))
+				{
+					ui.label(t!("lib.col_installed"));
+					ui.label(version.to_string());
+					ui.end_row();
+				}
 			});
 		if let Some(note) = catalog.note(&game.release_name) {
 			ui.add_space(8.0);
@@ -532,6 +719,14 @@ fn status_label(ui: &mut egui::Ui, status: GameStatus) {
 			);
 		}
 	}
+}
+
+/// The game's size and the headset's free space, when the game won't fit.
+/// The mirror lists the download size; the installed game takes about as much.
+fn short_of_space(game: &Game, apps: &InstalledApps<'_>) -> Option<(u64, u64)> {
+	let needed = (game.size_mb? * 1024.0 * 1024.0) as u64;
+	let free = apps.free_bytes?;
+	(needed > free).then_some((needed, free))
 }
 
 fn size_text(game: &Game) -> String {
@@ -579,6 +774,7 @@ mod tests {
 			device_name: "Quest 3".into(),
 			serial: "S",
 			versions: HashMap::from([("com.a", Some(10)), ("com.b", None)]),
+			free_bytes: None,
 		};
 		assert_eq!(
 			apps.status(&game("com.a", Some(11))),
@@ -591,6 +787,73 @@ mod tests {
 			apps.status(&game("com.c", Some(1))),
 			GameStatus::NotInstalled
 		);
+	}
+
+	#[test]
+	fn sorts_by_each_key_with_name_ties() {
+		let mut games = vec![
+			game("com.c", Some(3)),
+			game("com.a", None),
+			game("com.b", Some(3)),
+		];
+		games[0].name = "Beta".into();
+		games[1].name = "Alpha".into();
+		games[2].name = "Alpha".into();
+		games[2].release_name = "Alpha v2".into();
+		games[0].size_mb = Some(500.0);
+		games[2].size_mb = Some(10.0);
+		let names: Vec<String> = games.iter().map(|g| g.name.to_lowercase()).collect();
+		let order = |sort, descending, rank: &dyn Fn(usize) -> u8| {
+			let mut rows = vec![0, 1, 2];
+			sort_rows(&mut rows, &games, &names, sort, descending, rank);
+			rows
+		};
+		let none = |_| 2;
+		// Same name: the release name decides, still A to Z when reversed.
+		assert_eq!(order(Sort::Name, false, &none), [2, 1, 0]);
+		assert_eq!(order(Sort::Name, true, &none), [0, 2, 1]);
+		assert_eq!(order(Sort::Package, false, &none), [1, 2, 0]);
+		// Equal versions fall back to the name; a missing version is lowest.
+		assert_eq!(order(Sort::Version, true, &none), [2, 0, 1]);
+		assert_eq!(order(Sort::Size, true, &none), [0, 2, 1]);
+		let rank = |i| [1, 2, 0][i];
+		assert_eq!(order(Sort::Status, false, &rank), [2, 0, 1]);
+	}
+
+	#[test]
+	fn warns_only_when_the_game_does_not_fit() {
+		let mut apps = InstalledApps {
+			device_name: "Quest 3".into(),
+			serial: "S",
+			versions: HashMap::new(),
+			free_bytes: Some(100 * 1024 * 1024),
+		};
+		let mut big = game("com.a", Some(1));
+		big.size_mb = Some(150.0);
+		let mut small = game("com.b", Some(1));
+		small.size_mb = Some(50.0);
+		assert_eq!(
+			short_of_space(&big, &apps),
+			Some((150 * 1024 * 1024, 100 * 1024 * 1024))
+		);
+		assert_eq!(short_of_space(&small, &apps), None);
+		assert_eq!(short_of_space(&game("com.c", None), &apps), None);
+		apps.free_bytes = None;
+		assert_eq!(short_of_space(&big, &apps), None);
+	}
+
+	#[test]
+	fn saved_headset_choices_wait_for_a_headset() {
+		let mut view = LibraryView::new();
+		view.restore(LibraryPrefs {
+			sort: Sort::Status,
+			descending: true,
+			filter: Filter::Updates,
+		});
+		assert_eq!(view.effective(false), (Filter::All, Sort::Name, false));
+		assert_eq!(view.effective(true), (Filter::Updates, Sort::Status, true));
+		let prefs = view.prefs();
+		assert_eq!((prefs.sort, prefs.filter), (Sort::Status, Filter::Updates));
 	}
 
 	#[test]

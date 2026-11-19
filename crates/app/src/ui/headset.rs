@@ -161,7 +161,7 @@ impl HeadsetView {
 					if let Some(b) = info.battery {
 						let temp = details
 							.and_then(|d| d.battery_temperature)
-							.map(|t| format!(", {t:.1} °C"))
+							.map(|t| format!(", {t:.1} C"))
 							.unwrap_or_default();
 						let charging = if b.charging {
 							t!("dev.charging")
@@ -571,7 +571,7 @@ impl HeadsetView {
 
 fn size_or_dash(bytes: u64) -> String {
 	if bytes == 0 {
-		"—".into()
+		"-".into()
 	} else {
 		format_bytes(bytes)
 	}

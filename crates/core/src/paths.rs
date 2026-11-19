@@ -77,6 +77,11 @@ impl AppPaths {
 		self.config_dir.join("settings.toml")
 	}
 
+	/// Window size and view choices kept by the GUI between runs.
+	pub fn ui_state_file(&self) -> PathBuf {
+		self.config_dir.join("ui.ron")
+	}
+
 	pub fn logs_dir(&self) -> PathBuf {
 		self.data_dir.join("logs")
 	}
