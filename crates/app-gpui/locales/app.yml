@@ -1783,3 +1783,59 @@ common.no:
   en: "No"
   ru: "Нет"
   uk: "Ні"
+set.dark_scheme:
+  en: "Dark scheme"
+  ru: "Тёмная схема"
+  uk: "Темна схема"
+set.light_scheme:
+  en: "Light scheme"
+  ru: "Светлая схема"
+  uk: "Світла схема"
+set.scheme_default:
+  en: "Default"
+  ru: "Стандартная"
+  uk: "Стандартна"
+logs.button_errors:
+  en: "Logs (%{n})"
+  ru: "Логи (%{n})"
+  uk: "Журнал (%{n})"
+logs.button_hint:
+  en: "Recent log lines. Turns red when something fails."
+  ru: "Последние строки лога. Кнопка краснеет, если что-то пошло не так."
+  uk: "Останні рядки журналу. Кнопка червоніє, якщо щось пішло не так."
+logs.count:
+  en: "%{n} line(s)"
+  ru: "строк: %{n}"
+  uk: "рядків: %{n}"
+logs.errors:
+  en: "Errors"
+  ru: "Ошибки"
+  uk: "Помилки"
+logs.warnings:
+  en: "Warnings and up"
+  ru: "Предупреждения и выше"
+  uk: "Попередження й вище"
+logs.info:
+  en: "Info and up"
+  ru: "Инфо и выше"
+  uk: "Інфо й вище"
+logs.debug:
+  en: "Debug and up"
+  ru: "Отладка и выше"
+  uk: "Налагодження й вище"
+logs.everything:
+  en: "Everything"
+  ru: "Всё"
+  uk: "Усе"
+set.scale:
+  en: "Interface scale"
+  ru: "Масштаб интерфейса"
+  uk: "Масштаб інтерфейсу"
+set.scale_reset:
+  en: "Reset"
+  ru: "Сбросить"
+  uk: "Скинути"
+app.settings_load_error:
+  en: "%{error}. Using defaults; saving will overwrite the file."
+  ru: "%{error}. Используются настройки по умолчанию; сохранение перезапишет файл."
+  uk: "%{error}. Використовуються налаштування за замовчуванням; збереження перезапише файл."

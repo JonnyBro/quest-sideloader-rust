@@ -6244,12 +6244,14 @@ dependencies = [
  "gpui-kit",
  "notify-rust",
  "quest-sideloader-core",
+ "rfd",
  "rust-i18n",
  "serde",
  "serde_json",
  "smol",
  "sys-locale",
  "tracing",
+ "tracing-appender",
  "tracing-subscriber",
 ]
 

@@ -30,8 +30,8 @@ use crate::dialogs::checkup::{self, Check, Level};
 use crate::dialogs::review::PendingReview;
 use crate::dialogs::{review, tools, welcome};
 use crate::icons::AppIcon;
-use crate::logbuf::LogBuffer;
 use crate::logbuf::highlight::{LevelColors, LogHighlighter, SharedColors};
+use crate::logbuf::{Level as LogLevel, LogBuffer, level_of};
 use crate::theme::Mono;
 use crate::ui_state::{SavedBounds, UiState};
 use crate::views::catalog::{CatalogView, Installed};
@@ -123,6 +123,12 @@ pub struct Shell {
 	logs_open: bool,
 	logs_seen: u64,
 	log_lines: usize,
+	/// The lowest level the logs panel shows.
+	log_level: LogLevel,
+	/// Error lines already seen in the logs panel.
+	errors_seen: u64,
+	/// The Advanced group in the sidebar is folded.
+	advanced_folded: bool,
 	/// Read-only editor, so the log can be selected, searched and copied.
 	log_view: Entity<EditorState>,
 	log_colors: SharedColors,
@@ -133,16 +139,28 @@ pub struct Shell {
 	_devices_events: Subscription,
 }
 
+/// What `main` read before the window opened.
+pub struct Startup {
+	pub paths: AppPaths,
+	pub settings: Settings,
+	/// Why the settings file couldn't be read, when it couldn't.
+	pub load_error: Option<String>,
+	pub ui: UiState,
+	/// There was no settings file yet.
+	pub first_run: bool,
+	pub logs: LogBuffer,
+}
+
 impl Shell {
-	pub fn new(
-		paths: AppPaths,
-		settings: Settings,
-		ui: UiState,
-		first_run: bool,
-		logs: LogBuffer,
-		window: &mut Window,
-		cx: &mut Context<Self>,
-	) -> Self {
+	pub fn new(startup: Startup, window: &mut Window, cx: &mut Context<Self>) -> Self {
+		let Startup {
+			paths,
+			settings,
+			load_error,
+			ui,
+			first_run,
+			logs,
+		} = startup;
 		// The engine calls this from its own threads; it only wakes the UI task below.
 		let (wake_tx, wake_rx) = smol::channel::unbounded::<()>();
 		let engine = Engine::start(
@@ -182,7 +200,7 @@ impl Shell {
 		});
 
 		let appearance = cx.observe_window_appearance(window, |this, window, cx| {
-			crate::theme::apply(this.settings.theme, window, cx);
+			crate::theme::apply(&this.settings, window, cx);
 		});
 		window.on_window_should_close(cx, {
 			let shell = cx.entity().downgrade();
@@ -192,6 +210,12 @@ impl Shell {
 				true
 			}
 		});
+		if let Some(error) = load_error {
+			cx.defer_in(window, move |this, window, cx| {
+				let text = t!("app.settings_load_error", error = error).into_owned();
+				this.notify(Notification::error(text), window, cx);
+			});
+		}
 		if first_run {
 			cx.defer_in(window, |this, window, cx| this.open_welcome(window, cx));
 		}
@@ -307,6 +331,9 @@ impl Shell {
 			logs_open: ui.logs_open,
 			logs_seen: 0,
 			log_lines: 0,
+			log_level: LogLevel::Trace,
+			errors_seen: 0,
+			advanced_folded: ui.advanced_folded,
 			log_view,
 			log_colors,
 			_tasks: vec![events, log_poll],
@@ -329,7 +356,7 @@ impl Shell {
 		match event {
 			Event::SettingsSaved(settings) => {
 				crate::apply_language(settings.language);
-				crate::theme::apply(settings.theme, window, cx);
+				crate::theme::apply(&settings, window, cx);
 				let for_view = settings.clone();
 				let announce = self
 					.settings_view
@@ -343,12 +370,12 @@ impl Shell {
 				self.sync_catalog_settings(cx);
 				window.refresh();
 				if announce {
-					window.push_notification(Notification::info(t!("app.settings_saved")), cx);
+					self.notify(Notification::info(t!("app.settings_saved")), window, cx);
 				}
 			}
 			Event::SettingsSaveFailed(text) => {
 				self.settings_view.update(cx, |s, cx| s.save_failed(cx));
-				window.push_notification(Notification::error(text), cx)
+				self.notify(Notification::error(text), window, cx)
 			}
 			Event::AdbStatus(status) => {
 				match &status {
@@ -414,7 +441,7 @@ impl Shell {
 					self.infos.insert(serial, info);
 					self.update_installed(cx);
 				}
-				Err(e) => window.push_notification(Notification::error(e), cx),
+				Err(e) => self.notify(Notification::error(e), window, cx),
 			},
 			Event::HeadsetDetails { serial, details } => {
 				if let Ok((d, _)) = &details {
@@ -455,8 +482,8 @@ impl Shell {
 					.update(cx, |d, cx| d.set_releases(releases, cx));
 			}
 			Event::TaskUpdated(task) => self.on_task(task, window, cx),
-			Event::Notice(text) => window.push_notification(Notification::info(text), cx),
-			Event::Error(text) => window.push_notification(Notification::error(text), cx),
+			Event::Notice(text) => self.notify(Notification::info(text), window, cx),
+			Event::Error(text) => self.notify(Notification::error(text), window, cx),
 		}
 	}
 
@@ -704,6 +731,8 @@ impl Shell {
 			window: Some(SavedBounds::from_window(bounds)),
 			tab: Some(self.tab),
 			logs_open: self.logs_open,
+			scale: Some(crate::theme::scale(cx)),
+			advanced_folded: self.advanced_folded,
 			last_wireless: self.last_wireless.clone(),
 			headset,
 			catalog,
@@ -719,7 +748,7 @@ impl Shell {
 		cx: &mut Context<Self>,
 	) {
 		let Some(device) = self.selected_device() else {
-			window.push_notification(Notification::error(t!("app.no_headset")), cx);
+			self.notify(Notification::error(t!("app.no_headset")), window, cx);
 			return;
 		};
 		let serial = device.serial.clone();
@@ -731,13 +760,51 @@ impl Shell {
 		}
 	}
 
+	/// Every notice opens the logs panel when clicked, where the details are.
+	fn notify(&self, note: Notification, window: &mut Window, cx: &mut Context<Self>) {
+		let shell = cx.entity().downgrade();
+		let note = note.on_click(move |_, window, cx| {
+			let _ = shell.update(cx, |this, cx| this.open_logs(window, cx));
+		});
+		window.push_notification(note, cx);
+	}
+
+	fn open_logs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+		self.logs_open = true;
+		self.logs_seen = 0;
+		self.poll_logs(window, cx);
+		cx.notify();
+	}
+
+	fn set_log_level(&mut self, level: LogLevel, window: &mut Window, cx: &mut Context<Self>) {
+		self.log_level = level;
+		self.logs_seen = 0;
+		self.poll_logs(window, cx);
+		cx.notify();
+	}
+
 	fn poll_logs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
 		let generation = self.logs.generation();
-		if !self.logs_open || generation == self.logs_seen {
+		if !self.logs_open {
+			// The badge on the logs button counts new errors.
+			if self.logs.errors() != self.errors_seen {
+				cx.notify();
+			}
+			return;
+		}
+		self.errors_seen = self.logs.errors();
+		if generation == self.logs_seen {
 			return;
 		}
 		let shown = self.log_lines;
-		let lines = self.logs.lines();
+		let min = self.log_level;
+		// Lines without a level continue the line above; they stay.
+		let lines: Vec<String> = self
+			.logs
+			.lines()
+			.into_iter()
+			.filter(|line| level_of(line).is_none_or(|level| level >= min))
+			.collect();
 		let updated = self.log_view.update(cx, |editor, cx| {
 			// Replacing the text drops the selection; wait until the user is done with it.
 			if !editor.selected_range().is_empty() {
@@ -1004,17 +1071,44 @@ impl Shell {
 			self.nav_item(Tab::Downloads, cx),
 			self.nav_item(Tab::Rename, cx),
 		]);
-		let advanced = SidebarMenu::new().children([
-			self.nav_item(Tab::Devices, cx),
-			self.nav_item(Tab::Inspector, cx),
-			self.nav_item(Tab::Console, cx),
-		]);
+		// Folded, the group still shows the tab that is open.
+		let advanced = SidebarMenu::new().children(
+			[Tab::Devices, Tab::Inspector, Tab::Console]
+				.into_iter()
+				.filter(|tab| !self.advanced_folded || self.tab == *tab)
+				.map(|tab| self.nav_item(tab, cx))
+				.collect::<Vec<_>>(),
+		);
 		Sidebar::new("sidebar")
 			.collapsible(SidebarCollapsible::None)
 			.w(px(240.))
 			.header(self.device_switcher(cx))
 			.child(SidebarGroup::new(t!("nav.main")).child(main))
-			.child(SidebarGroup::new(t!("nav.advanced")).child(advanced))
+			.child(
+				SidebarGroup::new(t!("nav.advanced"))
+					.child(advanced)
+					.suffix({
+						let shell = cx.entity().downgrade();
+						let folded = self.advanced_folded;
+						move |_, _| {
+							let shell = shell.clone();
+							Button::new("fold-advanced")
+								.icon(Icon::new(if folded {
+									IconName::ChevronRight
+								} else {
+									IconName::ChevronDown
+								}))
+								.ghost()
+								.xsmall()
+								.on_click(move |_, _, cx| {
+									let _ = shell.update(cx, |this, cx| {
+										this.advanced_folded = !this.advanced_folded;
+										cx.notify();
+									});
+								})
+						}
+					}),
+			)
 			.footer(
 				SidebarFooter::new().p_0().child(
 					Button::new("nav-settings")
@@ -1144,9 +1238,14 @@ impl Shell {
 			.child(
 				Button::new("toggle-logs")
 					.icon(Icon::from(AppIcon::Logs))
-					.label(t!("tab.logs"))
+					.label(match self.logs.errors().saturating_sub(self.errors_seen) {
+						0 => t!("tab.logs").into_owned(),
+						n => t!("logs.button_errors", n = n).into_owned(),
+					})
 					.ghost()
 					.xsmall()
+					.when(self.logs.errors() > self.errors_seen, |b| b.danger())
+					.tooltip(t!("logs.button_hint"))
 					.selected(self.logs_open)
 					.on_click(cx.listener(|this, _, window, cx| {
 						this.logs_open = !this.logs_open;
@@ -1164,18 +1263,83 @@ impl Shell {
 			warn: theme.warning,
 			debug: theme.muted_foreground,
 		});
-		div()
+		let level = self.log_level;
+		let shell = cx.entity().downgrade();
+		let folder = self.paths.logs_dir();
+		let toolbar = h_flex()
+			.px_3()
+			.py_1()
+			.gap_2()
+			.text_sm()
+			.border_b_1()
+			.border_color(theme.border)
+			.child(
+				Button::new("log-level")
+					.label(level_label(level))
+					.ghost()
+					.xsmall()
+					.dropdown_caret(true)
+					.dropdown_menu(move |mut menu, _, _| {
+						for choice in [
+							LogLevel::Trace,
+							LogLevel::Debug,
+							LogLevel::Info,
+							LogLevel::Warn,
+							LogLevel::Error,
+						] {
+							let shell = shell.clone();
+							menu = menu.item(
+								PopupMenuItem::new(level_label(choice))
+									.checked(choice == level)
+									.on_click(move |_, window, cx| {
+										let _ = shell.update(cx, |this, cx| {
+											this.set_log_level(choice, window, cx)
+										});
+									}),
+							);
+						}
+						menu
+					}),
+			)
+			.child(
+				div()
+					.text_color(theme.muted_foreground)
+					.child(t!("logs.count", n = self.log_lines).into_owned()),
+			)
+			.child(div().flex_1())
+			.child(
+				Button::new("logs-folder")
+					.label(t!("common.open_folder"))
+					.icon(Icon::new(IconName::FolderOpen))
+					.ghost()
+					.xsmall()
+					.on_click(move |_, _, _| crate::widgets::open_folder(&folder)),
+			)
+			.child(
+				Button::new("logs-close")
+					.icon(Icon::new(IconName::Close))
+					.ghost()
+					.xsmall()
+					.on_click(cx.listener(|this, _, _, cx| {
+						this.logs_open = false;
+						cx.notify();
+					})),
+			);
+		v_flex()
 			.h(px(LOGS_HEIGHT))
 			.flex_shrink_0()
 			.border_t_1()
 			.border_color(theme.border)
 			.bg(theme.sidebar)
+			.child(toolbar)
 			.child(
-				Editor::new(&self.log_view)
-					.readonly(true)
-					.bordered(false)
-					.appearance(false)
-					.h_full(),
+				div().flex_1().min_h_0().child(
+					Editor::new(&self.log_view)
+						.readonly(true)
+						.bordered(false)
+						.appearance(false)
+						.h_full(),
+				),
 			)
 	}
 }
@@ -1188,6 +1352,17 @@ fn no_upload(settings: &Settings, copies: &HashSet<String>) -> HashSet<String> {
 		.cloned()
 		.chain(copies.iter().cloned())
 		.collect()
+}
+
+fn level_label(level: LogLevel) -> String {
+	match level {
+		LogLevel::Trace => t!("logs.everything"),
+		LogLevel::Debug => t!("logs.debug"),
+		LogLevel::Info => t!("logs.info"),
+		LogLevel::Warn => t!("logs.warnings"),
+		LogLevel::Error => t!("logs.errors"),
+	}
+	.into_owned()
 }
 
 fn transport_label(device: &DeviceEntry) -> String {

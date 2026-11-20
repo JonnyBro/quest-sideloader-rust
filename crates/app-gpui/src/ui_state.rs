@@ -50,6 +50,10 @@ pub struct UiState {
 	pub window: Option<SavedBounds>,
 	pub tab: Option<Tab>,
 	pub logs_open: bool,
+	/// Interface scale, 1.0 by default.
+	pub scale: Option<f32>,
+	/// The Advanced group in the sidebar is folded.
+	pub advanced_folded: bool,
 	/// The Wi-Fi headset of the last run, reconnected on start.
 	pub last_wireless: Option<String>,
 	pub headset: HeadsetPrefs,

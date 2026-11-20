@@ -18,31 +18,24 @@ use quest_sideloader_core::{AppPaths, Settings};
 use tracing_subscriber::prelude::*;
 
 fn main() {
+	let paths = match AppPaths::detect().and_then(|p| p.ensure_exist().map(|()| p)) {
+		Ok(paths) => paths,
+		Err(e) => fatal(&e.to_string()),
+	};
 	let logs = logbuf::LogBuffer::default();
-	let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-		"info,quest_sideloader_core=debug,wgpu_hal=warn,wgpu_core=warn,zbus=error".into()
-	});
-	tracing_subscriber::registry()
-		.with(filter)
-		.with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
-		.with(
-			tracing_subscriber::fmt::layer()
-				.with_ansi(false)
-				.with_target(false)
-				.with_writer(logs.clone()),
-		)
-		.init();
+	let _log_guard = init_logging(&paths, logs.clone());
 
-	let paths = AppPaths::detect()
-		.and_then(|p| p.ensure_exist().map(|()| p))
-		.expect("data folders");
 	// Checked before anything saves the settings.
 	let first_run = !paths.settings_file().exists();
 	let ui = ui_state::UiState::load(&ui_state::file(&paths.ui_state_file()));
-	let settings = Settings::load(&paths).unwrap_or_else(|e| {
-		tracing::error!("{e}");
-		Settings::defaults_for(&paths)
-	});
+	let scale = ui.scale.unwrap_or(1.);
+	let (settings, load_error) = match Settings::load(&paths) {
+		Ok(settings) => (settings, None),
+		Err(e) => {
+			tracing::error!("{e}");
+			(Settings::defaults_for(&paths), Some(e.to_string()))
+		}
+	};
 	apply_language(settings.language);
 
 	gpui_kit::application()
@@ -50,6 +43,7 @@ fn main() {
 		.run(move |cx: &mut App| {
 			gpui_kit::init(cx);
 			theme::install(cx);
+			cx.set_global(theme::UiScale(scale));
 
 			let options = WindowOptions {
 				window_bounds: Some(ui.window.map(|b| b.to_window()).unwrap_or_else(|| {
@@ -63,10 +57,23 @@ fn main() {
 				app_id: Some("quest-sideloader-gpui".into()),
 				..Default::default()
 			};
-			let theme_setting = settings.theme;
+			let for_theme = settings.clone();
 			gpui_kit::open_window(options, cx, move |window, cx| {
-				theme::apply(theme_setting, window, cx);
-				cx.new(|cx| shell::Shell::new(paths, settings, ui, first_run, logs, window, cx))
+				theme::apply(&for_theme, window, cx);
+				cx.new(|cx| {
+					shell::Shell::new(
+						shell::Startup {
+							paths,
+							settings,
+							load_error,
+							ui,
+							first_run,
+							logs,
+						},
+						window,
+						cx,
+					)
+				})
 			})
 			.expect("open window");
 			cx.on_window_closed(|cx, _| cx.quit()).detach();
@@ -95,4 +102,72 @@ fn apply_language(language: Language) {
 	};
 	// One global locale for this crate, the core and gpui-component.
 	rust_i18n::set_locale(locale);
+}
+
+/// Release builds on Windows have no console, so the error also goes to a dialog.
+fn fatal(message: &str) -> ! {
+	eprintln!("fatal: {message}");
+	rfd::MessageDialog::new()
+		.set_level(rfd::MessageLevel::Error)
+		.set_title("Quest Sideloader")
+		.set_description(message)
+		.show();
+	std::process::exit(1);
+}
+
+/// Logs go to stderr, to the logs panel and to a daily file in the logs folder.
+fn init_logging(
+	paths: &AppPaths,
+	buffer: logbuf::LogBuffer,
+) -> Option<tracing_appender::non_blocking::WorkerGuard> {
+	use tracing_subscriber::{EnvFilter, fmt};
+	// zbus warns on every portal file dialog: the request object is gone
+	// before it reads its properties, which the dialog doesn't need.
+	let default = if cfg!(debug_assertions) {
+		"info,quest_sideloader=debug,quest_sideloader_core=debug,wgpu_hal=warn,wgpu_core=warn,zbus=error"
+	} else {
+		"info,wgpu_hal=warn,wgpu_core=warn,zbus=error"
+	};
+	let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default));
+	// tracing writes timestamps in UTC by default; these use the local time zone.
+	let timer = fmt::time::ChronoLocal::rfc_3339();
+	let stderr = fmt::layer()
+		.with_timer(timer.clone())
+		.with_writer(std::io::stderr);
+	let in_app = fmt::layer()
+		.with_timer(timer.clone())
+		.with_ansi(false)
+		.with_target(false)
+		.with_writer(buffer);
+	match tracing_appender::rolling::Builder::new()
+		.rotation(tracing_appender::rolling::Rotation::DAILY)
+		.filename_prefix("quest-sideloader")
+		.filename_suffix("log")
+		.max_log_files(7)
+		.build(paths.logs_dir())
+	{
+		Ok(appender) => {
+			let (writer, guard) = tracing_appender::non_blocking(appender);
+			let file = fmt::layer()
+				.with_timer(timer)
+				.with_ansi(false)
+				.with_writer(writer);
+			tracing_subscriber::registry()
+				.with(filter)
+				.with(stderr)
+				.with(in_app)
+				.with(file)
+				.init();
+			Some(guard)
+		}
+		Err(e) => {
+			tracing_subscriber::registry()
+				.with(filter)
+				.with(stderr)
+				.with(in_app)
+				.init();
+			tracing::warn!("file logging disabled: {e}");
+			None
+		}
+	}
 }

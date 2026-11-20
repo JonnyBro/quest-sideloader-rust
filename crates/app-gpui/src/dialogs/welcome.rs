@@ -93,7 +93,7 @@ impl Welcome {
 	fn set_theme(&mut self, theme: Theme, window: &mut Window, cx: &mut Context<Self>) {
 		self.draft.theme = theme;
 		// Applied right away, so the wizard itself shows the choice.
-		crate::theme::apply(theme, window, cx);
+		crate::theme::apply(&self.draft, window, cx);
 	}
 
 	fn set_language(&mut self, language: Language, window: &mut Window, cx: &mut Context<Self>) {

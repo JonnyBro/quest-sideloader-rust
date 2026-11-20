@@ -15,12 +15,18 @@ struct Inner {
 	lines: VecDeque<String>,
 	/// Bumped on every line, so the panel knows when to redraw.
 	generation: u64,
+	/// Error lines written so far, for the badge on the logs button.
+	errors: u64,
 	partial: String,
 }
 
 impl LogBuffer {
 	pub fn generation(&self) -> u64 {
 		self.inner.lock().map_or(0, |i| i.generation)
+	}
+
+	pub fn errors(&self) -> u64 {
+		self.inner.lock().map_or(0, |i| i.errors)
 	}
 
 	pub fn lines(&self) -> Vec<String> {
@@ -37,6 +43,9 @@ impl Write for LogBuffer {
 			inner.partial.push_str(&String::from_utf8_lossy(buf));
 			while let Some(end) = inner.partial.find('\n') {
 				let line: String = inner.partial.drain(..=end).collect();
+				if level_of(&line) == Some(Level::Error) {
+					inner.errors += 1;
+				}
 				inner.lines.push_back(line.trim_end().to_owned());
 				if inner.lines.len() > MAX_LINES {
 					inner.lines.pop_front();
@@ -50,6 +59,30 @@ impl Write for LogBuffer {
 	fn flush(&mut self) -> std::io::Result<()> {
 		Ok(())
 	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Level {
+	Trace,
+	Debug,
+	Info,
+	Warn,
+	Error,
+}
+
+/// The level the fmt layer wrote near the start of a line, padded like `" WARN "`.
+pub fn level_of(line: &str) -> Option<Level> {
+	let head = line.get(..line.len().min(48)).unwrap_or(line);
+	[
+		(" ERROR ", Level::Error),
+		(" WARN ", Level::Warn),
+		(" INFO ", Level::Info),
+		(" DEBUG ", Level::Debug),
+		(" TRACE ", Level::Trace),
+	]
+	.into_iter()
+	.find(|(tag, _)| head.contains(tag))
+	.map(|(_, level)| level)
 }
 
 impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for LogBuffer {

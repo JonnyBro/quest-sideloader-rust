@@ -246,8 +246,122 @@ impl SettingsView {
 
 	fn set_theme(&mut self, theme: Theme, window: &mut Window, cx: &mut Context<Self>) {
 		self.save_now(|s| s.theme = theme);
-		crate::theme::apply(theme, window, cx);
+		crate::theme::apply(&self.draft, window, cx);
 		cx.notify();
+	}
+
+	fn set_scheme(
+		&mut self,
+		dark: bool,
+		name: String,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
+		// Picking a scheme also picks its mode; "System" stays until a scheme is clicked.
+		self.save_now(|s| {
+			if dark {
+				s.dark_scheme = name.clone();
+				s.theme = Theme::Dark;
+			} else {
+				s.light_scheme = name.clone();
+				s.theme = Theme::Light;
+			}
+		});
+		crate::theme::apply(&self.draft, window, cx);
+		cx.notify();
+	}
+
+	/// Small previews of the bundled dark or light schemes; a click picks one.
+	fn scheme_picker(&self, dark: bool, cx: &mut Context<Self>) -> AnyElement {
+		let theme = cx.theme().clone();
+		let (current, default) = if dark {
+			(&self.draft.dark_scheme, crate::theme::DEFAULT_DARK)
+		} else {
+			(&self.draft.light_scheme, crate::theme::DEFAULT_LIGHT)
+		};
+		let current = if current.is_empty() {
+			default
+		} else {
+			current.as_str()
+		};
+		let cards = crate::theme::schemes()
+			.iter()
+			.filter(|s| s.dark == dark)
+			.enumerate()
+			.map(|(ix, scheme)| {
+				let selected = scheme.name == current;
+				// The scheme of the other mode is remembered, shown fainter.
+				let in_use = selected
+					&& match self.draft.theme {
+						Theme::System => true,
+						Theme::Dark => dark,
+						Theme::Light => !dark,
+					};
+				let label = if scheme.name == default {
+					t!("set.scheme_default").into_owned()
+				} else {
+					scheme.name.clone()
+				};
+				let name = scheme.name.clone();
+				let line = |width: f32| {
+					div()
+						.h(px(4.))
+						.w(px(width))
+						.rounded_full()
+						.bg(scheme.foreground.opacity(0.6))
+				};
+				v_flex()
+					.id((if dark { "dark-scheme" } else { "light-scheme" }, ix))
+					.w(px(150.))
+					.gap_1()
+					.p_1()
+					.rounded(theme.radius_lg)
+					.border_2()
+					.border_color(if in_use {
+						theme.primary
+					} else if selected {
+						theme.muted_foreground.opacity(0.4)
+					} else {
+						theme.transparent
+					})
+					.cursor_pointer()
+					.hover(|s| s.bg(theme.list_hover))
+					.on_click(cx.listener(move |this, _, window, cx| {
+						this.set_scheme(dark, name.clone(), window, cx)
+					}))
+					.child(
+						h_flex()
+							.h(px(64.))
+							.rounded(theme.radius)
+							.overflow_hidden()
+							.border_1()
+							.border_color(theme.border)
+							.bg(scheme.background)
+							.child(div().w(px(36.)).h_full().bg(scheme.surface))
+							.child(
+								v_flex()
+									.flex_1()
+									.p_2()
+									.gap_1p5()
+									.child(line(70.))
+									.child(line(50.))
+									.child(
+										div()
+											.mt_1()
+											.h(px(12.))
+											.w(px(40.))
+											.rounded(px(3.))
+											.bg(scheme.accent),
+									),
+							),
+					)
+					.child(div().px_1().text_sm().truncate().child(label))
+			});
+		h_flex()
+			.gap_2()
+			.flex_wrap()
+			.children(cards)
+			.into_any_element()
 	}
 
 	fn set_language(&mut self, language: Language, window: &mut Window, cx: &mut Context<Self>) {
@@ -299,6 +413,49 @@ impl SettingsView {
 		.detach();
 	}
 
+	fn scale_control(&self, cx: &mut Context<Self>) -> AnyElement {
+		let scale = crate::theme::scale(cx);
+		let step = |id: &'static str, label: &'static str, delta: f32, enabled: bool| {
+			Button::new(id)
+				.label(label)
+				.small()
+				.outline()
+				.disabled(!enabled)
+				.on_click(move |_, window, cx| {
+					crate::theme::set_scale(crate::theme::scale(cx) + delta, window, cx)
+				})
+		};
+		v_flex()
+			.gap_1()
+			.child(
+				h_flex()
+					.gap_2()
+					.child(step(
+						"scale-down",
+						"-",
+						-0.1,
+						scale > crate::theme::SCALE_MIN,
+					))
+					.child(
+						div()
+							.w(px(56.))
+							.text_center()
+							.mono(cx)
+							.child(format!("{:.0}%", scale * 100.)),
+					)
+					.child(step("scale-up", "+", 0.1, scale < crate::theme::SCALE_MAX))
+					.child(
+						Button::new("scale-reset")
+							.label(t!("set.scale_reset"))
+							.small()
+							.outline()
+							.disabled((scale - 1.).abs() < f32::EPSILON)
+							.on_click(|_, window, cx| crate::theme::set_scale(1., window, cx)),
+					),
+			)
+			.into_any_element()
+	}
+
 	fn appearance(&self, cx: &mut Context<Self>) -> impl IntoElement {
 		let choice = |id: &'static str, label: String, selected: bool| {
 			Button::new(id)
@@ -315,22 +472,27 @@ impl SettingsView {
 			.child(field(
 				t!("set.theme").into(),
 				h_flex().gap_1().children(
-					[
-						("theme-system", Theme::System, t!("set.theme_system")),
-						("theme-dark", Theme::Dark, t!("set.theme_dark")),
-						("theme-light", Theme::Light, t!("set.theme_light")),
-					]
-					.into_iter()
-					.map(|(id, value, label)| {
-						choice(id, label.into_owned(), theme == value).on_click(
-							cx.listener(move |this, _, window, cx| {
-								this.set_theme(value, window, cx)
-							}),
-						)
-					}),
+					[("theme-system", Theme::System, t!("set.theme_system"))]
+						.into_iter()
+						.map(|(id, value, label)| {
+							choice(id, label.into_owned(), theme == value).on_click(cx.listener(
+								move |this, _, window, cx| this.set_theme(value, window, cx),
+							))
+						}),
 				),
 				cx,
 			))
+			.child(field(
+				t!("set.dark_scheme").into(),
+				self.scheme_picker(true, cx),
+				cx,
+			))
+			.child(field(
+				t!("set.light_scheme").into(),
+				self.scheme_picker(false, cx),
+				cx,
+			))
+			.child(field(t!("set.scale").into(), self.scale_control(cx), cx))
 			.child(field(
 				t!("set.language").into(),
 				h_flex().gap_1().children(

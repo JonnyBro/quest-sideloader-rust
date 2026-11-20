@@ -79,6 +79,12 @@ pub struct Settings {
 	pub max_concurrent_downloads: u8,
 	pub download_limit: SpeedLimit,
 	pub theme: Theme,
+	/// Color scheme names the UI shows for the dark and light theme; empty
+	/// means its default one. The core doesn't know the schemes.
+	#[serde(skip_serializing_if = "String::is_empty")]
+	pub dark_scheme: String,
+	#[serde(skip_serializing_if = "String::is_empty")]
+	pub light_scheme: String,
 	pub language: Language,
 	/// Keep unpacked releases after installing them, for reinstalling later.
 	pub keep_downloads: bool,
@@ -208,6 +214,8 @@ impl Default for Settings {
 			max_concurrent_downloads: 2,
 			download_limit: SpeedLimit::default(),
 			theme: Theme::default(),
+			dark_scheme: String::new(),
+			light_scheme: String::new(),
 			language: Language::default(),
 			keep_downloads: false,
 			notifications: true,
@@ -333,6 +341,8 @@ mod tests {
 				unit: SpeedUnit::KB,
 			},
 			theme: Theme::Dark,
+			dark_scheme: "Nord".into(),
+			light_scheme: String::new(),
 			language: Language::Russian,
 			keep_downloads: true,
 			notifications: false,
