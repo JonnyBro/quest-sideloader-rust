@@ -6242,8 +6242,11 @@ version = "1.0.0"
 dependencies = [
  "chrono",
  "gpui-kit",
+ "notify-rust",
  "quest-sideloader-core",
  "rust-i18n",
+ "serde",
+ "serde_json",
  "smol",
  "sys-locale",
  "tracing",

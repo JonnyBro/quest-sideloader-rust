@@ -1,18 +1,18 @@
 use rust_i18n::t;
-use std::cell::RefCell;
-use std::collections::HashMap;
+use std::cell::Cell;
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
-use gpui_kit::component::button::{Button, ButtonVariant, ButtonVariants};
+use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::menu::{DropdownMenu, PopupMenu, PopupMenuItem};
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::tab::{Tab, TabBar};
-use gpui_kit::component::tag::Tag;
 use gpui_kit::component::{
 	ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, WindowExt, h_flex, v_flex,
 };
@@ -25,6 +25,11 @@ use quest_sideloader_core::{AppInfo, Command, Engine, format_bytes};
 
 use crate::icons::AppIcon;
 use crate::theme::Mono;
+use crate::ui_state::HeadsetPrefs;
+use crate::widgets::{
+	Confirm, card, centered, column_header, confirm, format_date, open_folder, send_item, soft_tag,
+	table_row,
+};
 
 type Details = Result<(DeviceDetails, HashMap<String, AppUsage>), String>;
 
@@ -35,6 +40,7 @@ const SIZE_W: f32 = 96.;
 const TAG_W: f32 = 120.;
 const DATE_W: f32 = 150.;
 const MENU_W: f32 = 28.;
+const BACKUP_ACTIONS_W: f32 = 300.;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Sort {
@@ -73,6 +79,8 @@ pub struct HeadsetView {
 	rows: Vec<Row>,
 	/// Rows hidden because they are system apps.
 	hidden: usize,
+	/// Renamed copies made here.
+	copies: HashSet<String>,
 	_filter_changes: Subscription,
 }
 
@@ -98,8 +106,34 @@ impl HeadsetView {
 			show_system: false,
 			rows: Vec::new(),
 			hidden: 0,
+			copies: HashSet::new(),
 			_filter_changes: subscription,
 		}
+	}
+
+	pub fn set_prefs(&mut self, prefs: &HeadsetPrefs) {
+		self.sort = if prefs.sort_by_name {
+			Sort::Name
+		} else {
+			Sort::Size
+		};
+		self.show_system = prefs.show_system;
+	}
+
+	pub fn prefs(&self) -> HeadsetPrefs {
+		HeadsetPrefs {
+			sort_by_name: self.sort == Sort::Name,
+			show_system: self.show_system,
+		}
+	}
+
+	pub fn set_copies(&mut self, copies: HashSet<String>) {
+		self.copies = copies;
+	}
+
+	pub fn set_copies_and_notify(&mut self, copies: HashSet<String>, cx: &mut Context<Self>) {
+		self.copies = copies;
+		cx.notify();
 	}
 
 	pub fn clear(&mut self, cx: &mut Context<Self>) {
@@ -443,6 +477,9 @@ impl HeadsetView {
 						.into_any_element(),
 				};
 				let tag = match (row.app.version_code, row.latest) {
+					_ if self.copies.contains(&row.app.package) => {
+						Some(soft_tag(theme.info, t!("hs.copy").into_owned()))
+					}
 					(Some(have), Some(latest)) if have >= latest => {
 						Some(soft_tag(theme.success, t!("hs.latest").into_owned()))
 					}
@@ -456,7 +493,7 @@ impl HeadsetView {
 				let size = row.size.map_or_else(|| "...".to_owned(), format_bytes);
 				let has_name = row.app.name != row.app.package;
 
-				table_row(("app-row", ix), &theme)
+				table_row(("app-row", ix), ROW_HEIGHT, &theme)
 					.child(cover)
 					.child(
 						div()
@@ -522,34 +559,23 @@ impl HeadsetView {
 					app: app.clone(),
 				};
 				let (uninstall_serial, uninstall_app) = (serial.clone(), app.clone());
-				let title = t!("hs.uninstall_title", name = app.name).into_owned();
-				let confirm_engine = engine.clone();
+				let uninstall_engine = engine.clone();
 				menu.item(send_item(&engine, t!("hs.launch").into(), launch))
 					.item(send_item(&engine, t!("hs.stop").into(), stop))
 					.separator()
 					.item(send_item(&engine, t!("hs.back_up").into(), back_up))
 					.separator()
-					.item(
-						PopupMenuItem::new(t!("hs.uninstall")).on_click(move |_, window, cx| {
-							confirm(
-								&confirm_engine,
-								Confirm {
-									title: title.clone(),
-									text: t!("hs.uninstall_text").into_owned(),
-									ok: t!("hs.uninstall").into_owned(),
-									danger: true,
-								},
-								Command::Uninstall {
-									serial: uninstall_serial.clone(),
-									app: uninstall_app.clone(),
-									back_up: true,
-									remove_obb: true,
-								},
+					.item(PopupMenuItem::new(t!("hs.uninstall_button")).on_click(
+						move |_, window, cx| {
+							open_uninstall(
+								uninstall_engine.clone(),
+								uninstall_serial.clone(),
+								uninstall_app.clone(),
 								window,
 								cx,
-							);
-						}),
-					)
+							)
+						},
+					))
 			})
 	}
 
@@ -843,6 +869,88 @@ impl HeadsetView {
 			})
 	}
 
+	/// Installed apps a backup can go into: renamed copies first, then by name.
+	fn restore_targets(&self) -> Vec<(bool, String, String)> {
+		let mut targets: Vec<(bool, String, String)> = self
+			.info
+			.iter()
+			.flat_map(|i| i.packages.iter())
+			.filter(|p| !is_system(&p.name))
+			.map(|p| {
+				let name = self
+					.names
+					.get(&p.name)
+					.cloned()
+					.unwrap_or_else(|| p.name.clone());
+				(self.copies.contains(&p.name), name, p.name.clone())
+			})
+			.collect();
+		targets.sort_by_key(|(copy, name, _)| (!*copy, name.to_lowercase()));
+		targets
+	}
+
+	fn restore_into_menu(
+		&self,
+		ix: usize,
+		backup: &Backup,
+		targets: Rc<Vec<(bool, String, String)>>,
+	) -> impl IntoElement {
+		let engine = self.engine.clone();
+		let serial = self.serial.clone().unwrap_or_default();
+		let backup = backup.clone();
+		let any = targets.iter().any(|(_, _, p)| p != &backup.meta.package);
+		Button::new(("restore-into", ix))
+			.label(t!("hs.restore_into"))
+			.ghost()
+			.xsmall()
+			.dropdown_caret(true)
+			.disabled(!any || self.serial.is_none())
+			.tooltip(t!("hs.restore_into_hint"))
+			.dropdown_menu(move |mut menu: PopupMenu, _, _| {
+				menu = menu.scrollable(true).max_h(px(320.));
+				for (copy, name, package) in targets.iter() {
+					if package == &backup.meta.package {
+						continue;
+					}
+					let label = if *copy {
+						t!("hs.copy_entry", name = name, package = package).into_owned()
+					} else {
+						format!("{name} ({package})")
+					};
+					let engine = engine.clone();
+					let serial = serial.clone();
+					let backup = backup.clone();
+					let (name, package) = (name.clone(), package.clone());
+					menu = menu.item(PopupMenuItem::new(label).on_click(move |_, window, cx| {
+						confirm(
+							&engine,
+							Confirm {
+								title: t!("hs.restore_into_title").into_owned(),
+								text: t!(
+									"hs.restore_into_text",
+									backup = backup.meta.name,
+									date = format_date(backup.meta.created),
+									name = name,
+									package = package
+								)
+								.into_owned(),
+								ok: t!("hs.restore").into_owned(),
+								danger: false,
+							},
+							Command::RestoreBackup {
+								serial: serial.clone(),
+								backup: backup.clone(),
+								package: package.clone(),
+							},
+							window,
+							cx,
+						);
+					}));
+				}
+				menu
+			})
+	}
+
 	fn backups_section(&self, cx: &mut Context<Self>) -> AnyElement {
 		if self.backups.is_empty() {
 			return centered(t!("hs.no_backups").into_owned(), cx);
@@ -868,7 +976,8 @@ impl HeadsetView {
 					.text_right()
 					.child(t!("hs.col_size").into_owned()),
 			)
-			.child(div().w(px(TAG_W)));
+			.child(div().w(px(BACKUP_ACTIONS_W)));
+		let targets = Rc::new(self.restore_targets());
 		let rows = self.backups.iter().enumerate().map(|(ix, backup)| {
 			let meta = &backup.meta;
 			let date = format_date(meta.created);
@@ -912,13 +1021,14 @@ impl HeadsetView {
 					.icon(Icon::new(IconName::Delete))
 					.ghost()
 					.xsmall()
+					.tooltip(t!("common.delete"))
 					.on_click(move |_, window, cx| {
 						confirm(
 							&engine,
 							Confirm {
 								title: t!("hs.delete_backup_title").into_owned(),
 								text: text.clone(),
-								ok: t!("hs.uninstall").into_owned(),
+								ok: t!("common.delete").into_owned(),
 								danger: true,
 							},
 							Command::DeleteBackup(backup.clone()),
@@ -927,7 +1037,7 @@ impl HeadsetView {
 						);
 					})
 			};
-			table_row(("backup-row", ix), &theme)
+			table_row(("backup-row", ix), ROW_HEIGHT, &theme)
 				.child(div().flex_1().min_w_0().truncate().child(meta.name.clone()))
 				.child(
 					div()
@@ -950,10 +1060,20 @@ impl HeadsetView {
 				)
 				.child(
 					h_flex()
-						.w(px(TAG_W))
+						.w(px(BACKUP_ACTIONS_W))
 						.gap_1()
 						.justify_end()
 						.child(restore)
+						.child(self.restore_into_menu(ix, backup, targets.clone()))
+						.child({
+							let dir = backup.dir.clone();
+							Button::new(("open", ix))
+								.icon(Icon::new(IconName::FolderOpen))
+								.ghost()
+								.xsmall()
+								.tooltip(t!("common.open"))
+								.on_click(move |_, _, _| open_folder(&dir))
+						})
 						.child(delete),
 				)
 		});
@@ -993,108 +1113,6 @@ impl Render for HeadsetView {
 	}
 }
 
-struct Confirm {
-	title: String,
-	text: String,
-	ok: String,
-	danger: bool,
-}
-
-/// Dialog callbacks are `Fn`, so the command waits in a cell until OK takes it.
-fn confirm(
-	engine: &Rc<Engine>,
-	confirm: Confirm,
-	command: Command,
-	window: &mut Window,
-	cx: &mut App,
-) {
-	let engine = engine.clone();
-	let command = Rc::new(RefCell::new(Some(command)));
-	window.open_alert_dialog(cx, move |alert, _, _| {
-		let engine = engine.clone();
-		let command = command.clone();
-		alert
-			.title(confirm.title.clone())
-			.description(confirm.text.clone())
-			.confirm()
-			.ok_text(confirm.ok.clone())
-			.cancel_text(t!("common.cancel").into_owned())
-			.when(confirm.danger, |a| a.ok_variant(ButtonVariant::Danger))
-			.on_ok(move |_, _, _| {
-				if let Some(command) = command.borrow_mut().take() {
-					engine.send(command);
-				}
-				true
-			})
-	});
-}
-
-fn send_item(engine: &Rc<Engine>, label: String, command: Command) -> PopupMenuItem {
-	let engine = engine.clone();
-	let command = RefCell::new(Some(command));
-	PopupMenuItem::new(label).on_click(move |_, _, _| {
-		if let Some(command) = command.borrow_mut().take() {
-			engine.send(command);
-		}
-	})
-}
-
-fn card(title: String, content: impl IntoElement, theme: &gpui_kit::component::Theme) -> Div {
-	v_flex()
-		.gap_3()
-		.p_4()
-		.rounded(theme.radius_lg)
-		.border_1()
-		.border_color(theme.border)
-		.bg(theme.muted)
-		.child(div().text_color(theme.muted_foreground).child(title))
-		.child(content)
-}
-
-/// Tinted rather than solid: a solid badge on every row is louder than its news.
-fn soft_tag(color: Hsla, text: String) -> Tag {
-	Tag::custom(color.opacity(0.15), color, color.opacity(0.4))
-		.small()
-		.child(text)
-}
-
-fn column_header(cx: &App) -> Div {
-	let theme = cx.theme();
-	h_flex()
-		.w_full()
-		.h(px(30.))
-		.px_5()
-		.gap_4()
-		.text_sm()
-		.text_color(theme.muted_foreground)
-		.border_b_1()
-		.border_color(theme.border)
-}
-
-fn table_row(id: impl Into<ElementId>, theme: &gpui_kit::component::Theme) -> Stateful<Div> {
-	h_flex()
-		.id(id)
-		.w_full()
-		.h(px(ROW_HEIGHT))
-		.px_5()
-		.gap_4()
-		.border_b_1()
-		.border_color(theme.border.opacity(0.6))
-		.hover(|s| s.bg(theme.list_hover))
-}
-
-fn centered(text: String, cx: &App) -> AnyElement {
-	div()
-		.size_full()
-		.flex()
-		.items_center()
-		.justify_center()
-		.p_8()
-		.text_color(cx.theme().muted_foreground)
-		.child(text)
-		.into_any_element()
-}
-
 /// System apps clutter the list; the switch in the toolbar shows them.
 fn is_system(package: &str) -> bool {
 	["com.meta.", "com.oculus.", "com.android.", "android."]
@@ -1118,12 +1136,70 @@ fn format_uptime(uptime: Duration) -> String {
 	}
 }
 
-fn format_date(unix: u64) -> String {
-	chrono::DateTime::from_timestamp(unix as i64, 0)
-		.map(|t| {
-			t.with_timezone(&chrono::Local)
-				.format("%Y-%m-%d %H:%M")
-				.to_string()
-		})
-		.unwrap_or_default()
+/// Uninstall with the two choices the old dialog had: back up saves first, delete OBB files.
+fn open_uninstall(
+	engine: Rc<Engine>,
+	serial: String,
+	app: AppInfo,
+	window: &mut Window,
+	cx: &mut App,
+) {
+	let back_up = Rc::new(Cell::new(true));
+	let remove_obb = Rc::new(Cell::new(true));
+	window.open_dialog(cx, move |dialog, _, _| {
+		let toggle = |id: &'static str, label: String, value: &Rc<Cell<bool>>| {
+			let value = value.clone();
+			Checkbox::new(id)
+				.label(label)
+				.checked(value.get())
+				.on_click(move |checked: &bool, window, _| {
+					value.set(*checked);
+					window.refresh();
+				})
+		};
+		let uninstall = {
+			let (engine, serial, app) = (engine.clone(), serial.clone(), app.clone());
+			let (back_up, remove_obb) = (back_up.clone(), remove_obb.clone());
+			move |_: &ClickEvent, window: &mut Window, cx: &mut App| {
+				engine.send(Command::Uninstall {
+					serial: serial.clone(),
+					app: app.clone(),
+					back_up: back_up.get(),
+					remove_obb: remove_obb.get(),
+				});
+				window.close_dialog(cx);
+			}
+		};
+		dialog
+			.title(t!("hs.uninstall_title", name = app.name).into_owned())
+			.w(px(460.))
+			.child(
+				v_flex()
+					.gap_3()
+					.child(toggle("back-up", t!("hs.backup_first").into(), &back_up))
+					.child(toggle(
+						"remove-obb",
+						t!("hs.delete_obb").into(),
+						&remove_obb,
+					)),
+			)
+			.footer(
+				h_flex()
+					.w_full()
+					.justify_end()
+					.gap_2()
+					.child(
+						Button::new("cancel")
+							.label(t!("common.cancel"))
+							.outline()
+							.on_click(|_, window, cx| window.close_dialog(cx)),
+					)
+					.child(
+						Button::new("uninstall")
+							.label(t!("hs.uninstall"))
+							.danger()
+							.on_click(uninstall),
+					),
+			)
+	});
 }

@@ -1,5 +1,6 @@
 use rust_i18n::t;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,18 +21,24 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use quest_sideloader_core::adb::{DeviceDetails, DeviceEntry, DeviceInfo, DeviceState};
 use quest_sideloader_core::{
-	AdbStatus, AppPaths, Command, Engine, Event, Settings, TaskSnapshot, TaskState, format_bytes,
+	AdbStatus, AppPaths, Command, Engine, Event, Settings, TaskId, TaskKind, TaskSnapshot,
+	TaskState, format_bytes,
 };
+use serde::{Deserialize, Serialize};
 
-use crate::headset::HeadsetView;
+use crate::dialogs::review::PendingReview;
+use crate::dialogs::{review, tools, welcome};
 use crate::icons::AppIcon;
 use crate::logbuf::LogBuffer;
 use crate::logbuf::highlight::{LevelColors, LogHighlighter, SharedColors};
 use crate::theme::Mono;
+use crate::ui_state::{SavedBounds, UiState};
+use crate::views::headset::HeadsetView;
+use quest_sideloader_core::rename::KeyStore;
 
 const LOGS_HEIGHT: f32 = 240.;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Tab {
 	Headset,
 	Catalog,
@@ -74,6 +81,19 @@ impl Tab {
 
 pub struct Shell {
 	engine: Rc<Engine>,
+	paths: AppPaths,
+	settings: Settings,
+	ui_path: PathBuf,
+	/// The Wi-Fi headset to reconnect to once adb runs.
+	last_wireless: Option<String>,
+	reconnect: bool,
+	/// The adb dialog opens by itself once per run; the status bar reopens it.
+	adb_prompted: bool,
+	reviews: VecDeque<PendingReview>,
+	review_open: Option<TaskId>,
+	/// Renamed copies made here; they get a badge and lead the restore list.
+	copies: HashSet<String>,
+	title: String,
 	tab: Tab,
 	adb: Option<AdbStatus>,
 	devices: Vec<DeviceEntry>,
@@ -97,6 +117,8 @@ impl Shell {
 	pub fn new(
 		paths: AppPaths,
 		settings: Settings,
+		ui: UiState,
+		first_run: bool,
 		logs: LogBuffer,
 		window: &mut Window,
 		cx: &mut Context<Self>,
@@ -104,7 +126,7 @@ impl Shell {
 		// The engine calls this from its own threads; it only wakes the UI task below.
 		let (wake_tx, wake_rx) = smol::channel::unbounded::<()>();
 		let engine = Engine::start(
-			paths,
+			paths.clone(),
 			settings.clone(),
 			Arc::new(move || {
 				let _ = wake_tx.try_send(());
@@ -139,12 +161,31 @@ impl Shell {
 			}
 		});
 
-		let theme = settings.theme;
-		let appearance = cx.observe_window_appearance(window, move |_, window, cx| {
-			crate::theme::apply(theme, window, cx);
+		let appearance = cx.observe_window_appearance(window, |this, window, cx| {
+			crate::theme::apply(this.settings.theme, window, cx);
 		});
+		window.on_window_should_close(cx, {
+			let shell = cx.entity().downgrade();
+			move |window, cx| {
+				let bounds = window.window_bounds();
+				let _ = shell.update(cx, |this, cx| this.save_ui(bounds, cx));
+				true
+			}
+		});
+		if first_run {
+			cx.defer_in(window, |this, window, cx| this.open_welcome(window, cx));
+		}
 
-		let headset = cx.new(|cx| HeadsetView::new(engine.clone(), window, cx));
+		let copies: HashSet<String> = KeyStore::new(paths.signing_dir())
+			.packages()
+			.into_iter()
+			.collect();
+		let headset = cx.new(|cx| {
+			let mut view = HeadsetView::new(engine.clone(), window, cx);
+			view.set_prefs(&ui.headset);
+			view.set_copies(copies.clone());
+			view
+		});
 		let log_colors = SharedColors::default();
 		let log_view = cx.new(|cx| {
 			let mut editor = EditorState::new(window, cx)
@@ -162,7 +203,17 @@ impl Shell {
 		engine.send(Command::ListBackups);
 		Self {
 			engine,
-			tab: Tab::Headset,
+			ui_path: crate::ui_state::file(&paths.ui_state_file()),
+			paths,
+			settings,
+			reconnect: ui.last_wireless.is_some(),
+			last_wireless: ui.last_wireless,
+			adb_prompted: false,
+			reviews: VecDeque::new(),
+			review_open: None,
+			copies,
+			title: String::new(),
+			tab: ui.tab.unwrap_or(Tab::Headset),
 			adb: None,
 			devices: Vec::new(),
 			infos: HashMap::new(),
@@ -171,7 +222,7 @@ impl Shell {
 			tasks: Vec::new(),
 			headset,
 			logs,
-			logs_open: false,
+			logs_open: ui.logs_open,
 			logs_seen: 0,
 			log_lines: 0,
 			log_view,
@@ -191,8 +242,53 @@ impl Shell {
 
 	fn handle_event(&mut self, event: Event, window: &mut Window, cx: &mut Context<Self>) {
 		match event {
-			Event::AdbStatus(status) => self.adb = Some(status),
+			Event::SettingsSaved(settings) => {
+				crate::apply_language(settings.language);
+				crate::theme::apply(settings.theme, window, cx);
+				self.settings = settings;
+				window.refresh();
+				window.push_notification(Notification::info(t!("app.settings_saved")), cx);
+			}
+			Event::SettingsSaveFailed(text) => {
+				window.push_notification(Notification::error(text), cx)
+			}
+			Event::AdbStatus(status) => {
+				match &status {
+					AdbStatus::Missing(_) if !self.adb_prompted => {
+						self.adb_prompted = true;
+						tools::open_adb(self.engine.clone(), window, cx);
+					}
+					AdbStatus::Running { .. } if std::mem::take(&mut self.reconnect) => {
+						if let Some(address) = &self.last_wireless {
+							self.engine.send(Command::Reconnect(address.clone()));
+						}
+					}
+					_ => {}
+				}
+				self.adb = Some(status);
+			}
+			Event::RcloneMissing => tools::open_rclone(self.engine.clone(), window, cx),
+			Event::ScriptReview {
+				task,
+				title,
+				analysis,
+			} => {
+				self.reviews.push_back(PendingReview {
+					task,
+					title,
+					analysis,
+				});
+				self.show_next_review(window, cx);
+			}
 			Event::DevicesChanged(devices) => {
+				// mDNS serials (`adb-...`) can't be connected to by address.
+				if let Some(device) = devices.iter().find(|d| {
+					d.state == DeviceState::Online
+						&& d.serial.contains(':')
+						&& !d.serial.starts_with("adb-")
+				}) {
+					self.last_wireless = Some(device.serial.clone());
+				}
 				self.devices = devices;
 				let online = |serial: &str| {
 					self.devices
@@ -233,23 +329,159 @@ impl Shell {
 				self.headset.update(cx, |h, cx| h.set_backups(backups, cx));
 			}
 			Event::BackupsChanged => self.engine.send(Command::ListBackups),
-			Event::TaskUpdated(task) => self.on_task(task),
+			Event::TaskUpdated(task) => self.on_task(task, window, cx),
 			Event::Notice(text) => window.push_notification(Notification::info(text), cx),
 			Event::Error(text) => window.push_notification(Notification::error(text), cx),
 			_ => {}
 		}
 	}
 
-	fn on_task(&mut self, task: TaskSnapshot) {
-		let finished_here = task.state == TaskState::Done && task.serial.is_some();
-		if finished_here && let Some(serial) = &task.serial {
-			// Installs and uninstalls change the app list.
-			self.engine.send(Command::RefreshDevice(serial.clone()));
-			self.engine.send(Command::RefreshHeadset(serial.clone()));
+	fn on_task(&mut self, task: TaskSnapshot, window: &mut Window, cx: &mut Context<Self>) {
+		let was_finished = self
+			.tasks
+			.iter()
+			.find(|t| t.id == task.id)
+			.is_some_and(|t| t.state.is_finished());
+		let finished = task.state.is_finished() && !was_finished;
+		if finished {
+			self.forget_review(task.id, window, cx);
+			self.notify_finished(&task, window);
+		}
+		if finished && task.state == TaskState::Done {
+			if let Some(serial) = &task.serial {
+				// Installs and uninstalls change the app list.
+				self.engine.send(Command::RefreshDevice(serial.clone()));
+				self.engine.send(Command::RefreshHeadset(serial.clone()));
+			}
+			if task.kind == TaskKind::Rename {
+				self.copies = KeyStore::new(self.paths.signing_dir())
+					.packages()
+					.into_iter()
+					.collect();
+				let copies = self.copies.clone();
+				self.headset
+					.update(cx, |h, cx| h.set_copies_and_notify(copies, cx));
+			}
 		}
 		match self.tasks.iter_mut().find(|t| t.id == task.id) {
 			Some(slot) => *slot = task,
 			None => self.tasks.push(task),
+		}
+		self.update_title(window);
+	}
+
+	/// A system notification when a task ends while the window is in the background.
+	fn notify_finished(&self, task: &TaskSnapshot, window: &Window) {
+		if !self.settings.notifications || window.is_window_active() {
+			return;
+		}
+		match &task.state {
+			TaskState::Done => crate::notify::send(task.title.clone(), task.stage.clone()),
+			TaskState::Failed(e) => crate::notify::send(
+				t!("app.task_failed", title = task.title).into_owned(),
+				e.chars().take(200).collect(),
+			),
+			_ => {}
+		}
+	}
+
+	/// The running task's progress goes in front of the title, for the taskbar.
+	fn update_title(&mut self, window: &mut Window) {
+		let base = crate::base_title(self.paths.portable_root().is_some());
+		let title = match self.active_tasks().next() {
+			Some(task) => match task.progress {
+				Some(p) => format!("{:.0}% {} - {base}", p * 100., task.title),
+				None => format!("{} - {base}", task.title),
+			},
+			None => base.to_owned(),
+		};
+		if title != self.title {
+			window.set_window_title(&title);
+			self.title = title;
+		}
+	}
+
+	fn show_next_review(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+		if self.review_open.is_some() {
+			return;
+		}
+		let Some(next) = self.reviews.pop_front() else {
+			return;
+		};
+		self.review_open = Some(next.task);
+		let shell = cx.entity().downgrade();
+		review::open(
+			self.engine.clone(),
+			next,
+			move |window, cx| {
+				let _ = shell.update(cx, |this, cx| {
+					this.review_open = None;
+					// The next one waits until this dialog is gone.
+					cx.defer_in(window, |this, window, cx| this.show_next_review(window, cx));
+				});
+			},
+			window,
+			cx,
+		);
+	}
+
+	/// The task was cancelled or failed elsewhere; its question is moot.
+	fn forget_review(&mut self, task: TaskId, window: &mut Window, cx: &mut Context<Self>) {
+		self.reviews.retain(|r| r.task != task);
+		if self.review_open == Some(task) {
+			self.review_open = None;
+			window.close_dialog(cx);
+			self.show_next_review(window, cx);
+		}
+	}
+
+	fn open_welcome(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+		let shell = cx.entity().downgrade();
+		welcome::Welcome::open(
+			self.engine.clone(),
+			self.settings.clone(),
+			self.paths.default_downloads_dir(),
+			move |outcome, _, cx| {
+				if outcome == welcome::Outcome::OpenMirrors {
+					let _ = shell.update(cx, |this, cx| {
+						this.tab = Tab::Settings;
+						cx.notify();
+					});
+				}
+			},
+			window,
+			cx,
+		);
+	}
+
+	fn save_ui(&self, bounds: WindowBounds, cx: &App) {
+		let headset = self.headset.read(cx).prefs();
+		UiState {
+			window: Some(SavedBounds::from_window(bounds)),
+			tab: Some(self.tab),
+			logs_open: self.logs_open,
+			last_wireless: self.last_wireless.clone(),
+			headset,
+		}
+		.save(&self.ui_path);
+	}
+
+	fn install_dropped(
+		&mut self,
+		paths: &ExternalPaths,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
+		let Some(device) = self.selected_device() else {
+			window.push_notification(Notification::error(t!("app.no_headset")), cx);
+			return;
+		};
+		let serial = device.serial.clone();
+		for path in paths.paths() {
+			self.engine.send(Command::Install {
+				serial: serial.clone(),
+				path: path.clone(),
+			});
 		}
 	}
 
@@ -565,9 +797,20 @@ impl Shell {
 				AdbStatus::Starting => t!("adb.starting").into_owned(),
 				AdbStatus::Unavailable(_) | AdbStatus::Missing(_) => t!("adb.down").into_owned(),
 			};
-			left = left
-				.child(sep())
-				.child(item(text).text_color(muted).mono(cx));
+			let down = matches!(adb, AdbStatus::Unavailable(_) | AdbStatus::Missing(_));
+			left = left.child(sep()).child(
+				div()
+					.id("adb-status")
+					.text_color(if down { theme.danger } else { muted })
+					.mono(cx)
+					.when(down, |d| {
+						d.cursor_pointer()
+							.on_click(cx.listener(|this, _, window, cx| {
+								tools::open_adb(this.engine.clone(), window, cx)
+							}))
+					})
+					.child(text),
+			);
 		}
 
 		let active: Vec<&TaskSnapshot> = self.active_tasks().collect();
@@ -667,7 +910,8 @@ fn battery_icon(level: u8, charging: bool) -> IconName {
 }
 
 impl Render for Shell {
-	fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+	fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+		self.update_title(window);
 		let content = match self.tab {
 			Tab::Headset => self.headset.clone().into_any_element(),
 			other => div()
@@ -679,10 +923,19 @@ impl Render for Shell {
 				.child(format!("{}: {}", other.label(), t!("proto.not_ported")))
 				.into_any_element(),
 		};
+		let drop_tint = cx.theme().primary.opacity(0.08);
+		let drop_border = cx.theme().primary;
 		v_flex()
+			.id("shell")
 			.size_full()
 			.bg(cx.theme().background)
 			.text_color(cx.theme().foreground)
+			.drag_over::<ExternalPaths>(move |style, _, _, _| {
+				style.bg(drop_tint).border_2().border_color(drop_border)
+			})
+			.on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
+				this.install_dropped(paths, window, cx)
+			}))
 			.child(
 				h_flex()
 					.flex_1()

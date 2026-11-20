@@ -100,13 +100,13 @@ hs.stop:
   ru: "Остановить"
 hs.back_up:
   en: "Back up saves"
-  ru: "Сохранить бэкап"
+  ru: "Сделать бэкап сохранений"
 hs.nothing:
   en: "Nothing matches the filter"
-  ru: "Под фильтр ничего не подходит"
+  ru: "По фильтру ничего не найдено"
 hs.loading:
   en: "Reading the headset..."
-  ru: "Читаю шлем..."
+  ru: "Чтение данных шлема..."
 dev.free_of:
   en: "%{free} free of %{total}"
   ru: "свободно %{free} из %{total}"
@@ -120,8 +120,8 @@ wifi.title:
   en: "Connect over Wi-Fi"
   ru: "Подключение по Wi-Fi"
 wifi.hint:
-  en: "Headset address with port. Wireless ADB has to be on: turn it on from the Device tab while the headset is on USB."
-  ru: "Адрес шлема с портом. Беспроводной ADB должен быть включён: это делается на вкладке Устройство, пока шлем подключён по USB."
+  en: "The headset's address with port. Wireless ADB has to be on: turn it on in the Device tab while the headset is on USB."
+  ru: "Адрес шлема с портом. Беспроводной ADB должен быть включён: включите его на вкладке Устройство, пока шлем подключён по USB."
 wifi.connect:
   en: "Connect"
   ru: "Подключить"
@@ -158,12 +158,6 @@ hs.no_backups:
 hs.col_date:
   en: "Date"
   ru: "Дата"
-hs.col_files:
-  en: "Files"
-  ru: "Файлы"
-hs.uninstall_text:
-  en: "Its saves are backed up first, then the app and its OBB files are removed."
-  ru: "Сначала сохранения копируются в бэкап, потом приложение и его OBB удаляются."
 hs.restore_title:
   en: "Restore %{name}?"
   ru: "Восстановить %{name}?"
@@ -296,3 +290,195 @@ hs.mtp_off:
 hs.mtp_hint:
   en: "Switches USB to MTP, so the headset's storage opens in the computer's file manager over the cable. adb keeps working; the USB connection resets for a moment."
   ru: "Переключает USB в режим MTP, чтобы память шлема открылась в файловом менеджере компьютера по кабелю. adb продолжает работать; USB-соединение на секунду переподключится."
+rev.heading:
+  en: "Review install.txt: %{title}"
+  ru: "Проверка install.txt: %{title}"
+rev.intro:
+  en: "This release comes with a script of adb commands. Some lines do more than install the game, so they won't run without your permission."
+  ru: "В этом релизе есть скрипт с командами adb. Некоторые строки делают что-то помимо установки игры, поэтому без вашего разрешения они не выполнятся."
+rev.package:
+  en: "Game package:"
+  ru: "Пакет игры:"
+rev.counts:
+  en: "%{suspicious} line(s) need permission, %{blocked} line(s) will never run."
+  ru: "Требуют разрешения строк: %{suspicious}, никогда не выполнятся: %{blocked}."
+rev.run_all:
+  en: "Run all allowed lines"
+  ru: "Выполнить все разрешённые строки"
+rev.run_all_hint:
+  en: "Runs safe and highlighted lines; blocked lines are still skipped"
+  ru: "Выполняет безопасные и подсвеченные строки; заблокированные всё равно пропускаются"
+rev.safe_only:
+  en: "Run safe lines only"
+  ru: "Только безопасные строки"
+rev.safe_only_hint:
+  en: "The game may not work if a skipped line was needed"
+  ru: "Игра может не работать, если пропущенная строка была нужна"
+rev.cancel:
+  en: "Cancel installation"
+  ru: "Отменить установку"
+rev.needs_permission:
+  en: "needs permission"
+  ru: "требует разрешения"
+rev.blocked:
+  en: "blocked"
+  ru: "заблокировано"
+rev.grey:
+  en: "grey lines are not adb commands and are skipped"
+  ru: "серые строки не являются командами adb и пропускаются"
+adb.title:
+  en: "ADB not found"
+  ru: "ADB не найден"
+adb.text:
+  en: "The app talks to the headset through adb from Android SDK Platform-Tools. It can download Platform-Tools from Google (dl.google.com) into its data folder and use them, or you can install them yourself and set the adb path in Settings."
+  ru: "Приложение общается со шлемом через adb из Android SDK Platform-Tools. Оно может скачать Platform-Tools с сайта Google (dl.google.com) в свою папку данных и пользоваться ими. Или установите их сами и укажите путь к adb в Настройках."
+adb.windows_driver:
+  en: "Windows also needs Meta's ADB driver to see the headset over USB."
+  ru: "Чтобы Windows видела шлем по USB, нужен ещё ADB-драйвер от Meta."
+adb.driver_link:
+  en: "Meta Quest ADB driver"
+  ru: "ADB-драйвер Meta Quest"
+adb.terms:
+  en: "Downloading means you accept the "
+  ru: "Скачивая, вы принимаете "
+adb.terms_link:
+  en: "Android SDK terms"
+  ru: "условия Android SDK"
+adb.no_build:
+  en: "Google doesn't publish adb for this system, so it has to be installed by hand."
+  ru: "Google не выпускает adb для этой системы, поэтому его придётся установить вручную."
+adb.install:
+  en: "Install automatically"
+  ru: "Установить автоматически"
+adb.open_page:
+  en: "Open download page"
+  ru: "Открыть страницу загрузки"
+adb.not_now:
+  en: "Not now"
+  ru: "Не сейчас"
+rclone.title:
+  en: "rclone not found"
+  ru: "rclone не найден"
+rclone.text:
+  en: "Mirrors are read through rclone. The app can download the official build from rclone.org into its data folder, check it against the published checksum and use it. You can also install rclone yourself and set its path in Settings."
+  ru: "Зеркала читаются через rclone. Приложение может скачать официальную сборку с rclone.org в свою папку данных, сверить её с опубликованной контрольной суммой и пользоваться ею. Или установите rclone сами и укажите путь к нему в Настройках."
+rclone.no_build:
+  en: "rclone.org has no build for this system, so rclone has to be installed by hand."
+  ru: "На rclone.org нет сборки для этой системы, поэтому rclone придётся установить вручную."
+welcome.title:
+  en: "Welcome to Quest Sideloader"
+  ru: "Добро пожаловать в Quest Sideloader"
+welcome.step:
+  en: "Step %{n} of %{total}"
+  ru: "Шаг %{n} из %{total}"
+welcome.intro:
+  en: "A few settings to start with. All of them can be changed later in Settings."
+  ru: "Несколько настроек для начала. Все их можно поменять потом в Настройках."
+welcome.folder_text:
+  en: "Games are downloaded and unpacked into this folder. Large games take tens of GB, so pick a drive with enough space."
+  ru: "Игры скачиваются и распаковываются в эту папку. Большие игры занимают десятки ГБ, так что выберите диск, где хватит места."
+welcome.headset_text:
+  en: "Turn on developer mode in the Meta Horizon app, then connect the headset with a USB cable and allow USB debugging when the headset asks. It then shows up on the Devices tab."
+  ru: "Включите режим разработчика в приложении Meta Horizon, потом подключите шлем USB-кабелем и разрешите отладку по USB, когда шлем спросит. После этого он появится на вкладке Устройства."
+welcome.mirror_text:
+  en: "The library is optional. To download games from it, add a mirror in Settings."
+  ru: "Библиотека необязательна. Чтобы скачивать из неё игры, добавьте зеркало в Настройках."
+welcome.skip:
+  en: "Skip"
+  ru: "Пропустить"
+welcome.back:
+  en: "Back"
+  ru: "Назад"
+welcome.next:
+  en: "Next"
+  ru: "Далее"
+welcome.finish:
+  en: "Finish"
+  ru: "Готово"
+welcome.add_mirror:
+  en: "Add a mirror"
+  ru: "Добавить зеркало"
+set.language:
+  en: "Language"
+  ru: "Язык"
+set.language_system:
+  en: "System"
+  ru: "Системный"
+set.theme:
+  en: "Theme"
+  ru: "Тема"
+set.theme_system:
+  en: "System"
+  ru: "Системная"
+set.theme_dark:
+  en: "Dark"
+  ru: "Тёмная"
+set.theme_light:
+  en: "Light"
+  ru: "Светлая"
+set.keep_downloads:
+  en: "Keep downloaded files for reinstalling"
+  ru: "Сохранять скачанные файлы для переустановки"
+set.default:
+  en: "Default"
+  ru: "По умолчанию"
+common.browse:
+  en: "Browse..."
+  ru: "Обзор..."
+app.drop_to_install:
+  en: "Drop to install on %{name}"
+  ru: "Отпустите, чтобы установить на %{name}"
+app.drop_no_headset:
+  en: "Connect a headset (or select one) to install"
+  ru: "Подключите шлем (или выберите его), чтобы установить"
+app.no_headset:
+  en: "No headset to install on: connect one or select it in Devices"
+  ru: "Некуда устанавливать: подключите шлем или выберите его в Устройствах"
+app.task_failed:
+  en: "Failed: %{title}"
+  ru: "Ошибка: %{title}"
+app.settings_saved:
+  en: "Settings saved"
+  ru: "Настройки сохранены"
+hs.backup_first:
+  en: "Back up saves first"
+  ru: "Сначала сделать бэкап сохранений"
+hs.delete_obb:
+  en: "Also delete its OBB files"
+  ru: "Также удалить его OBB-файлы"
+hs.restore_into:
+  en: "Into..."
+  ru: "В другое..."
+hs.restore_into_hint:
+  en: "Restore these saves into another installed app, such as a renamed copy of this game"
+  ru: "Восстановить эти сохранения в другое установленное приложение, например в копию этой игры с другим пакетом"
+hs.restore_into_title:
+  en: "Restore into another app?"
+  ru: "Восстановить в другое приложение?"
+hs.restore_into_text:
+  en: "The saves of %{backup} from %{date} go into %{name} (%{package}). Its files with the same names are replaced. File names that contain the original package get the new one, so the app finds them. Games that encrypt saves with their package or signature may not read them."
+  ru: "Сохранения %{backup} от %{date} будут записаны в %{name} (%{package}). Его файлы с теми же именами заменятся. В именах файлов с оригинальным пакетом он заменяется на новый, чтобы приложение их нашло. Игры, которые шифруют сохранения с привязкой к пакету или подписи, могут их не прочитать."
+hs.copy_entry:
+  en: "%{name} (%{package}), copy"
+  ru: "%{name} (%{package}), копия"
+hs.incl_private:
+  en: ", incl. private data"
+  ru: ", с приватными данными"
+hs.backup_info:
+  en: "%{size}, %{n} file(s)%{private}"
+  ru: "%{size}, файлов: %{n}%{private}"
+common.open:
+  en: "Open"
+  ru: "Открыть"
+common.delete:
+  en: "Delete"
+  ru: "Удалить"
+common.close:
+  en: "Close"
+  ru: "Закрыть"
+hs.copy:
+  en: "copy"
+  ru: "копия"
+hs.uninstall_button:
+  en: "Uninstall..."
+  ru: "Удалить..."

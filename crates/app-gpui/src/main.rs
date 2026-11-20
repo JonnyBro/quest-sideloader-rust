@@ -1,12 +1,16 @@
-//! Prototype of the gpui-component UI: the Headset screen on the real engine.
+//! Quest Sideloader on gpui-component; replaces the egui app in `crates/app`.
 
 rust_i18n::i18n!("locales", fallback = "en");
 
-mod headset;
+mod dialogs;
 mod icons;
 mod logbuf;
+mod notify;
 mod shell;
 mod theme;
+mod ui_state;
+mod views;
+mod widgets;
 
 use gpui_kit::*;
 use quest_sideloader_core::settings::Language;
@@ -15,8 +19,9 @@ use tracing_subscriber::prelude::*;
 
 fn main() {
 	let logs = logbuf::LogBuffer::default();
-	let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-		.unwrap_or_else(|_| "info,quest_sideloader_core=debug,wgpu_hal=warn,wgpu_core=warn".into());
+	let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+		"info,quest_sideloader_core=debug,wgpu_hal=warn,wgpu_core=warn,zbus=error".into()
+	});
 	tracing_subscriber::registry()
 		.with(filter)
 		.with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
@@ -31,6 +36,9 @@ fn main() {
 	let paths = AppPaths::detect()
 		.and_then(|p| p.ensure_exist().map(|()| p))
 		.expect("data folders");
+	// Checked before anything saves the settings.
+	let first_run = !paths.settings_file().exists();
+	let ui = ui_state::UiState::load(&ui_state::file(&paths.ui_state_file()));
 	let settings = Settings::load(&paths).unwrap_or_else(|e| {
 		tracing::error!("{e}");
 		Settings::defaults_for(&paths)
@@ -44,14 +52,12 @@ fn main() {
 			theme::install(cx);
 
 			let options = WindowOptions {
-				window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
-					None,
-					size(px(1200.), px(780.)),
-					cx,
-				))),
+				window_bounds: Some(ui.window.map(|b| b.to_window()).unwrap_or_else(|| {
+					WindowBounds::Windowed(Bounds::centered(None, size(px(1200.), px(780.)), cx))
+				})),
 				window_min_size: Some(size(px(900.), px(560.))),
 				titlebar: Some(TitlebarOptions {
-					title: Some("Quest Sideloader (gpui prototype)".into()),
+					title: Some(base_title(paths.portable_root().is_some()).into()),
 					..Default::default()
 				}),
 				app_id: Some("quest-sideloader-gpui".into()),
@@ -60,12 +66,20 @@ fn main() {
 			let theme_setting = settings.theme;
 			gpui_kit::open_window(options, cx, move |window, cx| {
 				theme::apply(theme_setting, window, cx);
-				cx.new(|cx| shell::Shell::new(paths, settings, logs, window, cx))
+				cx.new(|cx| shell::Shell::new(paths, settings, ui, first_run, logs, window, cx))
 			})
 			.expect("open window");
 			cx.on_window_closed(|cx, _| cx.quit()).detach();
 			cx.activate(true);
 		});
+}
+
+pub fn base_title(portable: bool) -> &'static str {
+	if portable {
+		"Quest Sideloader (portable)"
+	} else {
+		"Quest Sideloader"
+	}
 }
 
 fn apply_language(language: Language) {
