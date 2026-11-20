@@ -109,7 +109,7 @@ fn footer(
 		.child(
 			Button::new("not-now")
 				.label(t!("adb.not_now"))
-				.ghost()
+				.outline()
 				.on_click(|_, window, cx| window.close_dialog(cx)),
 		)
 		.child(div().flex_1())

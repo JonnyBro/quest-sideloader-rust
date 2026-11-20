@@ -13,8 +13,9 @@ use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::menu::{DropdownMenu, PopupMenu, PopupMenuItem};
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::tab::{Tab, TabBar};
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{
-	ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, WindowExt, h_flex, v_flex,
+	ActiveTheme, Disableable, Icon, IconName, Sizable, WindowExt, h_flex, v_flex,
 };
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -23,12 +24,14 @@ use quest_sideloader_core::catalog::Catalog;
 use quest_sideloader_core::saves::Backup;
 use quest_sideloader_core::{AppInfo, Command, Engine, format_bytes};
 
+use serde::{Deserialize, Serialize};
+
 use crate::icons::AppIcon;
 use crate::theme::Mono;
 use crate::ui_state::HeadsetPrefs;
 use crate::widgets::{
-	Confirm, card, centered, column_header, confirm, format_date, open_folder, send_item, soft_tag,
-	table_row,
+	Confirm, card, centered, column_header, confirm, content_width, fit_columns, format_date,
+	open_folder, send_item, soft_tag, table_row,
 };
 
 type Details = Result<(DeviceDetails, HashMap<String, AppUsage>), String>;
@@ -41,11 +44,24 @@ const TAG_W: f32 = 120.;
 const DATE_W: f32 = 150.;
 const MENU_W: f32 = 28.;
 const BACKUP_ACTIONS_W: f32 = 300.;
+const NAME_MIN: f32 = 180.;
+/// The package column is flexible; this is what it needs to be worth showing.
+const PACKAGE_MIN: f32 = 200.;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Sort {
-	Size,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Sort {
+	#[default]
 	Name,
+	Package,
+	Version,
+	Size,
+}
+
+impl Sort {
+	/// Text sorts A to Z; numbers start with the biggest.
+	fn starts_descending(self) -> bool {
+		matches!(self, Sort::Version | Sort::Size)
+	}
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -58,7 +74,7 @@ enum Section {
 struct Row {
 	app: AppInfo,
 	/// `None` until the headset reports per-app storage.
-	size: Option<u64>,
+	usage: Option<AppUsage>,
 	cover: Option<PathBuf>,
 	/// The newest version the catalog has.
 	latest: Option<u64>,
@@ -75,12 +91,17 @@ pub struct HeadsetView {
 	section: Section,
 	filter: Entity<InputState>,
 	sort: Sort,
+	descending: bool,
 	show_system: bool,
 	rows: Vec<Row>,
 	/// Rows hidden because they are system apps.
 	hidden: usize,
 	/// Renamed copies made here.
 	copies: HashSet<String>,
+	/// Which app columns fit: package, version, size, badge.
+	app_cols: [bool; 4],
+	/// Which backup columns fit: package, date, size.
+	backup_cols: [bool; 3],
 	_filter_changes: Subscription,
 }
 
@@ -102,27 +123,28 @@ impl HeadsetView {
 			backups: Vec::new(),
 			section: Section::Apps,
 			filter,
-			sort: Sort::Size,
+			sort: Sort::Name,
+			descending: false,
 			show_system: false,
 			rows: Vec::new(),
 			hidden: 0,
 			copies: HashSet::new(),
+			app_cols: [true; 4],
+			backup_cols: [true; 3],
 			_filter_changes: subscription,
 		}
 	}
 
 	pub fn set_prefs(&mut self, prefs: &HeadsetPrefs) {
-		self.sort = if prefs.sort_by_name {
-			Sort::Name
-		} else {
-			Sort::Size
-		};
+		self.sort = prefs.sort;
+		self.descending = prefs.descending;
 		self.show_system = prefs.show_system;
 	}
 
 	pub fn prefs(&self) -> HeadsetPrefs {
 		HeadsetPrefs {
-			sort_by_name: self.sort == Sort::Name,
+			sort: self.sort,
+			descending: self.descending,
 			show_system: self.show_system,
 		}
 	}
@@ -247,7 +269,7 @@ impl HeadsetView {
 			}
 			let catalog = self.catalog.as_ref();
 			self.rows.push(Row {
-				size: usage.map(|u| u.get(&package.name).map_or(0, |u| u.obb + u.data)),
+				usage: usage.map(|u| u.get(&package.name).copied().unwrap_or_default()),
 				cover: catalog.and_then(|c| c.thumbnail(&package.name)),
 				latest: catalog.and_then(|c| {
 					c.games
@@ -263,12 +285,18 @@ impl HeadsetView {
 				},
 			});
 		}
-		match self.sort {
-			Sort::Name => self.rows.sort_by_cached_key(|r| r.app.name.to_lowercase()),
-			Sort::Size => self
-				.rows
-				.sort_by_key(|r| std::cmp::Reverse(r.size.unwrap_or(0))),
-		}
+		let (sort, descending) = (self.sort, self.descending);
+		self.rows.sort_by_cached_key(|r| r.app.name.to_lowercase());
+		// Stable, so ties keep the A to Z order from above.
+		self.rows.sort_by(|a, b| {
+			let order = match sort {
+				Sort::Name => a.app.name.to_lowercase().cmp(&b.app.name.to_lowercase()),
+				Sort::Package => a.app.package.cmp(&b.app.package),
+				Sort::Version => a.app.version_code.cmp(&b.app.version_code),
+				Sort::Size => size_of(a).cmp(&size_of(b)),
+			};
+			if descending { order.reverse() } else { order }
+		});
 	}
 
 	fn header(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -347,17 +375,6 @@ impl HeadsetView {
 	}
 
 	fn apps_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-		let sort_button = |id: &'static str, sort: Sort, label: String| {
-			Button::new(id)
-				.label(label)
-				.ghost()
-				.small()
-				.selected(self.sort == sort)
-				.on_click(cx.listener(move |this, _, _, cx| {
-					this.sort = sort;
-					cx.notify();
-				}))
-		};
 		h_flex()
 			.gap_3()
 			.px_5()
@@ -368,20 +385,6 @@ impl HeadsetView {
 					.cleanable(true)
 					.small()
 					.w(px(280.)),
-			)
-			.child(
-				h_flex()
-					.gap_1()
-					.child(sort_button(
-						"sort-size",
-						Sort::Size,
-						t!("hs.largest").into(),
-					))
-					.child(sort_button(
-						"sort-name",
-						Sort::Name,
-						t!("hs.by_name").into(),
-					)),
 			)
 			.child(
 				Switch::new("show-system")
@@ -414,35 +417,72 @@ impl HeadsetView {
 			)
 	}
 
-	fn apps_header_row(&self, cx: &App) -> impl IntoElement {
+	/// Picking the current column again flips the order.
+	fn set_sort(&mut self, sort: Sort, cx: &mut Context<Self>) {
+		if self.sort == sort {
+			self.descending = !self.descending;
+		} else {
+			self.sort = sort;
+			self.descending = sort.starts_descending();
+		}
+		cx.notify();
+	}
+
+	fn apps_header_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
+		let c = self.app_cols;
+		let theme = cx.theme().clone();
+		let (current, descending) = (self.sort, self.descending);
+		let column = |sort: Sort, label: String, right: bool| {
+			let arrow = (current == sort).then(|| {
+				Icon::new(if descending {
+					IconName::ChevronDown
+				} else {
+					IconName::ChevronUp
+				})
+				.xsmall()
+			});
+			h_flex()
+				.id(SharedString::from(format!("hs-col-{sort:?}")))
+				.gap_1()
+				.whitespace_nowrap()
+				.cursor_pointer()
+				.when(right, |d| d.justify_end())
+				.when(current == sort, |d| d.text_color(theme.foreground))
+				.hover(|s| s.text_color(theme.foreground))
+				.on_click(cx.listener(move |this, _, _, cx| this.set_sort(sort, cx)))
+				.child(div().min_w_0().truncate().child(label))
+				.children(arrow)
+		};
 		column_header(cx)
-			.child(div().w(px(COVER.0)))
+			.child(div().w(px(COVER.0)).flex_shrink_0())
 			.child(
-				div()
+				column(Sort::Name, t!("hs.col_name").into(), false)
 					.flex_1()
-					.min_w_0()
-					.child(t!("hs.col_name").into_owned()),
+					.min_w(px(NAME_MIN)),
 			)
-			.child(
-				div()
-					.flex_1()
-					.min_w_0()
-					.child(t!("hs.col_package").into_owned()),
-			)
-			.child(
-				div()
-					.w(px(VERSION_W))
-					.text_right()
-					.child(t!("hs.col_version").into_owned()),
-			)
-			.child(
-				div()
-					.w(px(SIZE_W))
-					.text_right()
-					.child(t!("hs.col_size").into_owned()),
-			)
-			.child(div().w(px(TAG_W)))
-			.child(div().w(px(MENU_W)))
+			.when(c[0], |h| {
+				h.child(
+					column(Sort::Package, t!("hs.col_package").into(), false)
+						.flex_1()
+						.min_w_0(),
+				)
+			})
+			.when(c[1], |h| {
+				h.child(
+					column(Sort::Version, t!("hs.col_version").into(), true)
+						.w(px(VERSION_W))
+						.flex_shrink_0(),
+				)
+			})
+			.when(c[2], |h| {
+				h.child(
+					column(Sort::Size, t!("hs.col_size").into(), true)
+						.w(px(SIZE_W))
+						.flex_shrink_0(),
+				)
+			})
+			.when(c[3], |h| h.child(div().w(px(TAG_W)).flex_shrink_0()))
+			.child(div().w(px(MENU_W)).flex_shrink_0())
 	}
 
 	fn render_app_rows(
@@ -490,46 +530,80 @@ impl HeadsetView {
 					.app
 					.version_code
 					.map_or_else(String::new, |v| format!("v{v}"));
-				let size = row.size.map_or_else(|| "...".to_owned(), format_bytes);
+				let size = row
+					.usage
+					.map_or_else(|| "...".to_owned(), |u| format_bytes(u.total()));
+				let breakdown = row.usage.map(|u| {
+					t!(
+						"hs.size_breakdown",
+						apk = format_bytes(u.apk),
+						obb = format_bytes(u.obb),
+						data = format_bytes(u.data)
+					)
+					.into_owned()
+				});
 				let has_name = row.app.name != row.app.package;
 
+				let c = self.app_cols;
 				table_row(("app-row", ix), ROW_HEIGHT, &theme)
 					.child(cover)
 					.child(
 						div()
 							.flex_1()
-							.min_w_0()
+							.min_w(px(NAME_MIN))
 							.truncate()
 							.child(row.app.name.clone()),
 					)
-					.child(
-						div()
-							.flex_1()
-							.min_w_0()
-							.truncate()
-							.text_sm()
-							.text_color(theme.muted_foreground)
-							.mono(cx)
-							.when(has_name, |d| d.child(row.app.package.clone())),
-					)
-					.child(
-						div()
-							.w(px(VERSION_W))
-							.text_right()
-							.text_sm()
-							.text_color(theme.muted_foreground)
-							.mono(cx)
-							.child(version),
-					)
-					.child(
-						div()
-							.w(px(SIZE_W))
-							.text_right()
-							.text_sm()
-							.mono(cx)
-							.child(size),
-					)
-					.child(h_flex().w(px(TAG_W)).justify_end().children(tag))
+					.when(c[0], |r| {
+						r.child(
+							div()
+								.flex_1()
+								.min_w_0()
+								.truncate()
+								.text_sm()
+								.text_color(theme.muted_foreground)
+								.mono(cx)
+								.when(has_name, |d| d.child(row.app.package.clone())),
+						)
+					})
+					.when(c[1], |r| {
+						r.child(
+							div()
+								.w(px(VERSION_W))
+								.flex_shrink_0()
+								.text_right()
+								.text_sm()
+								.text_color(theme.muted_foreground)
+								.mono(cx)
+								.child(version),
+						)
+					})
+					.when(c[2], |r| {
+						r.child(
+							div()
+								.id(("app-size", ix))
+								.w(px(SIZE_W))
+								.flex_shrink_0()
+								.text_right()
+								.text_sm()
+								.mono(cx)
+								.when_some(breakdown, |d, text| {
+									d.tooltip(move |window, cx| {
+										Tooltip::new(text.clone()).build(window, cx)
+									})
+								})
+								.child(size),
+						)
+					})
+					.when(c[3], |r| {
+						r.child(
+							h_flex()
+								.w(px(TAG_W))
+								.flex_shrink_0()
+								.justify_end()
+								.children(tag),
+						)
+					})
 					.child(self.app_menu(ix, &row.app))
 					.into_any_element()
 			})
@@ -901,7 +975,7 @@ impl HeadsetView {
 		let any = targets.iter().any(|(_, _, p)| p != &backup.meta.package);
 		Button::new(("restore-into", ix))
 			.label(t!("hs.restore_into"))
-			.ghost()
+			.outline()
 			.xsmall()
 			.dropdown_caret(true)
 			.disabled(!any || self.serial.is_none())
@@ -956,27 +1030,40 @@ impl HeadsetView {
 			return centered(t!("hs.no_backups").into_owned(), cx);
 		}
 		let theme = cx.theme().clone();
+		let c = self.backup_cols;
 		let header = column_header(cx)
 			.child(
 				div()
 					.flex_1()
-					.min_w_0()
+					.min_w(px(NAME_MIN))
 					.child(t!("hs.col_name").into_owned()),
 			)
-			.child(
-				div()
-					.flex_1()
-					.min_w_0()
-					.child(t!("hs.col_package").into_owned()),
-			)
-			.child(div().w(px(DATE_W)).child(t!("hs.col_date").into_owned()))
-			.child(
-				div()
-					.w(px(SIZE_W))
-					.text_right()
-					.child(t!("hs.col_size").into_owned()),
-			)
-			.child(div().w(px(BACKUP_ACTIONS_W)));
+			.when(c[0], |h| {
+				h.child(
+					div()
+						.flex_1()
+						.min_w_0()
+						.child(t!("hs.col_package").into_owned()),
+				)
+			})
+			.when(c[1], |h| {
+				h.child(
+					div()
+						.w(px(DATE_W))
+						.flex_shrink_0()
+						.child(t!("hs.col_date").into_owned()),
+				)
+			})
+			.when(c[2], |h| {
+				h.child(
+					div()
+						.w(px(SIZE_W))
+						.flex_shrink_0()
+						.text_right()
+						.child(t!("hs.col_size").into_owned()),
+				)
+			})
+			.child(div().w(px(BACKUP_ACTIONS_W)).flex_shrink_0());
 		let targets = Rc::new(self.restore_targets());
 		let rows = self.backups.iter().enumerate().map(|(ix, backup)| {
 			let meta = &backup.meta;
@@ -1038,29 +1125,50 @@ impl HeadsetView {
 					})
 			};
 			table_row(("backup-row", ix), ROW_HEIGHT, &theme)
-				.child(div().flex_1().min_w_0().truncate().child(meta.name.clone()))
 				.child(
 					div()
 						.flex_1()
-						.min_w_0()
+						.min_w(px(NAME_MIN))
 						.truncate()
-						.text_sm()
-						.text_color(theme.muted_foreground)
-						.mono(cx)
-						.child(meta.package.clone()),
+						.child(meta.name.clone()),
 				)
-				.child(div().w(px(DATE_W)).text_sm().mono(cx).child(date))
-				.child(
-					div()
-						.w(px(SIZE_W))
-						.text_right()
-						.text_sm()
-						.mono(cx)
-						.child(format_bytes(meta.bytes)),
-				)
+				.when(c[0], |r| {
+					r.child(
+						div()
+							.flex_1()
+							.min_w_0()
+							.truncate()
+							.text_sm()
+							.text_color(theme.muted_foreground)
+							.mono(cx)
+							.child(meta.package.clone()),
+					)
+				})
+				.when(c[1], |r| {
+					r.child(
+						div()
+							.w(px(DATE_W))
+							.flex_shrink_0()
+							.text_sm()
+							.mono(cx)
+							.child(date),
+					)
+				})
+				.when(c[2], |r| {
+					r.child(
+						div()
+							.w(px(SIZE_W))
+							.flex_shrink_0()
+							.text_right()
+							.text_sm()
+							.mono(cx)
+							.child(format_bytes(meta.bytes)),
+					)
+				})
 				.child(
 					h_flex()
 						.w(px(BACKUP_ACTIONS_W))
+						.flex_shrink_0()
 						.gap_1()
 						.justify_end()
 						.child(restore)
@@ -1093,7 +1201,7 @@ impl HeadsetView {
 }
 
 impl Render for HeadsetView {
-	fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+	fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
 		if self.serial.is_none() {
 			return centered(t!("dev.connect_hint").into_owned(), cx);
 		}
@@ -1101,9 +1209,26 @@ impl Render for HeadsetView {
 			return centered(t!("hs.loading").into_owned(), cx);
 		}
 		let body = match self.section {
-			Section::Apps => self.apps_section(cx),
+			Section::Apps => {
+				// The badge stays longest, the package goes first.
+				let fit = fit_columns(
+					content_width(window, 0.),
+					40. + COVER.0 + 16. + NAME_MIN + 16. + MENU_W,
+					&[(PACKAGE_MIN, 0), (VERSION_W, 1), (SIZE_W, 2), (TAG_W, 3)],
+				);
+				self.app_cols = [fit[0], fit[1], fit[2], fit[3]];
+				self.apps_section(cx)
+			}
 			Section::Device => self.device_section(cx),
-			Section::Backups => self.backups_section(cx),
+			Section::Backups => {
+				let fit = fit_columns(
+					content_width(window, 0.),
+					40. + NAME_MIN + 16. + BACKUP_ACTIONS_W,
+					&[(PACKAGE_MIN, 0), (DATE_W, 1), (SIZE_W, 2)],
+				);
+				self.backup_cols = [fit[0], fit[1], fit[2]];
+				self.backups_section(cx)
+			}
 		};
 		v_flex()
 			.size_full()
@@ -1111,6 +1236,10 @@ impl Render for HeadsetView {
 			.child(div().flex_1().min_h_0().child(body))
 			.into_any_element()
 	}
+}
+
+fn size_of(row: &Row) -> u64 {
+	row.usage.map_or(0, |u| u.total())
 }
 
 /// System apps clutter the list; the switch in the toolbar shows them.

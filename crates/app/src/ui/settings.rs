@@ -163,7 +163,7 @@ impl SettingsView {
 						.selected_text(limit.unit.label())
 						.width(70.0)
 						.show_ui(ui, |ui| {
-							for unit in [SpeedUnit::KiB, SpeedUnit::KB] {
+							for unit in [SpeedUnit::KB, SpeedUnit::MB] {
 								ui.selectable_value(&mut limit.unit, unit, unit.label());
 							}
 						});

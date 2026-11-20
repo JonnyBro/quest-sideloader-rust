@@ -32,9 +32,6 @@ tab.logs:
 tab.settings:
   en: "Settings"
   ru: "Настройки"
-proto.not_ported:
-  en: "Not in the prototype yet"
-  ru: "В прототип ещё не перенесено"
 dev.none:
   en: "No headset"
   ru: "Нет шлема"
@@ -50,18 +47,9 @@ dev.unauthorized:
 dev.offline:
   en: "offline"
   ru: "не в сети"
-hs.apps:
-  en: "Apps"
-  ru: "Приложения"
 hs.filter:
   en: "Filter"
   ru: "Фильтр"
-hs.largest:
-  en: "Largest"
-  ru: "Крупные"
-hs.by_name:
-  en: "Name"
-  ru: "Имя"
 hs.system:
   en: "System"
   ru: "Системные"
@@ -381,8 +369,8 @@ welcome.headset_text:
   en: "Turn on developer mode in the Meta Horizon app, then connect the headset with a USB cable and allow USB debugging when the headset asks. It then shows up on the Devices tab."
   ru: "Включите режим разработчика в приложении Meta Horizon, потом подключите шлем USB-кабелем и разрешите отладку по USB, когда шлем спросит. После этого он появится на вкладке Устройства."
 welcome.mirror_text:
-  en: "The library is optional. To download games from it, add a mirror in Settings."
-  ru: "Библиотека необязательна. Чтобы скачивать из неё игры, добавьте зеркало в Настройках."
+  en: "The catalog is optional. To download games from it, add a mirror in Settings."
+  ru: "Каталог необязателен. Чтобы скачивать из него игры, добавьте зеркало в Настройках."
 welcome.skip:
   en: "Skip"
   ru: "Пропустить"
@@ -425,12 +413,6 @@ set.default:
 common.browse:
   en: "Browse..."
   ru: "Обзор..."
-app.drop_to_install:
-  en: "Drop to install on %{name}"
-  ru: "Отпустите, чтобы установить на %{name}"
-app.drop_no_headset:
-  en: "Connect a headset (or select one) to install"
-  ru: "Подключите шлем (или выберите его), чтобы установить"
 app.no_headset:
   en: "No headset to install on: connect one or select it in Devices"
   ru: "Некуда устанавливать: подключите шлем или выберите его в Устройствах"
@@ -461,12 +443,6 @@ hs.restore_into_text:
 hs.copy_entry:
   en: "%{name} (%{package}), copy"
   ru: "%{name} (%{package}), копия"
-hs.incl_private:
-  en: ", incl. private data"
-  ru: ", с приватными данными"
-hs.backup_info:
-  en: "%{size}, %{n} file(s)%{private}"
-  ru: "%{size}, файлов: %{n}%{private}"
 common.open:
   en: "Open"
   ru: "Открыть"
@@ -482,3 +458,882 @@ hs.copy:
 hs.uninstall_button:
   en: "Uninstall..."
   ru: "Удалить..."
+con.banner:
+  en: "%{n} app(s) on %{device} are missing from the catalog or newer than its version."
+  ru: "Приложений на %{device}, которых нет в каталоге или которые новее его версии: %{n}."
+con.review:
+  en: "Review and share..."
+  ru: "Посмотреть и поделиться..."
+con.title:
+  en: "Share app versions with the catalog"
+  ru: "Поделиться версиями приложений с каталогом"
+con.intro:
+  en: "The catalog doesn't have these apps from %{device}, or has older versions. Sending them helps everyone who uses this mirror."
+  ru: "Этих приложений с %{device} нет в каталоге, или там более старые версии. Отправка поможет всем, кто пользуется этим зеркалом."
+con.privacy:
+  en: "An upload sends the app's APK and OBB files, the headset model, and an anonymous headset id (a SHA-256 hash of its serial number) to the mirror. Nothing is uploaded until you press Upload, and nothing on the headset changes."
+  ru: "Отправляются APK и OBB-файлы приложения, модель шлема и анонимный идентификатор шлема (SHA-256 от серийного номера). Ничего не отправится, пока вы не нажмёте \"Отправить\", и на самом шлеме ничего не меняется."
+con.nothing:
+  en: "Nothing left to share."
+  ru: "Больше нечем поделиться."
+con.not_in_library:
+  en: "v%{version}, not in the catalog"
+  ru: "v%{version}, нет в каталоге"
+con.newer:
+  en: "v%{version}, the catalog has v%{library}"
+  ru: "v%{version}, в каталоге v%{library}"
+con.queued:
+  en: "sent to the queue"
+  ru: "отправлено в очередь"
+con.upload:
+  en: "Upload"
+  ru: "Отправить"
+con.ignore:
+  en: "Don't ask again"
+  ru: "Больше не спрашивать"
+lib.no_mirror:
+  en: "No mirror yet. Add one in the Mirrors section of Settings."
+  ru: "Зеркала пока нет. Добавьте его в разделе \"Зеркала\" в Настройках."
+lib.downloading_list:
+  en: "Downloading the game list..."
+  ru: "Загрузка списка игр..."
+lib.load_failed:
+  en: "Could not load the game list. Check the mirror settings and press Sync."
+  ru: "Не удалось загрузить список игр. Проверьте настройки зеркала и нажмите \"Синхронизировать\"."
+lib.empty:
+  en: "The game list is empty. Press Sync."
+  ru: "Список игр пуст. Нажмите \"Синхронизировать\"."
+lib.search_keys:
+  en: "Search games or packages (Ctrl+F)"
+  ru: "Поиск игр или пакетов (Ctrl+F)"
+lib.view_list:
+  en: "List"
+  ru: "Список"
+lib.view_grid:
+  en: "Grid"
+  ru: "Сетка"
+lib.menu_details:
+  en: "Details"
+  ru: "Подробнее"
+lib.copy_name:
+  en: "Copy name"
+  ru: "Копировать название"
+lib.copy_release:
+  en: "Copy release name"
+  ru: "Копировать имя релиза"
+lib.copy_package:
+  en: "Copy package name"
+  ru: "Копировать имя пакета"
+lib.all:
+  en: "All"
+  ru: "Все"
+lib.installed:
+  en: "Installed"
+  ru: "Установленные"
+lib.updates:
+  en: "Updates"
+  ru: "Обновления"
+lib.connect_compare:
+  en: "Connect a headset to compare with its apps"
+  ru: "Подключите шлем, чтобы сравнить с его приложениями"
+lib.sort_name:
+  en: "Name"
+  ru: "Название"
+lib.sort_updated:
+  en: "Last updated"
+  ru: "Дата обновления"
+lib.sort_size:
+  en: "Size"
+  ru: "Размер"
+lib.sort_popularity:
+  en: "Popularity"
+  ru: "Популярность"
+lib.sort_package:
+  en: "Package name"
+  ru: "Имя пакета"
+lib.sort_version:
+  en: "Version"
+  ru: "Версия"
+lib.sort_status:
+  en: "Status on the headset"
+  ru: "Статус на шлеме"
+lib.col_installed:
+  en: "Installed"
+  ru: "Установлена"
+lib.low_space:
+  en: "Not enough space on the headset: the game needs about %{needed}, %{free} is free."
+  ru: "На шлеме мало места: игре нужно около %{needed}, свободно %{free}."
+lib.reverse:
+  en: "Reverse order"
+  ru: "Обратный порядок"
+lib.sync:
+  en: "Sync"
+  ru: "Синхронизировать"
+lib.sync_failed:
+  en: "Sync failed"
+  ru: "Синхронизация не удалась"
+lib.synced:
+  en: "%{n} games, synced %{ago}"
+  ru: "игр: %{n}, синхронизировано %{ago}"
+lib.no_match:
+  en: "Nothing matches the filter."
+  ru: "Ничего не подходит под фильтр."
+lib.col_game:
+  en: "Game"
+  ru: "Игра"
+lib.col_version:
+  en: "Version"
+  ru: "Версия"
+lib.col_size:
+  en: "Size"
+  ru: "Размер"
+lib.col_updated:
+  en: "Updated"
+  ru: "Обновлено"
+lib.col_status:
+  en: "Status"
+  ru: "Статус"
+lib.col_popularity:
+  en: "Popularity"
+  ru: "Популярность"
+lib.download_update:
+  en: "Download and update"
+  ru: "Скачать и обновить"
+lib.download_reinstall:
+  en: "Download and reinstall"
+  ru: "Скачать и переустановить"
+lib.download_install:
+  en: "Download and install"
+  ru: "Скачать и установить"
+lib.installs_on:
+  en: "Installs on %{name}"
+  ru: "Установит на %{name}"
+lib.connect_install:
+  en: "Connect a headset to install"
+  ru: "Подключите шлем, чтобы установить"
+lib.download_only:
+  en: "Download only"
+  ru: "Только скачать"
+lib.release:
+  en: "Release"
+  ru: "Релиз"
+lib.package:
+  en: "Package"
+  ru: "Пакет"
+lib.on_headset:
+  en: "On headset"
+  ru: "На шлеме"
+lib.note:
+  en: "Note"
+  ru: "Заметка"
+lib.status_installed:
+  en: "Installed"
+  ru: "Установлено"
+lib.status_update:
+  en: "Update available"
+  ru: "Есть обновление"
+lib.just_now:
+  en: "just now"
+  ru: "только что"
+lib.mins_ago:
+  en: "%{n} min ago"
+  ru: "%{n} мин назад"
+lib.hours_ago:
+  en: "%{n} h ago"
+  ru: "%{n} ч назад"
+lib.days_ago:
+  en: "%{n} days ago"
+  ru: "%{n} дн. назад"
+lib.low_pc_space:
+  en: "This computer may not have room: the download and its unpacked copy need about %{needed}, and %{free} is free."
+  ru: "На компьютере может не хватить места: скачанному архиву и распакованной копии нужно около %{needed}, а свободно %{free}."
+lib.no_match_title:
+  en: "Nothing found"
+  ru: "Ничего не нашлось"
+set.downloads_folder:
+  en: "Downloads folder"
+  ru: "Папка загрузок"
+set.after_installing:
+  en: "After installing"
+  ru: "После установки"
+set.notifications:
+  en: "Notifications"
+  ru: "Уведомления"
+set.notify:
+  en: "Notify when a task ends while the window is in the background"
+  ru: "Сообщать о завершении задачи, когда окно в фоне"
+set.parallel:
+  en: "Parallel downloads"
+  ru: "Параллельные загрузки"
+set.speed_limit:
+  en: "Speed limit"
+  ru: "Ограничение скорости"
+set.unlimited:
+  en: "unlimited"
+  ru: "без ограничения"
+set.all_downloads:
+  en: "for all downloads together"
+  ru: "на все загрузки вместе"
+set.adb_binary:
+  en: "ADB binary"
+  ru: "Программа ADB"
+set.adb_hint:
+  en: "adb from PATH"
+  ru: "adb из PATH"
+set.rclone_binary:
+  en: "rclone binary"
+  ru: "Программа rclone"
+set.rclone_hint:
+  en: "rclone from PATH (used for all mirrors)"
+  ru: "rclone из PATH (нужен для всех зеркал)"
+set.save:
+  en: "Save"
+  ru: "Сохранить"
+set.revert:
+  en: "Revert"
+  ru: "Отменить"
+set.unsaved:
+  en: "Unsaved changes"
+  ru: "Есть несохранённые изменения"
+set.use_path:
+  en: "Use PATH"
+  ru: "Из PATH"
+mir.default_name:
+  en: "Mirror"
+  ru: "Зеркало"
+mir.choose_config:
+  en: "choose an rclone config file"
+  ru: "выберите файл rclone-конфига"
+mir.copy_failed:
+  en: "could not copy the rclone config: %{error}"
+  ru: "не удалось скопировать rclone-конфиг: %{error}"
+mir.no_remotes:
+  en: "no remotes found in this file"
+  ru: "в этом файле нет remote"
+mir.cannot_read:
+  en: "cannot read %{path}: %{error}"
+  ru: "не удалось прочитать %{path}: %{error}"
+mir.heading:
+  en: "Mirrors"
+  ru: "Зеркала"
+mir.intro:
+  en: "Servers the catalog can be downloaded from; the highlighted one is in use."
+  ru: "Серверы, с которых загружается каталог; сейчас используется выделенный."
+mir.none:
+  en: "No mirrors yet."
+  ru: "Зеркал пока нет."
+mir.remove:
+  en: "Remove"
+  ru: "Удалить"
+mir.add_mirror:
+  en: "Add mirror..."
+  ru: "Добавить зеркало..."
+mir.kind_json:
+  en: "Server config (JSON)"
+  ru: "Конфиг сервера (JSON)"
+mir.kind_rclone:
+  en: "rclone config"
+  ru: "rclone-конфиг"
+mir.name:
+  en: "Name"
+  ru: "Имя"
+mir.config:
+  en: "Config"
+  ru: "Конфиг"
+mir.load_file:
+  en: "Load from file..."
+  ru: "Загрузить из файла..."
+mir.base_uri:
+  en: "Base URI"
+  ru: "Base URI"
+mir.password:
+  en: "Password"
+  ru: "Пароль"
+mir.password_hint:
+  en: "base64, as in VRP configs"
+  ru: "base64, как в конфигах VRP"
+mir.config_file:
+  en: "Config file"
+  ru: "Файл конфига"
+mir.none_selected:
+  en: "none"
+  ru: "не выбран"
+mir.choose:
+  en: "Choose..."
+  ru: "Выбрать..."
+mir.remote:
+  en: "Remote"
+  ru: "Remote"
+mir.archive_password_hint:
+  en: "base64 archive password"
+  ru: "пароль архивов в base64"
+mir.add:
+  en: "Add"
+  ru: "Добавить"
+keys.intro:
+  en: "Each renamed copy is signed with its own key. Android only installs an update over a copy signed with the same key, so back these files up: without its key, a copy can only be uninstalled and installed again. Apps with a key here are never offered for upload to the mirror."
+  ru: "Каждая копия подписана своим ключом. Android ставит обновление поверх копии только с тем же ключом, поэтому сохраните эти файлы: без них копию можно только удалить и поставить заново. Приложения с ключом здесь никогда не предлагаются к загрузке на зеркало."
+keys.none:
+  en: "No keys yet; one is made when the first copy of a package is built."
+  ru: "Ключей пока нет; ключ создаётся при сборке первой копии пакета."
+keys.export:
+  en: "Export..."
+  ru: "Экспорт..."
+keys.import:
+  en: "Import key..."
+  ru: "Импортировать ключ..."
+keys.imported:
+  en: "Key for %{package} imported"
+  ru: "Ключ для %{package} импортирован"
+keys.exported:
+  en: "Key saved to %{path}"
+  ru: "Ключ сохранён в %{path}"
+chk.button:
+  en: "Check all"
+  ru: "Проверить всё"
+chk.hint:
+  en: "See at a glance whether everything is ready to install games"
+  ru: "Сразу видно, всё ли готово для установки игр"
+chk.title:
+  en: "Ready to install?"
+  ru: "Всё готово к установке?"
+chk.ok:
+  en: "OK"
+  ru: "OK"
+chk.warning:
+  en: "Check"
+  ru: "Внимание"
+chk.problem:
+  en: "Problem"
+  ru: "Проблема"
+chk.skipped:
+  en: "Not set"
+  ru: "Не настроено"
+chk.adb_ok:
+  en: "adb is running"
+  ru: "adb работает"
+chk.adb_starting:
+  en: "adb is starting"
+  ru: "adb запускается"
+chk.adb_missing:
+  en: "adb isn't running. To install it, click \"adb\" in the status bar."
+  ru: "adb не работает. Чтобы установить его, нажмите \"adb\" в строке состояния."
+chk.headset_ok:
+  en: "%{name} is connected"
+  ru: "%{name} подключён"
+chk.headset_waiting:
+  en: "The headset is connected but not ready"
+  ru: "Шлем подключён, но не готов"
+chk.headset_none:
+  en: "No headset connected"
+  ru: "Шлем не подключён"
+chk.headset_none_detail:
+  en: "The Headset tab shows how to connect it."
+  ru: "Как подключить, показано на вкладке Шлем."
+chk.headset_space:
+  en: "%{free} free on the headset"
+  ru: "На шлеме свободно %{free}"
+chk.space_detail:
+  en: "Big games may not fit. Uninstall what you don't play on the Headset tab."
+  ru: "Большие игры могут не поместиться. Удалите ненужное на вкладке Шлем."
+chk.battery:
+  en: "Battery %{level}%"
+  ru: "Заряд %{level}%"
+chk.pc_space:
+  en: "%{free} free for downloads on this computer"
+  ru: "На компьютере для загрузок свободно %{free}"
+chk.pc_space_detail:
+  en: "Delete releases you no longer need on the Downloads tab, or pick another folder in Settings."
+  ru: "Удалите ненужные релизы на вкладке Загрузки или выберите другую папку в Настройках."
+chk.pc_space_unknown:
+  en: "Can't tell how much space the downloads folder has"
+  ru: "Не удалось узнать, сколько места в папке загрузок"
+chk.mirror_none:
+  en: "No mirror added"
+  ru: "Зеркало не добавлено"
+chk.mirror_none_detail:
+  en: "Only the Catalog needs it; files from the computer install without one."
+  ru: "Нужно только для Каталога; файлы с компьютера ставятся и без него."
+chk.mirror_failed:
+  en: "The mirror didn't sync"
+  ru: "Зеркало не синхронизировалось"
+chk.mirror_syncing:
+  en: "The mirror is syncing"
+  ru: "Зеркало синхронизируется"
+chk.mirror_ok:
+  en: "Mirror %{name}: %{n} games"
+  ru: "Зеркало %{name}: игр %{n}"
+chk.mirror_empty:
+  en: "Mirror %{name} hasn't synced yet"
+  ru: "Зеркало %{name} ещё не синхронизировано"
+set.cat_appearance:
+  en: "Appearance and language"
+  ru: "Вид и язык"
+set.cat_downloads:
+  en: "Downloads"
+  ru: "Загрузки"
+set.cat_tools:
+  en: "Tools"
+  ru: "Инструменты"
+set.cat_keys:
+  en: "Signing keys"
+  ru: "Ключи подписи"
+set.instant_hint:
+  en: "These apply and save right away."
+  ru: "Применяются и сохраняются сразу."
+dl.summary:
+  en: "%{n} release(s), %{size}"
+  ru: "релизов: %{n}, %{size}"
+dl.empty:
+  en: "Games downloaded from the Catalog are kept here when \"Keep downloaded files\" is on in Settings."
+  ru: "Игры из Каталога остаются здесь, если в Настройках включено \"Сохранять скачанные файлы\"."
+dl.col_release:
+  en: "Release"
+  ru: "Релиз"
+dl.col_size:
+  en: "Size"
+  ru: "Размер"
+dl.col_date:
+  en: "Downloaded"
+  ru: "Скачано"
+dl.connect_first:
+  en: "Connect a headset first"
+  ru: "Сначала подключите шлем"
+dl.delete_title:
+  en: "Delete this release?"
+  ru: "Удалить этот релиз?"
+dl.delete_text:
+  en: "%{name} (%{size}) will be removed from the downloads folder. It stays on the headset if it is installed."
+  ru: "%{name} (%{size}) будет удалён из папки загрузок. На шлеме он останется, если установлен."
+tasks.clear:
+  en: "Clear finished"
+  ru: "Убрать завершённые"
+tasks.kind_download_install:
+  en: "download and install, %{serial}"
+  ru: "загрузка и установка, %{serial}"
+tasks.kind_download:
+  en: "download only"
+  ru: "только загрузка"
+tasks.kind_install_on:
+  en: "install, %{serial}"
+  ru: "установка, %{serial}"
+tasks.kind_install:
+  en: "install"
+  ru: "установка"
+tasks.kind_upload_on:
+  en: "upload to the catalog, %{serial}"
+  ru: "отправка в каталог, %{serial}"
+tasks.kind_upload:
+  en: "upload to the catalog"
+  ru: "отправка в каталог"
+tasks.kind_backup:
+  en: "save backup"
+  ru: "бэкап сохранений"
+tasks.kind_restore:
+  en: "save restore"
+  ru: "восстановление сохранений"
+tasks.kind_uninstall:
+  en: "uninstall"
+  ru: "удаление"
+tasks.dismiss:
+  en: "Dismiss"
+  ru: "Убрать"
+tasks.later:
+  en: "Later"
+  ru: "Позже"
+tasks.sooner:
+  en: "Sooner"
+  ru: "Раньше"
+tasks.cancelled:
+  en: "Cancelled"
+  ru: "Отменено"
+tasks.reinstall:
+  en: "Reinstall keeping saves"
+  ru: "Переустановить с сохранениями"
+tasks.reinstall_hint:
+  en: "Backs up the saves, uninstalls the installed app, installs this one and restores the saves"
+  ru: "Делает бэкап сохранений, удаляет установленное приложение, ставит это и восстанавливает сохранения"
+tasks.warnings:
+  en: "%{n} warning(s)"
+  ru: "предупреждений: %{n}"
+tasks.kind_adb:
+  en: "ADB setup"
+  ru: "установка ADB"
+tasks.kind_rclone:
+  en: "rclone setup"
+  ru: "установка rclone"
+dl.copy_hint:
+  en: "Build a copy under another package name, to install beside the original"
+  ru: "Собрать копию с другим именем пакета, чтобы поставить рядом с оригиналом"
+tasks.kind_rename:
+  en: "renamed copy"
+  ru: "копия с другим пакетом"
+dl.details:
+  en: "Details"
+  ru: "Подробнее"
+dl.empty_title:
+  en: "No downloads yet"
+  ru: "Загрузок пока нет"
+common.install:
+  en: "Install"
+  ru: "Установить"
+common.install_on:
+  en: "Install on %{name}"
+  ru: "Установить на %{name}"
+common.open_folder:
+  en: "Open folder"
+  ru: "Открыть папку"
+common.search:
+  en: "Search"
+  ru: "Поиск"
+common.refresh:
+  en: "Refresh"
+  ru: "Обновить"
+dl.queue:
+  en: "Queue"
+  ru: "Очередь"
+dl.on_disk:
+  en: "On disk"
+  ru: "На диске"
+hs.size_breakdown:
+  en: "APK %{apk}, OBB %{obb}, data %{data}"
+  ru: "APK %{apk}, OBB %{obb}, данные %{data}"
+rn.heading:
+  en: "Renamed copies"
+  ru: "Копии с другим пакетом"
+rn.add_folder:
+  en: "Add folder..."
+  ru: "Добавить папку..."
+rn.add_apk:
+  en: "Add APK..."
+  ru: "Добавить APK..."
+rn.empty:
+  en: "Add a release folder or an APK here, or use Make a copy on the Downloads tab."
+  ru: "Добавьте папку релиза или APK здесь или нажмите \"Сделать копию\" на вкладке Загрузки."
+rn.select:
+  en: "Select a release on the left."
+  ru: "Выберите релиз слева."
+rn.remove:
+  en: "Remove from the list"
+  ru: "Убрать из списка"
+rn.analyzing:
+  en: "Reading..."
+  ru: "Чтение..."
+rn.analyzing_long:
+  en: "Reading the APK. Large games take a while, since every native library is checked."
+  ru: "Чтение APK. Для больших игр это занимает время: проверяется каждая нативная библиотека."
+rn.failed:
+  en: "Can't be read"
+  ru: "Не читается"
+rn.reanalyze:
+  en: "Read again"
+  ru: "Прочитать заново"
+rn.package:
+  en: "Package"
+  ru: "Пакет"
+rn.version:
+  en: "Version"
+  ru: "Версия"
+rn.new_package:
+  en: "Copy's package"
+  ru: "Пакет копии"
+rn.suggest:
+  en: "Default"
+  ru: "По умолчанию"
+rn.manifest:
+  en: "Manifest: %{n} changes"
+  ru: "Манифест: изменений %{n}"
+rn.expanded:
+  en: "Written relative to the package; spelled out in full so it keeps pointing at the same class"
+  ru: "Записано относительно пакета; раскрывается полностью, чтобы указывать на тот же класс"
+rn.resources:
+  en: "Resource strings: %{n}"
+  ru: "Строки ресурсов: %{n}"
+rn.obb:
+  en: "OBB files: %{n}"
+  ru: "Файлы OBB: %{n}"
+rn.script:
+  en: "install.txt lines: %{n}"
+  ru: "Строки install.txt: %{n}"
+rn.dex_warning:
+  en: "The code has %{n} strings with the package name. They stay as they are, so the copy may still use some of the original's names (for example a file provider)."
+  ru: "В коде %{n} строк с именем пакета. Они останутся прежними, поэтому копия может обращаться к именам оригинала (например, к провайдеру файлов)."
+rn.dex_examples:
+  en: "Strings in the code"
+  ru: "Строки в коде"
+rn.firebase:
+  en: "The game uses Firebase set up for the original package; in the copy it may not work."
+  ru: "Игра использует Firebase, настроенный на оригинальный пакет; в копии он может не работать."
+rn.other_apks:
+  en: "The release has more APKs (%{n}); only the first one is renamed."
+  ru: "В релизе есть ещё APK (%{n}); переименуется только первый."
+rn.jni:
+  en: "%{n} native libraries call Java classes of the package. Classes keep their names, so this is fine."
+  ru: "Нативных библиотек, вызывающих Java-классы пакета: %{n}. Классы сохраняют имена, так что это не мешает."
+rn.loader:
+  en: "Has the Platform SDK loader (lib/arm64-v8a/libovrplatformloader.so), SHA-256:"
+  ru: "Есть загрузчик Platform SDK (lib/arm64-v8a/libovrplatformloader.so), SHA-256:"
+rn.build:
+  en: "Build copy"
+  ru: "Собрать копию"
+rn.use_loader:
+  en: "Replace the Platform SDK loader, so the game starts on older firmware"
+  ru: "Заменить загрузчик Platform SDK, чтобы игра запускалась на старых прошивках"
+rn.pick_loader:
+  en: "Choose file..."
+  ru: "Выбрать файл..."
+rn.no_loader_file:
+  en: "No file chosen"
+  ru: "Файл не выбран"
+rn.loader_hint:
+  en: "A patched libovrplatformloader.so you got yourself, for example from the eventhorizon project. The app doesn't download it; the report in the copy's folder lists both files' SHA-256."
+  ru: "Пропатченный libovrplatformloader.so, который вы взяли сами, например из проекта eventhorizon. Программа его не скачивает; в отчёте в папке копии записаны SHA-256 обоих файлов."
+rn.output:
+  en: "The copy goes to %{path}"
+  ru: "Копия будет в %{path}"
+rn.output_exists:
+  en: "That folder already exists; delete it on the Downloads tab to build again"
+  ru: "Такая папка уже есть; удалите её на вкладке Загрузки, чтобы собрать заново"
+rn.started:
+  en: "Building; progress is on the Downloads tab"
+  ru: "Идёт сборка; ход виден на вкладке Загрузки"
+rn.debuggable:
+  en: "Make the copy debuggable, so backups get all its saves"
+  ru: "Сделать копию debuggable, чтобы бэкап брал все её сохранения"
+rn.debuggable_hint:
+  en: "Sets android:debuggable, so run-as works for the copy: backups then include its private data and files only the game may read. Some games behave differently or refuse to start when debuggable."
+  ru: "Ставит android:debuggable, и для копии начинает работать run-as: в бэкап попадают её приватные данные и файлы, которые может читать только сама игра. Некоторые игры ведут себя иначе или не запускаются, если они debuggable."
+rn.already_debuggable:
+  en: "The game is already debuggable: backups get all its saves."
+  ru: "Игра уже debuggable: бэкап берёт все её сохранения."
+rn.empty_title:
+  en: "Nothing to copy yet"
+  ru: "Пока нечего копировать"
+dev.starting:
+  en: "Starting ADB..."
+  ru: "Запуск ADB..."
+dev.running:
+  en: "ADB server running (protocol %{version})"
+  ru: "Сервер ADB работает (протокол %{version})"
+dev.unavailable:
+  en: "ADB unavailable: %{error}"
+  ru: "ADB недоступен: %{error}"
+dev.connect:
+  en: "Connect"
+  ru: "Подключить"
+dev.wifi:
+  en: "Wi-Fi:"
+  ru: "Wi-Fi:"
+dev.disconnect:
+  en: "Disconnect"
+  ru: "Отключить"
+dev.reading:
+  en: "Reading device info..."
+  ru: "Чтение данных устройства..."
+dev.state_online:
+  en: "connected"
+  ru: "подключено"
+dev.state_offline:
+  en: "offline"
+  ru: "не в сети"
+dev.state_unauthorized:
+  en: "unauthorized"
+  ru: "не авторизовано"
+dev.state_authorizing:
+  en: "authorizing"
+  ru: "авторизация"
+dev.state_connecting:
+  en: "connecting"
+  ru: "подключение"
+dev.state_no_permissions:
+  en: "no USB access"
+  ru: "нет доступа к USB"
+dev.hint_unauthorized:
+  en: "Put on the headset and allow USB debugging for this computer."
+  ru: "Наденьте шлем и разрешите отладку по USB для этого компьютера."
+dev.hint_waiting:
+  en: "Waiting for the device..."
+  ru: "Ожидание устройства..."
+dev.hint_offline:
+  en: "The device is offline. Reconnect the cable or restart the headset."
+  ru: "Устройство не в сети. Переподключите кабель или перезагрузите шлем."
+dev.hint_no_permissions:
+  en: "This user has no access to the USB device. Install udev rules for Android devices (for example the android-udev package) and replug the headset."
+  ru: "У этого пользователя нет доступа к USB-устройству. Установите udev-правила для Android-устройств (например, пакет android-udev) и переподключите шлем."
+dev.hint_other:
+  en: "The device is in an unsupported state."
+  ru: "Устройство в неподдерживаемом состоянии."
+dev.battery:
+  en: "Battery"
+  ru: "Батарея"
+dev.charging:
+  en: ", charging"
+  ru: ", заряжается"
+dev.unknown:
+  en: "unknown"
+  ru: "неизвестно"
+dev.storage:
+  en: "Storage"
+  ru: "Память"
+dev.set_up_adb:
+  en: "Set up ADB..."
+  ru: "Установить ADB..."
+console.on:
+  en: "adb shell on %{name}"
+  ru: "adb shell на %{name}"
+console.no_headset:
+  en: "Connect a headset to run commands on it."
+  ru: "Подключите шлем, чтобы выполнять на нём команды."
+console.hint:
+  en: "Shell command, for example pm list packages -3"
+  ru: "Команда shell, например pm list packages -3"
+console.run:
+  en: "Run"
+  ru: "Выполнить"
+console.stop:
+  en: "Stop"
+  ru: "Стоп"
+console.clear:
+  en: "Clear"
+  ru: "Очистить"
+console.copy:
+  en: "Copy all"
+  ru: "Копировать всё"
+console.empty:
+  en: "Commands run on the headset as with adb shell. Up and Down go through earlier commands."
+  ru: "Команды выполняются на шлеме, как через adb shell. Стрелки вверх и вниз листают прошлые команды."
+console.exit_code:
+  en: "exit code %{code}"
+  ru: "код выхода %{code}"
+console.ended:
+  en: "connection closed"
+  ru: "соединение закрыто"
+console.only_shell:
+  en: "Only shell commands run here; for other adb commands use the Devices and Headset tabs."
+  ru: "Здесь выполняются только команды shell; для других команд adb есть вкладки Устройства и Шлем."
+ins.heading:
+  en: "APK inspector"
+  ru: "Инспектор APK"
+ins.empty:
+  en: "Open an APK or a release folder here, or use Details on the Downloads tab."
+  ru: "Откройте APK или папку релиза здесь или нажмите \"Подробнее\" на вкладке Загрузки."
+ins.reading:
+  en: "Reading the APK..."
+  ru: "Чтение APK..."
+ins.app:
+  en: "App"
+  ru: "Приложение"
+ins.label:
+  en: "Name"
+  ru: "Название"
+ins.size:
+  en: "Size"
+  ru: "Размер"
+ins.sdk:
+  en: "Android SDK"
+  ru: "Android SDK"
+ins.sdk_values:
+  en: "min %{min}, target %{target}, compiled with %{compile}"
+  ru: "минимум %{min}, целевой %{target}, собрано с %{compile}"
+ins.devices:
+  en: "Headsets"
+  ru: "Шлемы"
+ins.loader:
+  en: "Platform SDK loader"
+  ru: "Загрузчик Platform SDK"
+ins.signature:
+  en: "Signature"
+  ru: "Подпись"
+ins.unsigned:
+  en: "not signed"
+  ru: "не подписан"
+ins.schemes:
+  en: "Schemes"
+  ru: "Схемы"
+ins.v2_check:
+  en: "v2 check"
+  ru: "Проверка v2"
+ins.valid:
+  en: "valid"
+  ru: "в порядке"
+ins.invalid:
+  en: "fails: %{error}"
+  ru: "не проходит: %{error}"
+ins.certificate:
+  en: "Certificate"
+  ru: "Сертификат"
+ins.ours:
+  en: "Signed with the key of the renamed copy %{package} made here."
+  ru: "Подписан ключом копии %{package}, собранной в этой программе."
+ins.contents:
+  en: "Contents"
+  ru: "Содержимое"
+ins.abis:
+  en: "Architectures"
+  ru: "Архитектуры"
+ins.locales:
+  en: "Languages"
+  ru: "Языки"
+ins.native:
+  en: "Native libraries"
+  ru: "Нативные библиотеки"
+ins.entries:
+  en: "Files in the APK"
+  ru: "Файлов в APK"
+ins.components:
+  en: "Components"
+  ru: "Компоненты"
+ins.permissions:
+  en: "Permissions: %{n}"
+  ru: "Разрешения: %{n}"
+ins.features:
+  en: "Features: %{n}"
+  ru: "Возможности (features): %{n}"
+ins.optional:
+  en: "optional"
+  ru: "необязательно"
+ins.hashes:
+  en: "Hashes"
+  ru: "Хэши"
+help.no_adb_title:
+  en: "adb isn't set up"
+  ru: "adb не установлен"
+help.no_adb:
+  en: "The app talks to the headset through adb from Google's Android tools. It can download it for you."
+  ru: "Программа общается со шлемом через adb из инструментов Android от Google. Его можно скачать прямо отсюда."
+help.unauthorized_title:
+  en: "The headset is waiting for your permission"
+  ru: "Шлем ждёт вашего разрешения"
+help.unauthorized:
+  en: "Put on the headset: there's a window asking to allow USB debugging. Tick \"Always allow from this computer\" and press Allow."
+  ru: "Наденьте шлем: там открыто окно с запросом на отладку по USB. Отметьте \"Всегда разрешать с этого компьютера\" и нажмите \"Разрешить\"."
+help.waiting_title:
+  en: "The headset isn't ready yet"
+  ru: "Шлем ещё не готов"
+help.none_title:
+  en: "Connect your headset"
+  ru: "Подключите шлем"
+help.step_dev_mode:
+  en: "Turn on developer mode in the Meta Horizon app on your phone: Menu, Devices, your headset, Headset settings, Developer mode."
+  ru: "Включите режим разработчика в приложении Meta Horizon на телефоне: Меню, Устройства, ваш шлем, Настройки шлема, Режим разработчика."
+help.step_cable:
+  en: "Connect the headset to this computer with a USB cable that carries data (some cables only charge)."
+  ru: "Подключите шлем к компьютеру USB-кабелем с передачей данных (некоторые кабели только заряжают)."
+help.step_allow:
+  en: "Put on the headset and allow USB debugging when it asks."
+  ru: "Наденьте шлем и разрешите отладку по USB, когда он спросит."
+help.windows_driver:
+  en: "On Windows the headset also needs Meta's ADB driver:"
+  ru: "На Windows шлему также нужен ADB-драйвер от Meta:"
+help.or_wifi:
+  en: "Already turned on wireless ADB? Connect by its address instead:"
+  ru: "Уже включали беспроводной ADB? Можно подключиться по адресу:"
+ins.empty_title:
+  en: "No APK open"
+  ru: "APK не открыт"
+common.yes:
+  en: "Yes"
+  ru: "Да"
+common.no:
+  en: "No"
+  ru: "Нет"

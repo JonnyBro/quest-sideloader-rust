@@ -19,12 +19,27 @@ pub enum RebootMode {
 	Bootloader,
 }
 
-/// Space an app takes on shared storage, in bytes.
+/// Space an app takes, in bytes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct AppUsage {
+	/// `base.apk` only: split APKs and unpacked native libraries aren't
+	/// readable without root.
+	pub apk: u64,
 	pub obb: u64,
 	pub data: u64,
 }
+
+impl AppUsage {
+	pub fn total(&self) -> u64 {
+		self.apk + self.obb + self.data
+	}
+}
+
+/// Prints `<bytes> <package>` for each third-party app's `base.apk`. One
+/// command whatever the number of apps; `stat` reads the file through
+/// directories the shell user may enter but not list.
+const APK_SIZES: &str = "pm list packages -f -3 | while IFS= read -r line; do \
+	p=${line#package:}; echo \"$(stat -c %s \"${p%=*}\" 2>/dev/null) ${p##*=}\"; done";
 
 /// More than [`super::DeviceInfo`]: what the headset tab shows.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -183,12 +198,23 @@ impl Device {
 			.map(drop)
 	}
 
-	/// Space each app's OBB and `Android/data` folders take, by package.
+	/// Space each app's APK, OBB and `Android/data` folders take, by package.
 	pub async fn app_usage(&self) -> Result<HashMap<String, AppUsage>, AdbError> {
-		let out = self
-			.shell("du -sk /sdcard/Android/obb/* /sdcard/Android/data/* 2>/dev/null")
-			.await?;
-		Ok(parse_du(&out.stdout))
+		let (shared, apks) = tokio::join!(
+			self.shell("du -sk /sdcard/Android/obb/* /sdcard/Android/data/* 2>/dev/null"),
+			self.shell(APK_SIZES),
+		);
+		let mut usage = parse_du(&shared?.stdout);
+		// Sizes without the APK are still worth showing.
+		match apks {
+			Ok(out) => {
+				for (package, bytes) in parse_apk_sizes(&out.stdout) {
+					usage.entry(package).or_default().apk = bytes;
+				}
+			}
+			Err(e) => tracing::warn!("could not read APK sizes: {e}"),
+		}
+		Ok(usage)
 	}
 
 	pub async fn details(&self) -> Result<DeviceDetails, AdbError> {
@@ -296,6 +322,20 @@ fn parse_du(text: &str) -> HashMap<String, AppUsage> {
 	usage
 }
 
+/// `<bytes> <package>` lines; a line without a size (no `stat` output) is skipped.
+fn parse_apk_sizes(text: &str) -> Vec<(String, u64)> {
+	text.lines()
+		.filter_map(|line| {
+			let (bytes, package) = line.trim().split_once(' ')?;
+			let package = package.trim();
+			if package.is_empty() {
+				return None;
+			}
+			Some((package.to_owned(), bytes.parse().ok()?))
+		})
+		.collect()
+}
+
 fn parse_uptime(text: &str) -> Option<Duration> {
 	let secs: f64 = text.split_whitespace().next()?.parse().ok()?;
 	Some(Duration::from_secs_f64(secs.max(0.0)))
@@ -364,11 +404,28 @@ mod tests {
 		assert_eq!(
 			usage["com.Armature.VR4"],
 			AppUsage {
+				apk: 0,
 				obb: 3_736_504 * 1024,
 				data: 12 * 1024
 			}
 		);
 		assert_eq!(usage["com.discord"].obb, 0);
+	}
+
+	#[test]
+	fn apk_sizes() {
+		let text = "123456789 com.beatgames.beatsaber
+			 com.broken
+			28672 moe.shizuku.privileged.api
+			junk
+";
+		assert_eq!(
+			parse_apk_sizes(text),
+			[
+				("com.beatgames.beatsaber".to_owned(), 123_456_789),
+				("moe.shizuku.privileged.api".to_owned(), 28_672),
+			]
+		);
 	}
 
 	#[test]

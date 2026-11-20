@@ -139,3 +139,49 @@ pub fn open_folder(path: &Path) {
 		tracing::warn!("could not open {}: {e}", path.display());
 	}
 }
+
+/// The sidebar's width; views measure what's left of the window from it.
+pub const SIDEBAR_WIDTH: f32 = 240.;
+/// The gap `table_row` and `column_header` put between columns.
+const COLUMN_GAP: f32 = 16.;
+
+/// Width a view's content has: the window minus the sidebar and `beside`, a
+/// side panel. gpui knows element sizes only after layout, so this goes by the
+/// window.
+pub fn content_width(window: &Window, beside: f32) -> f32 {
+	window.viewport_size().width.as_f32() - SIDEBAR_WIDTH - beside
+}
+
+/// Which optional columns fit in `width`. `fixed` is what always shows (row
+/// padding, cover, the name column's minimum); each column is (width,
+/// priority), and the lowest priorities are hidden first.
+pub fn fit_columns(width: f32, fixed: f32, columns: &[(f32, u8)]) -> Vec<bool> {
+	let mut shown = vec![true; columns.len()];
+	let mut used = fixed + columns.iter().map(|(w, _)| w + COLUMN_GAP).sum::<f32>();
+	let mut order: Vec<usize> = (0..columns.len()).collect();
+	order.sort_by_key(|&i| columns[i].1);
+	for i in order {
+		if used <= width {
+			break;
+		}
+		shown[i] = false;
+		used -= columns[i].0 + COLUMN_GAP;
+	}
+	shown
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use ::core::prelude::v1::test;
+
+	#[test]
+	fn hides_lowest_priority_first() {
+		let columns = [(100., 2), (100., 0), (100., 1)];
+		assert_eq!(fit_columns(1000., 100., &columns), [true, true, true]);
+		// 100 + 3 * 116 = 448; dropping the priority-0 column leaves 332.
+		assert_eq!(fit_columns(400., 100., &columns), [true, false, true]);
+		assert_eq!(fit_columns(250., 100., &columns), [true, false, false]);
+		assert_eq!(fit_columns(50., 100., &columns), [false, false, false]);
+	}
+}

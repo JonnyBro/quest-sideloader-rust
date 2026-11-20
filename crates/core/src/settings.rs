@@ -11,25 +11,30 @@ pub const MAX_CONCURRENT_DOWNLOADS: u8 = 5;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SpeedUnit {
-	/// 1024 bytes.
-	#[default]
-	KiB,
 	/// 1000 bytes.
+	#[default]
 	KB,
+	/// 1 000 000 bytes.
+	MB,
+	/// 1024 bytes. Older settings files have it; [`Settings::normalize`]
+	/// turns it into KB.
+	KiB,
 }
 
 impl SpeedUnit {
 	pub fn bytes(self) -> u64 {
 		match self {
-			Self::KiB => 1024,
 			Self::KB => 1000,
+			Self::MB => 1_000_000,
+			Self::KiB => 1024,
 		}
 	}
 
 	pub fn label(self) -> &'static str {
 		match self {
-			Self::KiB => "KiB/s",
 			Self::KB => "KB/s",
+			Self::MB => "MB/s",
+			Self::KiB => "KiB/s",
 		}
 	}
 }
@@ -147,6 +152,13 @@ impl Settings {
 	}
 
 	pub fn normalize(&mut self) {
+		if self.download_limit.unit == SpeedUnit::KiB {
+			let bytes = self.download_limit.bytes_per_sec();
+			self.download_limit = SpeedLimit {
+				value: u32::try_from(bytes.div_ceil(1000)).unwrap_or(u32::MAX),
+				unit: SpeedUnit::KB,
+			};
+		}
 		self.max_concurrent_downloads = self
 			.max_concurrent_downloads
 			.clamp(1, MAX_CONCURRENT_DOWNLOADS);
@@ -396,16 +408,16 @@ mod tests {
 
 	#[test]
 	fn speed_limit_units() {
-		let kib = SpeedLimit {
-			value: 2,
-			unit: SpeedUnit::KiB,
-		};
 		let kb = SpeedLimit {
 			value: 2,
 			unit: SpeedUnit::KB,
 		};
-		assert_eq!(kib.bytes_per_sec(), 2048);
+		let mb = SpeedLimit {
+			value: 3,
+			unit: SpeedUnit::MB,
+		};
 		assert_eq!(kb.bytes_per_sec(), 2000);
+		assert_eq!(mb.bytes_per_sec(), 3_000_000);
 		assert_eq!(SpeedLimit::default().bytes_per_sec(), 0);
 		let text = toml::to_string(&Settings {
 			download_limit: kb,
@@ -413,5 +425,24 @@ mod tests {
 		})
 		.unwrap();
 		assert!(text.contains("unit = \"kb\""), "{text}");
+	}
+
+	#[test]
+	fn old_kib_limits_become_kb() {
+		let mut settings = Settings {
+			download_limit: SpeedLimit {
+				value: 2,
+				unit: SpeedUnit::KiB,
+			},
+			..Settings::default()
+		};
+		settings.normalize();
+		assert_eq!(
+			settings.download_limit,
+			SpeedLimit {
+				value: 3,
+				unit: SpeedUnit::KB,
+			}
+		);
 	}
 }

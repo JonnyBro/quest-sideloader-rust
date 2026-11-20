@@ -53,12 +53,16 @@ pub struct UiState {
 	/// The Wi-Fi headset of the last run, reconnected on start.
 	pub last_wireless: Option<String>,
 	pub headset: HeadsetPrefs,
+	pub catalog: crate::views::catalog::CatalogPrefs,
+	/// The patched Platform SDK loader picked on the Rename tab.
+	pub rename_loader: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HeadsetPrefs {
-	pub sort_by_name: bool,
+	pub sort: crate::views::headset::Sort,
+	pub descending: bool,
 	pub show_system: bool,
 }
 

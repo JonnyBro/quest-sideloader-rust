@@ -208,7 +208,7 @@ impl Welcome {
 						Button::new("default")
 							.label(t!("set.default"))
 							.small()
-							.ghost()
+							.outline()
 							.on_click(cx.listener(|this, _, window, cx| {
 								let dir = this.default_downloads.clone();
 								this.set_folder(dir, window, cx);
@@ -248,11 +248,11 @@ impl Welcome {
 			}
 			Step::Folder => h_flex()
 				.gap_2()
-				.child(go("back", t!("welcome.back").into(), Step::Look).ghost())
+				.child(go("back", t!("welcome.back").into(), Step::Look).outline())
 				.child(go("next", t!("welcome.next").into(), Step::Headset).primary()),
 			Step::Headset => h_flex()
 				.gap_2()
-				.child(go("back", t!("welcome.back").into(), Step::Folder).ghost())
+				.child(go("back", t!("welcome.back").into(), Step::Folder).outline())
 				.child(
 					close(
 						"mirror",
@@ -265,7 +265,7 @@ impl Welcome {
 		};
 		h_flex()
 			.pt_2()
-			.child(close("skip", t!("welcome.skip").into(), Outcome::Closed).ghost())
+			.child(close("skip", t!("welcome.skip").into(), Outcome::Closed).outline())
 			.child(div().flex_1())
 			.child(right)
 	}

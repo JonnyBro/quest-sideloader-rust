@@ -420,7 +420,7 @@ impl HeadsetView {
 			.collect();
 		match self.sort {
 			AppSort::Name => rows.sort_by_cached_key(|(app, _)| app.name.to_lowercase()),
-			AppSort::Size => rows.sort_by_key(|(_, u)| std::cmp::Reverse(u.obb + u.data)),
+			AppSort::Size => rows.sort_by_key(|(_, u)| std::cmp::Reverse(u.total())),
 		}
 
 		let mut uninstall = None;
@@ -466,7 +466,7 @@ impl HeadsetView {
 								if let Some(v) = app.version_code {
 									line.push(format!("v{v}"));
 								}
-								let total = usage.obb + usage.data;
+								let total = usage.total();
 								if total > 0 {
 									line.push(format_bytes(total));
 								}

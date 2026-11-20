@@ -107,7 +107,7 @@ pub fn open(
 					.w_full()
 					.gap_2()
 					.child(
-						answer("cancel", t!("rev.cancel").into(), ReviewDecision::Cancel).ghost(),
+						answer("cancel", t!("rev.cancel").into(), ReviewDecision::Cancel).outline(),
 					)
 					.child(div().flex_1())
 					.child(
