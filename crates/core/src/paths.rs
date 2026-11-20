@@ -79,7 +79,7 @@ impl AppPaths {
 
 	/// Window size and view choices kept by the GUI between runs.
 	pub fn ui_state_file(&self) -> PathBuf {
-		self.config_dir.join("ui.ron")
+		self.config_dir.join("ui.json")
 	}
 
 	pub fn logs_dir(&self) -> PathBuf {

@@ -1,71 +1,58 @@
-//! Keeps the latest log lines in memory for the in-app log window.
-
 use std::collections::VecDeque;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
-use tracing::{Level, Metadata};
-use tracing_subscriber::fmt::MakeWriter;
+const MAX_LINES: usize = 2000;
 
-const MAX_LINES: usize = 5000;
-
-#[derive(Debug, Clone)]
-pub struct LogLine {
-	pub level: Level,
-	pub text: String,
+/// The last log lines, for the logs panel.
+#[derive(Clone, Default)]
+pub struct LogBuffer {
+	inner: Arc<Mutex<Inner>>,
 }
 
 #[derive(Default)]
 struct Inner {
-	lines: VecDeque<LogLine>,
-	/// Errors logged since the app started; the UI compares it with what it
-	/// has shown to know whether something new went wrong.
-	errors: usize,
+	lines: VecDeque<String>,
+	/// Bumped on every line, so the panel knows when to redraw.
+	generation: u64,
+	/// Error lines written so far, for the badge on the logs button.
+	errors: u64,
+	partial: String,
 }
-
-#[derive(Clone, Default)]
-pub struct LogBuffer(Arc<Mutex<Inner>>);
 
 impl LogBuffer {
-	fn push(&self, level: Level, text: String) {
-		let mut inner = self.0.lock().expect("log buffer lock poisoned");
-		if level == Level::ERROR {
-			inner.errors += 1;
-		}
-		if inner.lines.len() == MAX_LINES {
-			inner.lines.pop_front();
-		}
-		inner.lines.push_back(LogLine { level, text });
+	pub fn generation(&self) -> u64 {
+		self.inner.lock().map_or(0, |i| i.generation)
 	}
 
-	pub fn errors(&self) -> usize {
-		self.0.lock().expect("log buffer lock poisoned").errors
+	pub fn errors(&self) -> u64 {
+		self.inner.lock().map_or(0, |i| i.errors)
 	}
 
-	/// Lines at `min_level` or more severe that contain `needle` (lowercase).
-	pub fn matching(&self, min_level: Level, needle: &str) -> Vec<LogLine> {
-		let inner = self.0.lock().expect("log buffer lock poisoned");
-		inner
-			.lines
-			.iter()
-			// tracing orders levels by verbosity: ERROR < WARN < ... < TRACE.
-			.filter(|l| l.level <= min_level)
-			.filter(|l| needle.is_empty() || l.text.to_lowercase().contains(needle))
-			.cloned()
-			.collect()
+	pub fn lines(&self) -> Vec<String> {
+		self.inner
+			.lock()
+			.map(|i| i.lines.iter().cloned().collect())
+			.unwrap_or_default()
 	}
 }
 
-/// Collects one formatted event and files it when the formatter is done.
-pub struct LineWriter {
-	buffer: LogBuffer,
-	level: Level,
-	bytes: Vec<u8>,
-}
-
-impl Write for LineWriter {
+impl Write for LogBuffer {
 	fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-		self.bytes.extend_from_slice(buf);
+		if let Ok(mut inner) = self.inner.lock() {
+			inner.partial.push_str(&String::from_utf8_lossy(buf));
+			while let Some(end) = inner.partial.find('\n') {
+				let line: String = inner.partial.drain(..=end).collect();
+				if level_of(&line) == Some(Level::Error) {
+					inner.errors += 1;
+				}
+				inner.lines.push_back(line.trim_end().to_owned());
+				if inner.lines.len() > MAX_LINES {
+					inner.lines.pop_front();
+				}
+				inner.generation += 1;
+			}
+		}
 		Ok(buf.len())
 	}
 
@@ -74,58 +61,157 @@ impl Write for LineWriter {
 	}
 }
 
-impl Drop for LineWriter {
-	fn drop(&mut self) {
-		let text = String::from_utf8_lossy(&self.bytes).trim_end().to_owned();
-		if !text.is_empty() {
-			self.buffer.push(self.level, text);
-		}
-	}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Level {
+	Trace,
+	Debug,
+	Info,
+	Warn,
+	Error,
 }
 
-impl<'a> MakeWriter<'a> for LogBuffer {
-	type Writer = LineWriter;
+/// The level the fmt layer wrote near the start of a line, padded like `" WARN "`.
+pub fn level_of(line: &str) -> Option<Level> {
+	let head = line.get(..line.len().min(48)).unwrap_or(line);
+	[
+		(" ERROR ", Level::Error),
+		(" WARN ", Level::Warn),
+		(" INFO ", Level::Info),
+		(" DEBUG ", Level::Debug),
+		(" TRACE ", Level::Trace),
+	]
+	.into_iter()
+	.find(|(tag, _)| head.contains(tag))
+	.map(|(_, level)| level)
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for LogBuffer {
+	type Writer = LogBuffer;
 
 	fn make_writer(&'a self) -> Self::Writer {
-		LineWriter {
-			buffer: self.clone(),
-			level: Level::INFO,
-			bytes: Vec::new(),
-		}
-	}
-
-	fn make_writer_for(&'a self, meta: &Metadata<'_>) -> Self::Writer {
-		LineWriter {
-			buffer: self.clone(),
-			level: *meta.level(),
-			bytes: Vec::new(),
-		}
+		self.clone()
 	}
 }
 
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use tracing_subscriber::prelude::*;
+/// Colors log lines by level in the logs editor.
+pub mod highlight {
+	use std::cell::Cell;
+	use std::ops::Range;
+	use std::rc::Rc;
 
-	#[test]
-	fn collects_and_filters_lines() {
-		let buffer = LogBuffer::default();
-		let subscriber = tracing_subscriber::registry().with(
-			tracing_subscriber::fmt::layer()
-				.with_ansi(false)
-				.with_writer(buffer.clone()),
-		);
-		tracing::subscriber::with_default(subscriber, || {
-			tracing::info!("sync started");
-			tracing::warn!("slow mirror");
-			tracing::error!("sync failed: 403");
-		});
-		assert_eq!(buffer.errors(), 1);
-		assert_eq!(buffer.matching(Level::TRACE, "").len(), 3);
-		let warnings = buffer.matching(Level::WARN, "");
-		assert_eq!(warnings.len(), 2);
-		assert!(warnings[1].text.contains("sync failed: 403"));
-		assert_eq!(buffer.matching(Level::TRACE, "mirror").len(), 1);
+	use gpui_kit::component::input::{
+		EditorState, FoldRange, HighlightStyleResolver, InputEdit, InputHighlighter, Rope, RopeExt,
+	};
+	use gpui_kit::*;
+
+	#[derive(Clone, Copy, Default)]
+	pub struct LevelColors {
+		pub error: Hsla,
+		pub warn: Hsla,
+		pub debug: Hsla,
+	}
+
+	pub type SharedColors = Rc<Cell<LevelColors>>;
+
+	#[derive(Clone, Copy)]
+	enum Level {
+		Error,
+		Warn,
+		Debug,
+	}
+
+	pub struct LogHighlighter {
+		colors: SharedColors,
+		/// Byte range of every line, newline included, and its level.
+		lines: Vec<(Range<usize>, Option<Level>)>,
+	}
+
+	impl LogHighlighter {
+		pub fn new(colors: SharedColors) -> Self {
+			Self {
+				colors,
+				lines: Vec::new(),
+			}
+		}
+	}
+
+	impl InputHighlighter for LogHighlighter {
+		fn language(&self) -> SharedString {
+			"log".into()
+		}
+
+		fn update(
+			&mut self,
+			_edit: Option<InputEdit>,
+			text: &Rope,
+			_folding: bool,
+			_window: &mut Window,
+			_cx: &mut Context<EditorState>,
+		) {
+			self.lines.clear();
+			let rows = text.lines_len();
+			let end = if rows == 0 {
+				0
+			} else {
+				text.line_end_offset(rows - 1)
+			};
+			for row in 0..rows {
+				let start = text.line_start_offset(row);
+				let next = if row + 1 < rows {
+					text.line_start_offset(row + 1)
+				} else {
+					end
+				};
+				// The fmt layer pads the level, e.g. "  WARN"; check only the line's start.
+				let head = text.slice_line(row).to_string();
+				let head = head.get(..head.len().min(48)).unwrap_or(&head);
+				let level = if head.contains(" ERROR ") {
+					Some(Level::Error)
+				} else if head.contains(" WARN ") {
+					Some(Level::Warn)
+				} else if head.contains(" DEBUG ") || head.contains(" TRACE ") {
+					Some(Level::Debug)
+				} else {
+					None
+				};
+				self.lines.push((start..next, level));
+			}
+		}
+
+		fn styles(
+			&self,
+			range: &Range<usize>,
+			_resolver: &dyn HighlightStyleResolver,
+		) -> Vec<(Range<usize>, HighlightStyle)> {
+			let colors = self.colors.get();
+			let first = self.lines.partition_point(|(r, _)| r.end <= range.start);
+			let mut runs = Vec::new();
+			let mut at = range.start;
+			for (line, level) in &self.lines[first..] {
+				if line.start >= range.end {
+					break;
+				}
+				let end = line.end.min(range.end);
+				if end <= at {
+					continue;
+				}
+				let style = match level {
+					Some(Level::Error) => HighlightStyle::color(colors.error),
+					Some(Level::Warn) => HighlightStyle::color(colors.warn),
+					Some(Level::Debug) => HighlightStyle::color(colors.debug),
+					None => HighlightStyle::default(),
+				};
+				runs.push((at..end, style));
+				at = end;
+			}
+			if at < range.end {
+				runs.push((at..range.end, HighlightStyle::default()));
+			}
+			runs
+		}
+
+		fn fold_ranges(&self, _text: &Rope) -> Vec<FoldRange> {
+			Vec::new()
+		}
 	}
 }

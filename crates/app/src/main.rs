@@ -3,26 +3,33 @@
 
 rust_i18n::i18n!("locales", fallback = "en");
 
-mod app;
+mod dialogs;
 mod icons;
 mod logbuf;
 mod notify;
+mod shell;
 mod theme;
-mod ui;
+mod ui_state;
+mod views;
+mod widgets;
 
+use gpui_kit::*;
+use quest_sideloader_core::settings::Language;
 use quest_sideloader_core::{AppPaths, Settings};
-use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+use tracing_subscriber::prelude::*;
 
-fn main() -> eframe::Result {
+fn main() {
 	let paths = match AppPaths::detect().and_then(|p| p.ensure_exist().map(|()| p)) {
 		Ok(paths) => paths,
 		Err(e) => fatal(&e.to_string()),
 	};
-	let log_buffer = logbuf::LogBuffer::default();
-	let _log_guard = init_logging(&paths, log_buffer.clone());
+	let logs = logbuf::LogBuffer::default();
+	let _log_guard = init_logging(&paths, logs.clone());
 
 	// Checked before anything saves the settings.
 	let first_run = !paths.settings_file().exists();
+	let ui = ui_state::UiState::load(&paths.ui_state_file());
+	let scale = ui.scale.unwrap_or(1.);
 	let (settings, load_error) = match Settings::load(&paths) {
 		Ok(settings) => (settings, None),
 		Err(e) => {
@@ -30,25 +37,72 @@ fn main() -> eframe::Result {
 			(Settings::defaults_for(&paths), Some(e.to_string()))
 		}
 	};
+	apply_language(settings.language);
 
-	let options = eframe::NativeOptions {
-		viewport: egui::ViewportBuilder::default()
-			.with_title(app::base_title(paths.portable_root().is_some()))
-			.with_inner_size([1100.0, 720.0])
-			.with_min_inner_size([800.0, 520.0]),
-		persistence_path: Some(paths.ui_state_file()),
-		..Default::default()
+	gpui_kit::application()
+		.with_assets(gpui_kit::assets::Assets)
+		.run(move |cx: &mut App| {
+			gpui_kit::init(cx);
+			theme::install(cx);
+			cx.set_global(theme::UiScale(scale));
+
+			let options = WindowOptions {
+				window_bounds: Some(ui.window.map(|b| b.to_window()).unwrap_or_else(|| {
+					WindowBounds::Windowed(Bounds::centered(None, size(px(1200.), px(780.)), cx))
+				})),
+				window_min_size: Some(size(px(900.), px(560.))),
+				titlebar: Some(TitlebarOptions {
+					title: Some(base_title(paths.portable_root().is_some()).into()),
+					..Default::default()
+				}),
+				app_id: Some("quest-sideloader".into()),
+				..Default::default()
+			};
+			let for_theme = settings.clone();
+			gpui_kit::open_window(options, cx, move |window, cx| {
+				theme::apply(&for_theme, window, cx);
+				cx.new(|cx| {
+					shell::Shell::new(
+						shell::Startup {
+							paths,
+							settings,
+							load_error,
+							ui,
+							first_run,
+							logs,
+						},
+						window,
+						cx,
+					)
+				})
+			})
+			.expect("open window");
+			cx.on_window_closed(|cx, _| cx.quit()).detach();
+			cx.activate(true);
+		});
+}
+
+pub fn base_title(portable: bool) -> &'static str {
+	if portable {
+		"Quest Sideloader (portable)"
+	} else {
+		"Quest Sideloader"
+	}
+}
+
+fn apply_language(language: Language) {
+	let locale = match language {
+		Language::English => "en",
+		Language::Russian => "ru",
+		Language::Ukrainian => "uk",
+		Language::System => match sys_locale::get_locale() {
+			Some(l) if l.starts_with("uk") => "uk",
+			Some(l) if l.starts_with("ru") => "ru",
+			_ => "en",
+		},
 	};
-
-	eframe::run_native(
-		"quest-sideloader",
-		options,
-		Box::new(move |cc| {
-			let app =
-				app::SideloaderApp::new(cc, paths, settings, load_error, first_run, log_buffer)?;
-			Ok(Box::new(app))
-		}),
-	)
+	// One global locale for this crate, the core and gpui-component.
+	rust_i18n::set_locale(locale);
 }
 
 /// Release builds on Windows have no console, so the error also goes to a dialog.
@@ -62,14 +116,18 @@ fn fatal(message: &str) -> ! {
 	std::process::exit(1);
 }
 
+/// Logs go to stderr, to the logs panel and to a daily file in the logs folder.
 fn init_logging(
 	paths: &AppPaths,
 	buffer: logbuf::LogBuffer,
 ) -> Option<tracing_appender::non_blocking::WorkerGuard> {
+	use tracing_subscriber::{EnvFilter, fmt};
+	// zbus warns on every portal file dialog: the request object is gone
+	// before it reads its properties, which the dialog doesn't need.
 	let default = if cfg!(debug_assertions) {
-		"info,quest_sideloader=debug,quest_sideloader_core=debug,wgpu_hal=warn,wgpu_core=warn,egui_wgpu=warn"
+		"info,quest_sideloader=debug,quest_sideloader_core=debug,wgpu_hal=warn,wgpu_core=warn,zbus=error"
 	} else {
-		"info,wgpu_hal=warn,wgpu_core=warn,egui_wgpu=warn"
+		"info,wgpu_hal=warn,wgpu_core=warn,zbus=error"
 	};
 	let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default));
 	// tracing writes timestamps in UTC by default; these use the local time zone.
@@ -80,8 +138,8 @@ fn init_logging(
 	let in_app = fmt::layer()
 		.with_timer(timer.clone())
 		.with_ansi(false)
+		.with_target(false)
 		.with_writer(buffer);
-
 	match tracing_appender::rolling::Builder::new()
 		.rotation(tracing_appender::rolling::Rotation::DAILY)
 		.filename_prefix("quest-sideloader")

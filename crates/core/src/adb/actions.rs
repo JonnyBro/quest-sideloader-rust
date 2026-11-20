@@ -59,6 +59,76 @@ pub struct DeviceDetails {
 	pub gpu_level: Option<String>,
 	/// USB is in file transfer mode; `None` when the firmware doesn't say.
 	pub mtp: Option<bool>,
+	/// Horizon OS release, like `v209`, from the build branch.
+	pub horizon_version: Option<String>,
+	/// Build number the headset's settings show next to the version.
+	pub build_number: Option<String>,
+	/// `YYYY-MM-DD`.
+	pub security_patch: Option<String>,
+	/// Panel resolution, like `3664x1920`.
+	pub display: Option<String>,
+	/// Degrees Celsius.
+	pub soc_temperature: Option<f32>,
+	pub power: Option<Power>,
+	/// `None` when Wi-Fi isn't connected.
+	pub wifi: Option<WifiLink>,
+	pub controllers: Vec<Controller>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PowerSource {
+	Ac,
+	Usb,
+	Wireless,
+	Dock,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BatteryHealth {
+	Good,
+	Overheat,
+	Dead,
+	OverVoltage,
+	Cold,
+	Other,
+}
+
+/// From `dumpsys battery`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Power {
+	/// `None` when running on battery.
+	pub source: Option<PowerSource>,
+	/// The charger gives too little current to charge at full speed.
+	pub weak_charger: bool,
+	pub voltage_mv: Option<u32>,
+	pub health: Option<BatteryHealth>,
+}
+
+/// The connected network, from `dumpsys wifi`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WifiLink {
+	pub ssid: String,
+	/// dBm; closer to 0 is stronger.
+	pub rssi: i32,
+	pub link_mbps: Option<u32>,
+	pub frequency_mhz: Option<u32>,
+	/// The Wi-Fi generation, like 6.
+	pub standard: Option<u8>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ControllerSide {
+	Left,
+	Right,
+}
+
+/// A paired controller, from `dumpsys OVRRemoteService`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Controller {
+	pub side: ControllerSide,
+	/// Percent, as of the last time the controller was on.
+	pub battery: Option<u8>,
+	pub firmware: Option<String>,
 }
 
 /// Performance overrides Quest headsets read from system properties. They
@@ -228,6 +298,14 @@ impl Device {
 			self.shell("ip -f inet addr show wlan0"),
 			self.shell("svc usb getFunctions"),
 		);
+		// The full Wi-Fi and thermal dumps are long; the device cuts them down.
+		let (wifi, thermal, controllers, display) = tokio::join!(
+			self.shell("dumpsys wifi | grep -m1 'mWifiInfo SSID'"),
+			self.shell("dumpsys thermalservice | grep -m20 'Temperature{'"),
+			self.shell("dumpsys OVRRemoteService | grep 'Paired device:'"),
+			self.shell("wm size"),
+		);
+		let battery = battery.ok().map(|b| b.stdout);
 		let (memory_total, memory_available) = memory
 			.ok()
 			.map(|m| parse_meminfo(&m.stdout))
@@ -238,9 +316,7 @@ impl Device {
 				.or_else(|| prop("ro.build.version.incremental"))
 				.unwrap_or_default(),
 			uptime: uptime.ok().and_then(|u| parse_uptime(&u.stdout)),
-			battery_temperature: battery
-				.ok()
-				.and_then(|b| parse_battery_temperature(&b.stdout)),
+			battery_temperature: battery.as_deref().and_then(parse_battery_temperature),
 			memory_total,
 			memory_available,
 			wifi_ip: ip.ok().and_then(|i| parse_inet(&i.stdout)),
@@ -254,6 +330,17 @@ impl Device {
 				.ok()
 				.filter(|u| u.success())
 				.map(|u| u.stdout.contains("mtp") || u.stderr.contains("mtp")),
+			horizon_version: prop("ro.build.branch").and_then(|b| parse_horizon_version(&b)),
+			build_number: prop("ro.build.version.incremental"),
+			security_patch: prop("ro.build.version.security_patch"),
+			display: display.ok().and_then(|d| parse_wm_size(&d.stdout)),
+			soc_temperature: thermal.ok().and_then(|t| parse_soc_temperature(&t.stdout)),
+			power: battery.as_deref().map(parse_power),
+			wifi: wifi.ok().and_then(|w| parse_wifi(&w.stdout)),
+			controllers: controllers
+				.ok()
+				.map(|c| parse_controllers(&c.stdout))
+				.unwrap_or_default(),
 		})
 	}
 
@@ -334,6 +421,130 @@ fn parse_apk_sizes(text: &str) -> Vec<(String, u64)> {
 			Some((package.to_owned(), bytes.parse().ok()?))
 		})
 		.collect()
+}
+
+/// `releases-oculus-14.0-v209` -> `v209`.
+fn parse_horizon_version(branch: &str) -> Option<String> {
+	let last = branch.rsplit('-').next()?;
+	(last.starts_with('v') && last[1..].chars().all(|c| c.is_ascii_digit()) && last.len() > 1)
+		.then(|| last.to_owned())
+}
+
+/// `Physical size: 3664x1920`; an override line, when there is one, wins.
+fn parse_wm_size(text: &str) -> Option<String> {
+	text.lines().rev().find_map(|l| {
+		let v = l.split_once("size:")?.1.trim();
+		(!v.is_empty()).then(|| v.to_owned())
+	})
+}
+
+/// The SoC sensor from `Temperature{mValue=35.3, mType=3, mName=soc-usr, ...}` lines.
+fn parse_soc_temperature(text: &str) -> Option<f32> {
+	text.lines().find_map(|line| {
+		let name = line.split("mName=").nth(1)?.split([',', '}']).next()?;
+		if !name.starts_with("soc") {
+			return None;
+		}
+		line.split("mValue=")
+			.nth(1)?
+			.split(',')
+			.next()?
+			.trim()
+			.parse()
+			.ok()
+	})
+}
+
+/// Power source, charger strength, voltage and health from `dumpsys battery`.
+fn parse_power(text: &str) -> Power {
+	let value = |key: &str| {
+		text.lines().find_map(|line| {
+			let (k, v) = line.trim().split_once(':')?;
+			(k.trim() == key).then(|| v.trim().to_owned())
+		})
+	};
+	let on = |key: &str| value(key).as_deref() == Some("true");
+	let source = if on("AC powered") {
+		Some(PowerSource::Ac)
+	} else if on("USB powered") {
+		Some(PowerSource::Usb)
+	} else if on("Wireless powered") {
+		Some(PowerSource::Wireless)
+	} else if on("Dock powered") {
+		Some(PowerSource::Dock)
+	} else {
+		None
+	};
+	// BatteryManager.BATTERY_HEALTH_* values.
+	let health = value("health")
+		.and_then(|h| h.parse::<u8>().ok())
+		.map(|h| match h {
+			2 => BatteryHealth::Good,
+			3 => BatteryHealth::Overheat,
+			4 => BatteryHealth::Dead,
+			5 => BatteryHealth::OverVoltage,
+			7 => BatteryHealth::Cold,
+			_ => BatteryHealth::Other,
+		});
+	Power {
+		source,
+		weak_charger: source.is_some() && on("Weak Charger"),
+		voltage_mv: value("voltage").and_then(|v| v.parse().ok()),
+		health,
+	}
+}
+
+/// The `mWifiInfo SSID: "name", ..., RSSI: -21, Link speed: 2401Mbps, ...` line.
+fn parse_wifi(text: &str) -> Option<WifiLink> {
+	let line = text.lines().find(|l| l.contains("SSID:"))?;
+	let field = |key: &str| {
+		let rest = line.split(&format!("{key}: ")).nth(1)?;
+		Some(rest.split(", ").next()?.trim().to_owned())
+	};
+	if field("Supplicant state").as_deref() != Some("COMPLETED") {
+		return None;
+	}
+	let number = |key: &str| -> Option<i64> {
+		let text = field(key)?;
+		let digits: String = text
+			.chars()
+			.take_while(|c| *c == '-' || c.is_ascii_digit())
+			.collect();
+		digits.parse().ok()
+	};
+	Some(WifiLink {
+		ssid: field("SSID")?.trim_matches('"').to_owned(),
+		rssi: number("RSSI")? as i32,
+		link_mbps: number("Link speed").and_then(|v| u32::try_from(v).ok()),
+		frequency_mhz: number("Frequency").and_then(|v| u32::try_from(v).ok()),
+		standard: number("Wi-Fi standard").and_then(|v| u8::try_from(v).ok()),
+	})
+}
+
+/// `Paired device: id, Type:  Right, Model: ..., Firmware: 209.29.41, ..., Battery:  70%, ...`
+fn parse_controllers(text: &str) -> Vec<Controller> {
+	let mut controllers: Vec<Controller> = Vec::new();
+	for line in text.lines().filter(|l| l.contains("Paired device:")) {
+		let field = |key: &str| {
+			let rest = line.split(&format!("{key}:")).nth(1)?;
+			Some(rest.split(',').next()?.trim().to_owned())
+		};
+		let side = match field("Type").as_deref() {
+			Some("Left") => ControllerSide::Left,
+			Some("Right") => ControllerSide::Right,
+			_ => continue,
+		};
+		if controllers.iter().any(|c| c.side == side) {
+			continue;
+		}
+		controllers.push(Controller {
+			side,
+			battery: field("Battery").and_then(|b| b.trim_end_matches('%').trim().parse().ok()),
+			firmware: field("Firmware").filter(|f| !f.is_empty()),
+		});
+	}
+	controllers.sort_by_key(|c| c.side != ControllerSide::Left);
+	controllers
 }
 
 fn parse_uptime(text: &str) -> Option<Duration> {
@@ -424,6 +635,94 @@ mod tests {
 			[
 				("com.beatgames.beatsaber".to_owned(), 123_456_789),
 				("moe.shizuku.privileged.api".to_owned(), 28_672),
+			]
+		);
+	}
+
+	#[test]
+	fn headset_build_and_display() {
+		assert_eq!(
+			parse_horizon_version("releases-oculus-14.0-v209").as_deref(),
+			Some("v209")
+		);
+		assert_eq!(parse_horizon_version("main"), None);
+		assert_eq!(parse_horizon_version("x-v"), None);
+		assert_eq!(
+			parse_wm_size("Physical size: 3664x1920\n").as_deref(),
+			Some("3664x1920")
+		);
+		assert_eq!(
+			parse_wm_size("Physical size: 3664x1920\nOverride size: 1832x960\n").as_deref(),
+			Some("1832x960")
+		);
+	}
+
+	#[test]
+	fn soc_temperature() {
+		let text = "\tTemperature{mValue=33.678, mType=9, mName=nspss-0, mStatus=0}\n\
+			\tTemperature{mValue=35.328003, mType=3, mName=soc-usr, mStatus=0}\n\
+			\tTemperature{mValue=30.015001, mType=3, mName=pcb1-usr, mStatus=0}\n";
+		assert_eq!(parse_soc_temperature(text), Some(35.328003));
+		assert_eq!(parse_soc_temperature("nothing"), None);
+	}
+
+	#[test]
+	fn power_from_battery_dump() {
+		let text = "Current Battery Service state:\n  AC powered: false\n  USB powered: true\n\
+			  Wireless powered: false\n  Dock powered: false\n  Weak Charger: true\n\
+			  status: 5\n  health: 2\n  level: 100\n  voltage: 4417\n  temperature: 270\n";
+		assert_eq!(
+			parse_power(text),
+			Power {
+				source: Some(PowerSource::Usb),
+				weak_charger: true,
+				voltage_mv: Some(4417),
+				health: Some(BatteryHealth::Good),
+			}
+		);
+		let unplugged = "  AC powered: false\n  USB powered: false\n  Weak Charger: true\n";
+		assert_eq!(parse_power(unplugged).source, None);
+		assert!(!parse_power(unplugged).weak_charger);
+	}
+
+	#[test]
+	fn wifi_link() {
+		let text = "mWifiInfo SSID: \"Interra 6 5G\", BSSID: 52:ff:20:8c:53:b7, MAC: 78:c4:fa:45:c4:dc, \
+			IP: /192.168.1.102, Security type: 4, Supplicant state: COMPLETED, Wi-Fi standard: 6, \
+			RSSI: -19, Link speed: 2401Mbps, Tx Link speed: 2401Mbps, Frequency: 5180MHz, Net ID: 0";
+		assert_eq!(
+			parse_wifi(text),
+			Some(WifiLink {
+				ssid: "Interra 6 5G".into(),
+				rssi: -19,
+				link_mbps: Some(2401),
+				frequency_mhz: Some(5180),
+				standard: Some(6),
+			})
+		);
+		let off = "mWifiInfo SSID: <unknown ssid>, Supplicant state: DISCONNECTED, RSSI: -127";
+		assert_eq!(parse_wifi(off), None);
+	}
+
+	#[test]
+	fn controllers() {
+		let text = "  Paired device: 8141b2e33faacd2e, Type:  Right, Model: RUBYPRQ, HardwareRev: 0x9a, \
+			Firmware: 209.29.41, ImuModel: ICM42686, Battery:  70%, isAttached: 0\n\
+			  Paired device: e7ec8b9b83a6cb2d, Type:   Left, Model: RUBYPRQ, HardwareRev: 0x9a, \
+			Firmware: 209.29.41, ImuModel: ICM42686, Battery:  60%, isAttached: 0\n";
+		assert_eq!(
+			parse_controllers(text),
+			[
+				Controller {
+					side: ControllerSide::Left,
+					battery: Some(60),
+					firmware: Some("209.29.41".into()),
+				},
+				Controller {
+					side: ControllerSide::Right,
+					battery: Some(70),
+					firmware: Some("209.29.41".into()),
+				},
 			]
 		);
 	}

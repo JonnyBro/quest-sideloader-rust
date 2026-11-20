@@ -1,258 +1,165 @@
-//! The app's look on top of egui's defaults: an accent color, corners and
-//! spacing the user picks, and the system's own sans-serif font.
+use std::borrow::Cow;
 
-use egui::epaint::text::{FontInsert, FontPriority, InsertFontFamily};
-use egui::{Color32, CornerRadius, FontData, FontFamily, Theme, Vec2};
-use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicU8, Ordering};
+use gpui_kit::component::{ActiveTheme, Theme, ThemeMode, ThemeRegistry};
+use gpui_kit::*;
+use quest_sideloader_core::Settings;
+use quest_sideloader_core::settings::Theme as ThemeSetting;
+use std::sync::OnceLock;
 
-pub const GOOD: Color32 = Color32::from_rgb(59, 109, 17);
-pub const WARN: Color32 = Color32::from_rgb(186, 117, 23);
-pub const BAD: Color32 = Color32::from_rgb(163, 45, 45);
-pub const MUTED: Color32 = Color32::from_rgb(95, 94, 90);
+const THEMES: &str = include_str!("../assets/themes.json");
+/// Used when the settings name no scheme, or one this build doesn't have.
+pub const DEFAULT_DARK: &str = "Quest Dark";
+pub const DEFAULT_LIGHT: &str = "Quest Light";
 
-/// Fonts with Cyrillic that ship with the system, first found wins. Without
-/// any, egui's own font stays.
-const SYSTEM_FONTS: &[&str] = &[
-	"C:\\Windows\\Fonts\\segoeui.ttf",
-	"/System/Library/Fonts/Supplemental/Arial.ttf",
-	"/usr/share/fonts/noto/NotoSans-Regular.ttf",
-	"/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-	"/usr/share/fonts/google-noto/NotoSans-Regular.ttf",
-	"/usr/share/fonts/TTF/DejaVuSans.ttf",
-	"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+/// A color scheme as the scheme picker shows it.
+pub struct Scheme {
+	pub name: String,
+	pub dark: bool,
+	pub background: Hsla,
+	pub surface: Hsla,
+	pub foreground: Hsla,
+	pub accent: Hsla,
+}
+
+/// Every bundled scheme, in the order of the themes file.
+pub fn schemes() -> &'static [Scheme] {
+	static SCHEMES: OnceLock<Vec<Scheme>> = OnceLock::new();
+	SCHEMES.get_or_init(|| {
+		let file: serde_json::Value = serde_json::from_str(THEMES).unwrap_or_default();
+		let color = |colors: &serde_json::Value, key: &str| {
+			colors[key]
+				.as_str()
+				.and_then(|hex| u32::from_str_radix(hex.trim_start_matches('#'), 16).ok())
+				.map(|rgb_value| Hsla::from(rgb(rgb_value)))
+				.unwrap_or_default()
+		};
+		file["themes"]
+			.as_array()
+			.into_iter()
+			.flatten()
+			.map(|theme| {
+				let colors = &theme["colors"];
+				Scheme {
+					name: theme["name"].as_str().unwrap_or_default().to_owned(),
+					dark: theme["mode"] == "dark",
+					background: color(colors, "background"),
+					surface: color(colors, "sidebar.background"),
+					foreground: color(colors, "foreground"),
+					accent: color(colors, "primary.background"),
+				}
+			})
+			.collect()
+	})
+}
+
+/// Tried in order for engineering text (logs, packages, versions). Fira Code is
+/// bundled; the rest only matter if loading it failed.
+const MONO_FONTS: &[&str] = &[
+	"Fira Code",
+	"JetBrains Mono",
+	"DejaVu Sans Mono",
+	"Cascadia Mono",
+	"Consolas",
+	"Menlo",
 ];
 
-pub fn install_font(ctx: &egui::Context) {
-	if let Some(data) = SYSTEM_FONTS
+const UI_FONT: &str = "Inter";
+
+const FONTS_BUNDLED: [&[u8]; 8] = [
+	include_bytes!("../assets/fonts/Inter-Regular.ttf"),
+	include_bytes!("../assets/fonts/Inter-Medium.ttf"),
+	include_bytes!("../assets/fonts/Inter-SemiBold.ttf"),
+	include_bytes!("../assets/fonts/Inter-Bold.ttf"),
+	include_bytes!("../assets/fonts/FiraCode-Regular.ttf"),
+	include_bytes!("../assets/fonts/FiraCode-Medium.ttf"),
+	include_bytes!("../assets/fonts/FiraCode-SemiBold.ttf"),
+	include_bytes!("../assets/fonts/FiraCode-Bold.ttf"),
+];
+
+pub fn install(cx: &mut App) {
+	let fonts = FONTS_BUNDLED.iter().map(|f| Cow::Borrowed(*f)).collect();
+	if let Err(e) = cx.text_system().add_fonts(fonts) {
+		tracing::error!("bundled fonts: {e}");
+	}
+	if let Err(e) = ThemeRegistry::global_mut(cx).load_themes_from_str(THEMES) {
+		tracing::error!("bundled themes: {e}");
+	}
+}
+
+/// The theme mode and the dark and light schemes from the settings.
+pub fn apply(settings: &Settings, window: &mut Window, cx: &mut App) {
+	let pick = |name: &str, fallback: &str| {
+		let themes = ThemeRegistry::global(cx).themes();
+		themes.get(name).or_else(|| themes.get(fallback)).cloned()
+	};
+	let dark = pick(&settings.dark_scheme, DEFAULT_DARK);
+	let light = pick(&settings.light_scheme, DEFAULT_LIGHT);
+	let theme = Theme::global_mut(cx);
+	if let Some(dark) = dark {
+		theme.dark_theme = dark;
+	}
+	if let Some(light) = light {
+		theme.light_theme = light;
+	}
+	match settings.theme {
+		ThemeSetting::System => Theme::sync_system_appearance(Some(window), cx),
+		ThemeSetting::Dark => Theme::change(ThemeMode::Dark, Some(window), cx),
+		ThemeSetting::Light => Theme::change(ThemeMode::Light, Some(window), cx),
+	}
+	// Changing the mode reloads the theme config, fonts included.
+	apply_fonts(cx);
+}
+
+/// The interface scale; every size in the UI follows the theme's font size.
+pub struct UiScale(pub f32);
+
+impl Global for UiScale {}
+
+pub const SCALE_MIN: f32 = 0.7;
+pub const SCALE_MAX: f32 = 1.6;
+
+pub fn scale(cx: &App) -> f32 {
+	cx.try_global::<UiScale>().map_or(1., |s| s.0)
+}
+
+/// Rounds to tenths and keeps the scale usable.
+pub fn set_scale(scale: f32, window: &mut Window, cx: &mut App) {
+	let scale = ((scale * 10.).round() / 10.).clamp(SCALE_MIN, SCALE_MAX);
+	cx.set_global(UiScale(scale));
+	apply_fonts(cx);
+	window.refresh();
+}
+
+/// gpui panics on text in a family it can't load, so only installed fonts are used.
+fn apply_fonts(cx: &mut App) {
+	let scale = scale(cx);
+	let installed = cx.text_system().all_font_names();
+	let ui = installed
 		.iter()
-		.find_map(|path| std::fs::read(path).ok())
-	{
-		// Highest priority, so egui's fonts still cover the few symbols the
-		// system font lacks.
-		ctx.add_font(FontInsert {
-			name: "system".into(),
-			data: FontData::from_owned(data),
-			families: vec![InsertFontFamily {
-				family: FontFamily::Proportional,
-				priority: FontPriority::Highest,
-			}],
-		});
-	}
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum Accent {
-	#[default]
-	Violet,
-	Blue,
-	Teal,
-	Green,
-	Orange,
-	Pink,
-	Custom,
-}
-
-impl Accent {
-	pub const PRESETS: [Accent; 6] = [
-		Accent::Violet,
-		Accent::Blue,
-		Accent::Teal,
-		Accent::Green,
-		Accent::Orange,
-		Accent::Pink,
-	];
-
-	/// Dark enough for white text in both themes.
-	pub fn color(self) -> Color32 {
-		match self {
-			Accent::Violet => Color32::from_rgb(83, 74, 183),
-			Accent::Blue => Color32::from_rgb(24, 95, 165),
-			Accent::Teal => Color32::from_rgb(15, 110, 86),
-			Accent::Green => Color32::from_rgb(59, 109, 17),
-			Accent::Orange => Color32::from_rgb(153, 60, 29),
-			Accent::Pink => Color32::from_rgb(153, 53, 86),
-			Accent::Custom => Color32::GRAY,
+		.any(|f| f == UI_FONT)
+		.then(|| SharedString::from(UI_FONT));
+	let family = MONO_FONTS
+		.iter()
+		.find(|f| installed.iter().any(|i| i == *f))
+		.map(|f| SharedString::from(*f));
+	Theme::update(cx, |theme| {
+		if let Some(ui) = ui {
+			theme.font_family = ui;
 		}
-	}
-
-	/// The same hue light enough to read as link text on a dark background.
-	fn light(self) -> Color32 {
-		match self {
-			Accent::Violet => Color32::from_rgb(175, 169, 236),
-			Accent::Blue => Color32::from_rgb(133, 183, 235),
-			Accent::Teal => Color32::from_rgb(93, 202, 165),
-			Accent::Green => Color32::from_rgb(151, 196, 89),
-			Accent::Orange => Color32::from_rgb(240, 153, 123),
-			Accent::Pink => Color32::from_rgb(237, 147, 177),
-			Accent::Custom => Color32::GRAY,
+		if let Some(family) = family {
+			theme.mono_font_family = family;
 		}
-	}
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum Corners {
-	Square,
-	#[default]
-	Rounded,
-	Round,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum Density {
-	Compact,
-	#[default]
-	Normal,
-	Spacious,
-}
-
-/// How the app looks, kept between runs and applied as soon as it changes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Appearance {
-	pub accent: Accent,
-	/// Used when `accent` is [`Accent::Custom`].
-	pub custom: [u8; 3],
-	pub corners: Corners,
-	pub density: Density,
-}
-
-impl Appearance {
-	pub fn accent_color(&self) -> Color32 {
-		match self.accent {
-			Accent::Custom => {
-				let [r, g, b] = self.custom;
-				Color32::from_rgb(r, g, b)
-			}
-			preset => preset.color(),
-		}
-	}
-
-	/// Halfway to white, for a custom color the presets have no light shade of.
-	fn link_color(&self) -> Color32 {
-		match self.accent {
-			Accent::Custom => {
-				let [r, g, b] = self.custom.map(|c| c / 2 + 128);
-				Color32::from_rgb(r, g, b)
-			}
-			preset => preset.light(),
-		}
-	}
-}
-
-static CORNERS: AtomicU8 = AtomicU8::new(Corners::Rounded as u8);
-
-/// A corner radius for something drawn by hand, matched to the chosen
-/// corners: none when they're square, larger when they're round.
-pub fn radius(base: f32) -> f32 {
-	match CORNERS.load(Ordering::Relaxed) {
-		0 => 0.0,
-		2 => base * 1.6,
-		_ => base,
-	}
-}
-
-pub fn apply(ctx: &egui::Context, appearance: &Appearance) {
-	let (widget, window) = match appearance.corners {
-		Corners::Square => (0, 0),
-		Corners::Rounded => (6, 10),
-		Corners::Round => (10, 16),
-	};
-	let (item, button, height) = match appearance.density {
-		Density::Compact => (Vec2::new(6.0, 3.0), Vec2::new(5.0, 1.0), 16.0),
-		Density::Normal => (Vec2::new(8.0, 6.0), Vec2::new(8.0, 3.0), 20.0),
-		Density::Spacious => (Vec2::new(10.0, 9.0), Vec2::new(12.0, 5.0), 26.0),
-	};
-	CORNERS.store(appearance.corners as u8, Ordering::Relaxed);
-	let accent = appearance.accent_color();
-	// White text on light colors would vanish; a custom accent can be light.
-	let on_accent =
-		if accent.r() as u32 * 299 + accent.g() as u32 * 587 + accent.b() as u32 * 114 > 150_000 {
-			Color32::BLACK
-		} else {
-			Color32::WHITE
-		};
-	ctx.all_styles_mut(|style| {
-		style.spacing.item_spacing = item;
-		style.spacing.button_padding = button;
-		style.spacing.interact_size.y = height;
-		let visuals = &mut style.visuals;
-		visuals.window_corner_radius = CornerRadius::same(window);
-		visuals.menu_corner_radius = CornerRadius::same(window.saturating_sub(2));
-		for state in [
-			&mut visuals.widgets.noninteractive,
-			&mut visuals.widgets.inactive,
-			&mut visuals.widgets.hovered,
-			&mut visuals.widgets.active,
-			&mut visuals.widgets.open,
-		] {
-			state.corner_radius = CornerRadius::same(widget);
-		}
-		visuals.selection.bg_fill = accent;
-		visuals.selection.stroke.color = on_accent;
-	});
-	ctx.style_mut_of(Theme::Dark, |style| {
-		style.visuals.hyperlink_color = appearance.link_color();
-	});
-	ctx.style_mut_of(Theme::Light, |style| {
-		let visuals = &mut style.visuals;
-		visuals.hyperlink_color = accent;
-		// egui's light theme is nearly all one off-white; a slightly darker
-		// page makes the white panels and cards stand out.
-		visuals.panel_fill = Color32::from_gray(238);
-		visuals.window_fill = Color32::from_gray(250);
-		visuals.faint_bg_color = Color32::from_gray(244);
-		visuals.extreme_bg_color = Color32::WHITE;
-		visuals.widgets.inactive.weak_bg_fill = Color32::from_gray(226);
-		visuals.widgets.inactive.bg_fill = Color32::from_gray(222);
-		visuals.widgets.hovered.weak_bg_fill = Color32::from_gray(214);
-		visuals.widgets.noninteractive.bg_stroke.color = Color32::from_gray(210);
+		// Sizes in the UI are rem-based, and the rem is this.
+		theme.font_size = px(15. * scale);
+		theme.mono_font_size = px(14. * scale);
 	});
 }
 
-/// A rounded panel around a section of a tab.
-pub fn panel(ui: &egui::Ui) -> egui::Frame {
-	egui::Frame::group(ui.style())
-		.corner_radius(ui.visuals().window_corner_radius)
-		.inner_margin(egui::Margin::same(10))
-		.fill(ui.visuals().faint_bg_color)
-		.stroke(ui.visuals().widgets.noninteractive.bg_stroke)
+/// Engineering text: logs, package names, versions, sizes, addresses.
+pub trait Mono: Styled + Sized {
+	fn mono(self, cx: &App) -> Self {
+		self.font_family(cx.theme().mono_font_family.clone())
+	}
 }
 
-/// A small rounded label on a colored background, like "Installed".
-pub fn pill(ui: &mut egui::Ui, text: impl Into<String>, color: Color32) -> egui::Response {
-	// Painted at the text's own height, so a tall table row doesn't stretch it.
-	let galley = ui.painter().layout_no_wrap(
-		text.into(),
-		egui::TextStyle::Small.resolve(ui.style()),
-		Color32::WHITE,
-	);
-	let size = galley.size() + Vec2::new(12.0, 4.0);
-	let (rect, response) = ui.allocate_exact_size(size, egui::Sense::hover());
-	ui.painter()
-		.rect_filled(rect, radius(rect.height() / 2.0), color);
-	ui.painter()
-		.galley(rect.min + Vec2::new(6.0, 2.0), galley, Color32::WHITE);
-	response
-}
-
-/// A thin bar showing `fraction`, colored by how good the value is.
-pub fn meter(ui: &mut egui::Ui, fraction: f32, color: Color32) {
-	let width = ui.available_width();
-	let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 8.0), egui::Sense::hover());
-	let painter = ui.painter();
-	painter.rect_filled(rect, radius(4.0), ui.visuals().widgets.inactive.bg_fill);
-	let mut filled = rect;
-	filled.set_width(rect.width() * fraction.clamp(0.0, 1.0));
-	painter.rect_filled(filled, radius(4.0), color);
-}
-
-/// A big muted message in the middle of an empty area.
-pub fn empty_state(ui: &mut egui::Ui, title: impl Into<String>, body: impl Into<String>) {
-	ui.vertical_centered(|ui| {
-		ui.add_space((ui.available_height() / 3.0).max(24.0));
-		ui.label(egui::RichText::new(title.into()).heading().weak());
-		ui.add_space(4.0);
-		ui.weak(body.into());
-	});
-}
+impl<T: Styled> Mono for T {}

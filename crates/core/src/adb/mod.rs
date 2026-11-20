@@ -11,7 +11,10 @@ mod sync;
 #[cfg(test)]
 pub(crate) mod testing;
 
-pub use actions::{AppUsage, DeviceDetails, RebootMode, Tweak};
+pub use actions::{
+	AppUsage, BatteryHealth, Controller, ControllerSide, DeviceDetails, Power, PowerSource,
+	RebootMode, Tweak, WifiLink,
+};
 pub use device::{Device, OutputStream, ShellOutput};
 pub use error::AdbError;
 pub use parse::{Battery, DeviceEntry, DeviceInfo, DeviceState, Package, Storage};

@@ -1,6 +1,6 @@
 //! What the window remembers between runs: its size, the open tab, view choices.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use gpui_kit::*;
 use serde::{Deserialize, Serialize};
@@ -68,11 +68,6 @@ pub struct HeadsetPrefs {
 	pub sort: crate::views::headset::Sort,
 	pub descending: bool,
 	pub show_system: bool,
-}
-
-pub fn file(ui_state_file: &Path) -> PathBuf {
-	// The egui app keeps its own state in ui.ron next to this.
-	ui_state_file.with_file_name("ui.json")
 }
 
 impl UiState {

@@ -19,7 +19,10 @@ use gpui_kit::component::{
 };
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use quest_sideloader_core::adb::{AppUsage, DeviceDetails, DeviceInfo, RebootMode, Tweak};
+use quest_sideloader_core::adb::{
+	AppUsage, BatteryHealth, ControllerSide, DeviceDetails, DeviceInfo, PowerSource, RebootMode,
+	Tweak,
+};
 use quest_sideloader_core::catalog::Catalog;
 use quest_sideloader_core::saves::Backup;
 use quest_sideloader_core::{AppInfo, Command, Engine, format_bytes};
@@ -303,18 +306,49 @@ impl HeadsetView {
 		let theme = cx.theme();
 		let info = self.info.as_ref();
 		let model = info.map(|i| i.model.replace('_', " ")).unwrap_or_default();
-		let mut subtitle = Vec::new();
+		// (id, text, what it is); hovering a part says what it is.
+		let mut subtitle: Vec<(&'static str, String, String)> = Vec::new();
 		if let Some(i) = info {
-			subtitle.push(format!("Android {}", i.android_version));
+			subtitle.push((
+				"hs-android",
+				format!("Android {}", i.android_version),
+				t!("hs.tip_android").into_owned(),
+			));
 		}
-		if let Some(d) = self.device_details()
-			&& !d.build.is_empty()
+		if let Some(v) = self
+			.device_details()
+			.and_then(|d| d.horizon_version.as_ref())
 		{
-			subtitle.push(d.build.clone());
+			subtitle.push((
+				"hs-horizon",
+				format!("Horizon OS {v}"),
+				t!("hs.tip_horizon").into_owned(),
+			));
 		}
 		if let Some(serial) = &self.serial {
-			subtitle.push(serial.clone());
+			subtitle.push((
+				"hs-serial",
+				serial.clone(),
+				t!("hs.tip_serial").into_owned(),
+			));
 		}
+		let separator = theme.muted_foreground.opacity(0.5);
+		let parts = subtitle
+			.into_iter()
+			.enumerate()
+			.map(|(ix, (id, text, tip))| {
+				h_flex()
+					.gap_2()
+					.min_w_0()
+					.when(ix > 0, |d| d.child(div().text_color(separator).child("/")))
+					.child(
+						div()
+							.id(id)
+							.truncate()
+							.tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+							.child(text),
+					)
+			});
 		let apps = info.map_or(0, |i| i.packages.len());
 		let section = self.section;
 		v_flex()
@@ -330,12 +364,13 @@ impl HeadsetView {
 							.min_w_0()
 							.child(div().text_xl().child(model))
 							.child(
-								div()
+								h_flex()
+									.gap_2()
+									.min_w_0()
 									.text_sm()
-									.truncate()
 									.text_color(theme.muted_foreground)
 									.mono(cx)
-									.child(subtitle.join("  /  ")),
+									.children(parts),
 							),
 					)
 					.child(
@@ -679,39 +714,40 @@ impl HeadsetView {
 		let details = self.device_details();
 		let info = self.info.as_ref();
 
-		let mut facts: Vec<(String, String, bool)> = Vec::new();
+		// (label, value, monospace)
+		type Facts = Vec<(String, String, bool)>;
+		let mut system: Facts = Vec::new();
+		let mut power: Facts = Vec::new();
+		let mut network: Facts = Vec::new();
 		if let Some(i) = info {
-			facts.push((t!("dev.model").into(), i.model.replace('_', " "), false));
-			facts.push((t!("dev.android").into(), i.android_version.clone(), true));
-			if let Some(b) = i.battery {
-				let mut text = format!("{}%", b.level);
-				if let Some(temp) = details.and_then(|d| d.battery_temperature) {
-					text.push_str(&format!(", {temp:.0}C"));
-				}
-				facts.push((t!("hs.battery").into(), text, false));
-			}
-			if let Some(s) = i.storage {
-				facts.push((
-					t!("hs.storage").into(),
-					t!(
-						"dev.free_of",
-						free = format_bytes(s.free_bytes),
-						total = format_bytes(s.total_bytes)
-					)
-					.into_owned(),
-					false,
-				));
-			}
+			system.push((t!("dev.model").into(), i.model.replace('_', " "), false));
+		}
+		if let Some(d) = details
+			&& !d.codename.is_empty()
+		{
+			system.push((t!("hs.codename").into(), d.codename.clone(), true));
+		}
+		if let Some(i) = info {
+			system.push((t!("dev.android").into(), i.android_version.clone(), true));
 		}
 		if let Some(d) = details {
-			if !d.codename.is_empty() {
-				facts.push((t!("hs.codename").into(), d.codename.clone(), true));
+			if let Some(v) = &d.horizon_version {
+				system.push((t!("hs.horizon").into(), v.clone(), true));
+			}
+			if let Some(n) = &d.build_number {
+				system.push((t!("hs.build_number").into(), n.clone(), true));
 			}
 			if !d.build.is_empty() {
-				facts.push((t!("hs.build").into(), d.build.clone(), true));
+				system.push((t!("hs.build").into(), d.build.clone(), true));
+			}
+			if let Some(p) = &d.security_patch {
+				system.push((t!("hs.security_patch").into(), p.clone(), true));
+			}
+			if let Some(size) = &d.display {
+				system.push((t!("hs.display").into(), size.clone(), true));
 			}
 			if let (Some(total), Some(free)) = (d.memory_total, d.memory_available) {
-				facts.push((
+				system.push((
 					t!("hs.memory").into(),
 					t!(
 						"dev.free_of",
@@ -722,18 +758,103 @@ impl HeadsetView {
 					false,
 				));
 			}
-			if let Some(uptime) = d.uptime {
-				facts.push((t!("hs.uptime").into(), format_uptime(uptime), false));
-			}
-			facts.push((
-				t!("hs.wifi").into(),
-				d.wifi_ip
-					.clone()
-					.unwrap_or_else(|| t!("hs.not_connected").into_owned()),
-				d.wifi_ip.is_some(),
+		}
+		if let Some(s) = info.and_then(|i| i.storage) {
+			system.push((
+				t!("hs.storage").into(),
+				t!(
+					"dev.free_of",
+					free = format_bytes(s.free_bytes),
+					total = format_bytes(s.total_bytes)
+				)
+				.into_owned(),
+				false,
 			));
+		}
+		if let Some(uptime) = details.and_then(|d| d.uptime) {
+			system.push((t!("hs.uptime").into(), format_uptime(uptime), false));
+		}
+
+		if let Some(b) = info.and_then(|i| i.battery) {
+			let mut text = format!("{}%", b.level);
+			if b.charging {
+				text.push_str(&format!(", {}", t!("hs.charging")));
+			}
+			power.push((t!("hs.battery").into(), text, false));
+		}
+		if let Some(d) = details {
+			if let Some(p) = d.power {
+				let mut text = match p.source {
+					None => t!("hs.source_battery"),
+					Some(PowerSource::Ac) => t!("hs.source_ac"),
+					Some(PowerSource::Usb) => t!("hs.source_usb"),
+					Some(PowerSource::Wireless) => t!("hs.source_wireless"),
+					Some(PowerSource::Dock) => t!("hs.source_dock"),
+				}
+				.into_owned();
+				if p.weak_charger {
+					text.push_str(&format!(", {}", t!("hs.weak_charger")));
+				}
+				power.push((t!("hs.power_source").into(), text, false));
+				if let Some(health) = p.health {
+					let text = match health {
+						BatteryHealth::Good => t!("hs.health_good"),
+						BatteryHealth::Overheat => t!("hs.health_overheat"),
+						BatteryHealth::Dead => t!("hs.health_dead"),
+						BatteryHealth::OverVoltage => t!("hs.health_overvoltage"),
+						BatteryHealth::Cold => t!("hs.health_cold"),
+						BatteryHealth::Other => t!("hs.health_other"),
+					};
+					power.push((t!("hs.battery_health").into(), text.into_owned(), false));
+				}
+				if let Some(mv) = p.voltage_mv {
+					power.push((
+						t!("hs.voltage").into(),
+						format!("{:.2} V", f64::from(mv) / 1000.0),
+						true,
+					));
+				}
+			}
+			if let Some(temp) = d.battery_temperature {
+				power.push((t!("hs.battery_temp").into(), format!("{temp:.0}C"), true));
+			}
+			if let Some(temp) = d.soc_temperature {
+				power.push((t!("hs.soc_temp").into(), format!("{temp:.0}C"), true));
+			}
+
+			match &d.wifi {
+				Some(w) => {
+					network.push((t!("hs.wifi").into(), w.ssid.clone(), false));
+					network.push((
+						t!("hs.signal").into(),
+						format!("{} dBm, {}", w.rssi, signal_quality(w.rssi)),
+						false,
+					));
+					let mut link = Vec::new();
+					if let Some(mbps) = w.link_mbps {
+						link.push(t!("hs.mbps", speed = mbps).into_owned());
+					}
+					if let Some(band) = w.frequency_mhz.and_then(wifi_band) {
+						link.push(band.to_owned());
+					}
+					if let Some(standard) = w.standard {
+						link.push(format!("Wi-Fi {standard}"));
+					}
+					if !link.is_empty() {
+						network.push((t!("hs.link").into(), link.join(", "), false));
+					}
+				}
+				None => network.push((
+					t!("hs.wifi").into(),
+					t!("hs.not_connected").into_owned(),
+					false,
+				)),
+			}
+			if let Some(ip) = &d.wifi_ip {
+				network.push((t!("hs.ip").into(), ip.clone(), true));
+			}
 			if let Some(mtp) = d.mtp {
-				facts.push((
+				network.push((
 					t!("hs.usb").into(),
 					if mtp {
 						t!("hs.usb_mtp")
@@ -744,7 +865,7 @@ impl HeadsetView {
 					false,
 				));
 			}
-			facts.push((
+			network.push((
 				t!("hs.wireless_adb").into(),
 				d.adb_tcp_port.map_or_else(
 					|| t!("hs.off").into_owned(),
@@ -754,19 +875,85 @@ impl HeadsetView {
 			));
 		}
 
-		let fact_rows = facts.into_iter().map(|(label, value, mono)| {
-			h_flex()
-				.gap_4()
-				.py_1()
+		let fact_rows = |facts: Facts| {
+			v_flex().children(facts.into_iter().map(|(label, value, mono)| {
+				h_flex()
+					.gap_4()
+					.py_1()
+					.child(
+						div()
+							.w(px(170.))
+							.flex_shrink_0()
+							.text_color(theme.muted_foreground)
+							.child(label),
+					)
+					.child(div().min_w_0().when(mono, |d| d.mono(cx)).child(value))
+			}))
+		};
+		let controllers = details.map(|d| d.controllers.clone()).unwrap_or_default();
+		let controller_rows = if controllers.is_empty() {
+			div()
+				.text_color(theme.muted_foreground)
+				.child(t!("hs.no_controllers").into_owned())
+				.into_any_element()
+		} else {
+			let facts: Facts = controllers
+				.iter()
+				.map(|c| {
+					let label = match c.side {
+						ControllerSide::Left => t!("hs.left_controller"),
+						ControllerSide::Right => t!("hs.right_controller"),
+					};
+					let mut value = c
+						.battery
+						.map_or_else(|| "?".to_owned(), |b| format!("{b}%"));
+					if let Some(fw) = &c.firmware {
+						value.push_str(&format!(", {}", t!("hs.firmware", version = fw)));
+					}
+					(label.into_owned(), value, false)
+				})
+				.collect();
+			v_flex()
+				.gap_2()
+				.child(fact_rows(facts))
 				.child(
 					div()
-						.w(px(200.))
-						.flex_shrink_0()
+						.text_sm()
 						.text_color(theme.muted_foreground)
-						.child(label),
+						.child(t!("hs.controllers_hint").into_owned()),
 				)
-				.child(div().min_w_0().when(mono, |d| d.mono(cx)).child(value))
-		});
+				.into_any_element()
+		};
+		let info_cards = h_flex()
+			.gap_4()
+			.flex_wrap()
+			.items_start()
+			.child(
+				card(t!("hs.sec_system").into(), fact_rows(system), &theme)
+					.flex_1()
+					.min_w(px(380.)),
+			)
+			.child(
+				v_flex()
+					.gap_4()
+					.flex_1()
+					.min_w(px(380.))
+					.when(!power.is_empty(), |d| {
+						d.child(card(t!("hs.sec_power").into(), fact_rows(power), &theme))
+					})
+					.child(card(
+						t!("hs.sec_controllers").into(),
+						controller_rows,
+						&theme,
+					))
+					.when(!network.is_empty(), |d| {
+						d.child(card(
+							t!("hs.sec_network").into(),
+							fact_rows(network),
+							&theme,
+						))
+					}),
+			);
 
 		let has_wifi = details.is_some_and(|d| d.wifi_ip.is_some());
 		let mtp = details.and_then(|d| d.mtp);
@@ -852,11 +1039,7 @@ impl HeadsetView {
 				v_flex()
 					.gap_4()
 					.p_5()
-					.child(card(
-						t!("hs.info").into(),
-						v_flex().children(fact_rows),
-						&theme,
-					))
+					.child(info_cards)
 					.child(card(t!("hs.tools").into(), tools, &theme))
 					.child(card(t!("hs.performance").into(), tweaks, &theme)),
 			)
@@ -1254,6 +1437,24 @@ fn initial(name: &str) -> String {
 		.find(|c| c.is_alphanumeric())
 		.map(|c| c.to_uppercase().to_string())
 		.unwrap_or_default()
+}
+
+fn signal_quality(rssi: i32) -> std::borrow::Cow<'static, str> {
+	match rssi {
+		-55.. => t!("hs.signal_excellent"),
+		-67.. => t!("hs.signal_good"),
+		-75.. => t!("hs.signal_fair"),
+		_ => t!("hs.signal_weak"),
+	}
+}
+
+fn wifi_band(mhz: u32) -> Option<&'static str> {
+	match mhz {
+		2400..=2500 => Some("2.4 GHz"),
+		5000..=5900 => Some("5 GHz"),
+		5925..=7125 => Some("6 GHz"),
+		_ => None,
+	}
 }
 
 fn format_uptime(uptime: Duration) -> String {

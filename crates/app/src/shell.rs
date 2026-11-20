@@ -14,12 +14,15 @@ use gpui_kit::component::sidebar::{
 	SidebarMenuItem,
 };
 use gpui_kit::component::tag::Tag;
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{
 	ActiveTheme, Icon, IconName, Selectable, Sizable, WindowExt, h_flex, v_flex,
 };
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use quest_sideloader_core::adb::{DeviceDetails, DeviceEntry, DeviceInfo, DeviceState};
+use quest_sideloader_core::adb::{
+	Controller, ControllerSide, DeviceDetails, DeviceEntry, DeviceInfo, DeviceState,
+};
 use quest_sideloader_core::{
 	AdbStatus, AppPaths, CatalogStatus, Command, Engine, Event, Settings, TaskId, TaskKind,
 	TaskSnapshot, TaskState, format_bytes,
@@ -301,7 +304,7 @@ impl Shell {
 		engine.send(Command::ListBackups);
 		Self {
 			engine,
-			ui_path: crate::ui_state::file(&paths.ui_state_file()),
+			ui_path: paths.ui_state_file(),
 			paths,
 			settings,
 			reconnect: ui.last_wireless.is_some(),
@@ -1161,6 +1164,24 @@ impl Shell {
 								.child(item(text)),
 						);
 					}
+					let pads = self
+						.details
+						.get(&device.serial)
+						.map(|d| controllers_text(&d.controllers))
+						.unwrap_or_default();
+					if !pads.is_empty() {
+						left = left.child(sep()).child(
+							h_flex()
+								.id("status-controllers")
+								.gap_1()
+								.child(Icon::from(AppIcon::Controller).small())
+								.child(item(pads))
+								.tooltip(|window, cx| {
+									Tooltip::new(t!("hs.controllers_hint").into_owned())
+										.build(window, cx)
+								}),
+						);
+					}
 					if let Some(s) = info.storage {
 						left = left.child(sep()).child(
 							h_flex()
@@ -1378,6 +1399,21 @@ fn state_hint(state: &DeviceState) -> String {
 		DeviceState::Unauthorized | DeviceState::Authorizing => t!("dev.unauthorized").into_owned(),
 		_ => t!("dev.offline").into_owned(),
 	}
+}
+
+/// `L 60%  R 70%`, or empty when no controller is paired.
+fn controllers_text(controllers: &[Controller]) -> String {
+	controllers
+		.iter()
+		.filter_map(|c| {
+			let side = match c.side {
+				ControllerSide::Left => t!("hs.left_short"),
+				ControllerSide::Right => t!("hs.right_short"),
+			};
+			Some(format!("{side} {}%", c.battery?))
+		})
+		.collect::<Vec<_>>()
+		.join("  ")
 }
 
 fn battery_icon(level: u8, charging: bool) -> IconName {
