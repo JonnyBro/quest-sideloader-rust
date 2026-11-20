@@ -1635,7 +1635,8 @@ mod tests {
 		assert!(matches_loosely(&key, "re4"));
 		assert!(matches_loosely(&key, "resident-evil 4"));
 		assert!(matches_loosely(&key, "Evil4"));
-		assert!(!matches_loosely(&key, "r"));
+		assert!(matches_loosely(&key, "r"));
+		assert!(!matches_loosely(&key, "rex"));
 		assert!(!matches_loosely(&key, "re5"));
 		assert!(matches_loosely(&search_key("Beat Saber"), "beatsaber"));
 		assert!(matches_loosely(&search_key("Beat Saber"), "bs"));
