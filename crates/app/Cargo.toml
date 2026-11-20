@@ -9,7 +9,7 @@ license.workspace = true
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 eframe = { version = "0.37.0", features = ["persistence"] }
 egui = "0.37.0"
-egui_extras = { version = "0.37.0", features = ["file", "image"] }
+egui_extras = { version = "0.37.0", features = ["file", "image", "svg"] }
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
 notify-rust = "4.19.0"
 quest-sideloader-core = { path = "../core" }

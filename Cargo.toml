@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/core", "crates/app"]
+members = ["crates/core", "crates/app", "crates/app-gpui"]
 
 [workspace.package]
 version = "1.0.0"
@@ -19,6 +19,9 @@ lto = "thin"
 codegen-units = 1
 strip = true
 
-# RSA key generation and signing are very slow unoptimized, in tests too.
 [profile.dev.package.rsa]
 opt-level = 3
+
+[profile.dev.package."*"]
+opt-level = 2
+debug = false

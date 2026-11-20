@@ -4,8 +4,10 @@
 rust_i18n::i18n!("locales", fallback = "en");
 
 mod app;
+mod icons;
 mod logbuf;
 mod notify;
+mod theme;
 mod ui;
 
 use quest_sideloader_core::{AppPaths, Settings};

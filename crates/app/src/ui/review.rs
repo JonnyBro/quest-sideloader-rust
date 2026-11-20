@@ -136,7 +136,8 @@ fn legend(ui: &mut egui::Ui) {
 			(blocked_color(ui), t!("rev.blocked")),
 		] {
 			let (rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
-			ui.painter().rect_filled(rect, 2.0, color);
+			ui.painter()
+				.rect_filled(rect, crate::theme::radius(2.0), color);
 			ui.label(text);
 			ui.add_space(8.0);
 		}
@@ -161,7 +162,7 @@ fn script_line(ui: &mut egui::Ui, line: &ScriptLine) {
 	let frame = egui::Frame::new()
 		.fill(fill.unwrap_or(egui::Color32::TRANSPARENT))
 		.inner_margin(egui::Margin::symmetric(4, 2))
-		.corner_radius(2.0);
+		.corner_radius(crate::theme::radius(2.0));
 	frame.show(ui, |ui| {
 		ui.set_min_width(ui.available_width());
 		ui.horizontal(|ui| {

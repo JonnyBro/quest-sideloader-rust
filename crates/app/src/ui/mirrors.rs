@@ -168,7 +168,7 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 		.id_salt("mirrors_table")
 		.vscroll(false)
 		.cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-		.column(egui_extras::Column::auto().at_most(240.0).clip(true))
+		.column(egui_extras::Column::auto().at_most(320.0).clip(true))
 		.column(egui_extras::Column::remainder().at_least(120.0).clip(true))
 		.column(egui_extras::Column::auto())
 		.body(|mut body| {
@@ -176,6 +176,9 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 				body.row(24.0, |mut row| {
 					let active = draft.active_mirror.as_deref() == Some(mirror.id.as_str());
 					row.col(|ui| {
+						// Tables truncate by default, which an auto column then measures
+						// as nearly no width; the name sets the column's width instead.
+						ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 						if ui.selectable_label(active, &mirror.name).clicked() {
 							activate = Some(mirror.id.clone());
 						}
@@ -187,7 +190,10 @@ pub fn show(ui: &mut egui::Ui, draft: &mut Settings, form: &mut MirrorForm, rclo
 						);
 					});
 					row.col(|ui| {
-						if ui.small_button(t!("mir.remove")).clicked() {
+						if ui
+							.add(super::toned(t!("mir.remove"), super::Tone::Danger).small())
+							.clicked()
+						{
 							remove = Some(mirror.id.clone());
 						}
 					});

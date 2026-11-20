@@ -44,6 +44,8 @@ impl DownloadsView {
 		ui: &mut egui::Ui,
 		folder: &Path,
 		install_target: Option<(&str, &str)>,
+		advanced: bool,
+		cover: &dyn Fn(&str) -> Option<std::path::PathBuf>,
 		commands: &mut Vec<Command>,
 	) -> Option<Action> {
 		let mut action = None;
@@ -53,7 +55,13 @@ impl DownloadsView {
 		}
 		ui.horizontal(|ui| {
 			ui.heading(t!("dl.heading"));
-			if ui.button("⟳").on_hover_text(t!("common.refresh")).clicked() {
+			if ui
+				.add(egui::Button::image(
+					crate::icons::Icon::Refresh.image(16.0, ui.visuals().text_color()),
+				))
+				.on_hover_text(t!("common.refresh"))
+				.clicked()
+			{
 				commands.push(Command::ListDownloads);
 			}
 			if ui.button(t!("common.open_folder")).clicked() {
@@ -81,9 +89,7 @@ impl DownloadsView {
 			return None;
 		};
 		if releases.is_empty() {
-			ui.centered_and_justified(|ui| {
-				ui.weak(t!("dl.empty"));
-			});
+			crate::theme::empty_state(ui, t!("dl.empty_title"), t!("dl.empty"));
 			return None;
 		}
 		let needle = self.search.trim().to_lowercase();
@@ -117,6 +123,19 @@ impl DownloadsView {
 				for release in rows {
 					body.row(28.0, |mut row| {
 						row.col(|ui| {
+							let size = egui::vec2(44.0, 25.0);
+							match cover(&release.name) {
+								Some(path) => {
+									ui.add(
+										egui::Image::new(format!("file://{}", path.display()))
+											.max_size(size)
+											.corner_radius(crate::theme::radius(3.0)),
+									);
+								}
+								None => {
+									ui.add_space(size.x + ui.spacing().item_spacing.x);
+								}
+							}
 							ui.add(egui::Label::new(&release.name).truncate());
 						});
 						row.col(|ui| {
@@ -133,7 +152,7 @@ impl DownloadsView {
 						row.col(|ui| {
 							let install = ui.add_enabled(
 								install_target.is_some(),
-								egui::Button::new(t!("common.install")).small(),
+								super::toned(t!("common.install"), super::Tone::Go).small(),
 							);
 							let install = match install_target {
 								Some((_, name)) => {
@@ -149,20 +168,24 @@ impl DownloadsView {
 									path: release.path.clone(),
 								});
 							}
-							if ui
-								.small_button(t!("dl.copy"))
-								.on_hover_text(t!("dl.copy_hint"))
-								.clicked()
+							if advanced
+								&& ui
+									.small_button(t!("dl.copy"))
+									.on_hover_text(t!("dl.copy_hint"))
+									.clicked()
 							{
 								action = Some(Action::Rename(release.path.clone()));
 							}
-							if ui.small_button(t!("dl.details")).clicked() {
+							if advanced && ui.small_button(t!("dl.details")).clicked() {
 								action = Some(Action::Inspect(release.path.clone()));
 							}
 							if ui.small_button(t!("common.open")).clicked() {
 								super::open_folder(&release.path);
 							}
-							if ui.small_button(t!("common.delete")).clicked() {
+							if ui
+								.add(super::toned(t!("common.delete"), super::Tone::Danger).small())
+								.clicked()
+							{
 								self.confirm_delete = Some(release.clone());
 							}
 						});
@@ -188,7 +211,10 @@ impl DownloadsView {
 				size = format_bytes(release.size)
 			));
 			ui.horizontal(|ui| {
-				if ui.button(t!("common.delete")).clicked() {
+				if ui
+					.add(super::toned(t!("common.delete"), super::Tone::Danger))
+					.clicked()
+				{
 					commands.push(Command::DeleteDownload(release.name.clone()));
 					close = true;
 				}

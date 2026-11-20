@@ -91,7 +91,12 @@ pub(super) fn spawn_fetch_info(device: Device, sink: EventSink) {
 pub(super) fn spawn_connect(server: AdbServer, address: String, quiet: bool, sink: EventSink) {
 	tokio::spawn(async move {
 		match server.connect_wireless(&address).await {
-			Ok(message) => sink.emit(Event::Notice(message)),
+			Ok(message) => {
+				tracing::info!("{message}");
+				sink.emit(Event::Notice(
+					t!("dev.connected", address = address).into_owned(),
+				));
+			}
 			Err(e) if quiet => tracing::info!("could not reconnect to {address}: {e}"),
 			Err(e) => sink.emit(Event::Error(
 				t!("dev.connect_failed", address = address, error = e).into_owned(),

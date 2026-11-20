@@ -123,8 +123,8 @@ dl.summary:
   en: "%{n} release(s), %{size}"
   ru: "релизов: %{n}, %{size}"
 dl.empty:
-  en: "No downloaded releases. Games downloaded from the Library are kept here when \"Keep downloaded files\" is on in Settings."
-  ru: "Скачанных релизов нет. Игры из Библиотеки остаются здесь, если в Настройках включено \"Сохранять скачанные файлы\"."
+  en: "Games downloaded from the Library are kept here when \"Keep downloaded files\" is on in Settings."
+  ru: "Игры из Библиотеки остаются здесь, если в Настройках включено \"Сохранять скачанные файлы\"."
 dl.col_release:
   en: "Release"
   ru: "Релиз"
@@ -150,8 +150,8 @@ tasks.clear:
   en: "Clear finished"
   ru: "Убрать завершённые"
 tasks.empty:
-  en: "No tasks yet. Download games from the Library, or drop files onto the window. Downloaded files are listed under Downloads."
-  ru: "Задач пока нет. Скачайте игры из Библиотеки или перетащите файлы в окно. Скачанные файлы видны во вкладке Загрузки."
+  en: "Download games from the Library, or drop files onto the window. Downloaded files are listed under Downloads."
+  ru: "Скачайте игры из Библиотеки или перетащите файлы в окно. Скачанные файлы видны во вкладке Загрузки."
 tasks.kind_download_install:
   en: "download and install, %{serial}"
   ru: "загрузка и установка, %{serial}"
@@ -1247,3 +1247,243 @@ ins.optional:
 ins.hashes:
   en: "Hashes"
   ru: "Хэши"
+dev.free_short:
+  en: "%{size} free"
+  ru: "свободно %{size}"
+dev.pill_none:
+  en: "No headset"
+  ru: "Шлем не подключён"
+dev.pill_no_adb:
+  en: "adb not found"
+  ru: "adb не найден"
+dev.pill_hint:
+  en: "Open the Headset tab"
+  ru: "Открыть вкладку Шлем"
+help.no_adb_title:
+  en: "adb isn't set up"
+  ru: "adb не установлен"
+help.no_adb:
+  en: "The app talks to the headset through adb from Google's Android tools. It can download it for you."
+  ru: "Программа общается со шлемом через adb из инструментов Android от Google. Его можно скачать прямо отсюда."
+help.unauthorized_title:
+  en: "The headset is waiting for your permission"
+  ru: "Шлем ждёт вашего разрешения"
+help.unauthorized:
+  en: "Put on the headset: there's a window asking to allow USB debugging. Tick \"Always allow from this computer\" and press Allow."
+  ru: "Наденьте шлем: там открыто окно с запросом на отладку по USB. Отметьте \"Всегда разрешать с этого компьютера\" и нажмите \"Разрешить\"."
+help.waiting_title:
+  en: "The headset isn't ready yet"
+  ru: "Шлем ещё не готов"
+help.none_title:
+  en: "Connect your headset"
+  ru: "Подключите шлем"
+help.step_dev_mode:
+  en: "Turn on developer mode in the Meta Horizon app on your phone: Menu, Devices, your headset, Headset settings, Developer mode."
+  ru: "Включите режим разработчика в приложении Meta Horizon на телефоне: Меню, Устройства, ваш шлем, Настройки шлема, Режим разработчика."
+help.step_cable:
+  en: "Connect the headset to this computer with a USB cable that carries data (some cables only charge)."
+  ru: "Подключите шлем к компьютеру USB-кабелем с передачей данных (некоторые кабели только заряжают)."
+help.step_allow:
+  en: "Put on the headset and allow USB debugging when it asks."
+  ru: "Наденьте шлем и разрешите отладку по USB, когда он спросит."
+help.windows_driver:
+  en: "On Windows the headset also needs Meta's ADB driver:"
+  ru: "На Windows шлему также нужен ADB-драйвер от Meta:"
+help.or_wifi:
+  en: "Already turned on wireless ADB? Connect by its address instead:"
+  ru: "Уже включали беспроводной ADB? Можно подключиться по адресу:"
+set.mode:
+  en: "Mode"
+  ru: "Режим"
+set.advanced:
+  en: "Advanced: Devices, Rename, Inspector and Console tabs"
+  ru: "Расширенный: вкладки Устройства, Переименование, Инспектор и Консоль"
+set.advanced_hint:
+  en: "Tabs for people who know adb and APKs. Everyday installing and backups don't need them."
+  ru: "Вкладки для тех, кто разбирается в adb и APK. Для обычной установки игр и бэкапов они не нужны."
+hs.free_space:
+  en: "Free space"
+  ru: "Свободно"
+hs.temperature:
+  en: "Temperature"
+  ru: "Температура"
+lib.low_pc_space:
+  en: "This computer may not have room: the download and its unpacked copy need about %{needed}, and %{free} is free."
+  ru: "На компьютере может не хватить места: скачанному архиву и распакованной копии нужно около %{needed}, а свободно %{free}."
+chk.button:
+  en: "Check all"
+  ru: "Проверить всё"
+chk.hint:
+  en: "See at a glance whether everything is ready to install games"
+  ru: "Сразу видно, всё ли готово для установки игр"
+chk.title:
+  en: "Ready to install?"
+  ru: "Всё готово к установке?"
+chk.ok:
+  en: "OK"
+  ru: "OK"
+chk.warning:
+  en: "Check"
+  ru: "Внимание"
+chk.problem:
+  en: "Problem"
+  ru: "Проблема"
+chk.skipped:
+  en: "Not set"
+  ru: "Не настроено"
+chk.adb_ok:
+  en: "adb is running"
+  ru: "adb работает"
+chk.adb_starting:
+  en: "adb is starting"
+  ru: "adb запускается"
+chk.adb_missing:
+  en: "adb isn't working; it can be set up on the Headset tab"
+  ru: "adb не работает; его можно установить на вкладке Шлем"
+chk.headset_ok:
+  en: "%{name} is connected"
+  ru: "%{name} подключён"
+chk.headset_waiting:
+  en: "The headset is connected but not ready"
+  ru: "Шлем подключён, но не готов"
+chk.headset_none:
+  en: "No headset connected"
+  ru: "Шлем не подключён"
+chk.headset_none_detail:
+  en: "The Headset tab shows how to connect it."
+  ru: "Как подключить, показано на вкладке Шлем."
+chk.headset_space:
+  en: "%{free} free on the headset"
+  ru: "На шлеме свободно %{free}"
+chk.space_detail:
+  en: "Big games may not fit. Uninstall what you don't play on the Headset tab."
+  ru: "Большие игры могут не поместиться. Удалите ненужное на вкладке Шлем."
+chk.battery:
+  en: "Battery %{level}%"
+  ru: "Заряд %{level}%"
+chk.pc_space:
+  en: "%{free} free for downloads on this computer"
+  ru: "На компьютере для загрузок свободно %{free}"
+chk.pc_space_detail:
+  en: "Delete releases you no longer need on the Downloads tab, or pick another folder in Settings."
+  ru: "Удалите ненужные релизы на вкладке Загрузки или выберите другую папку в Настройках."
+chk.pc_space_unknown:
+  en: "Can't tell how much space the downloads folder has"
+  ru: "Не удалось узнать, сколько места в папке загрузок"
+chk.mirror_none:
+  en: "No mirror added"
+  ru: "Зеркало не добавлено"
+chk.mirror_none_detail:
+  en: "Only needed for the Library; files from your computer install without it."
+  ru: "Нужно только для Библиотеки; файлы с компьютера ставятся и без него."
+chk.mirror_failed:
+  en: "The mirror didn't sync"
+  ru: "Зеркало не синхронизировалось"
+chk.mirror_syncing:
+  en: "The mirror is syncing"
+  ru: "Зеркало синхронизируется"
+chk.mirror_ok:
+  en: "Mirror %{name}: %{n} games"
+  ru: "Зеркало %{name}: игр %{n}"
+chk.mirror_empty:
+  en: "Mirror %{name} hasn't synced yet"
+  ru: "Зеркало %{name} ещё не синхронизировано"
+tasks.empty_title:
+  en: "No tasks yet"
+  ru: "Задач пока нет"
+dl.empty_title:
+  en: "No downloads yet"
+  ru: "Загрузок пока нет"
+rn.empty_title:
+  en: "Nothing to copy yet"
+  ru: "Пока нечего копировать"
+ins.empty_title:
+  en: "No APK open"
+  ru: "APK не открыт"
+lib.no_match_title:
+  en: "Nothing found"
+  ru: "Ничего не нашлось"
+hs.of:
+  en: "%{part} of %{total}"
+  ru: "%{part} из %{total}"
+set.appearance:
+  en: "Appearance"
+  ru: "Оформление"
+set.appearance_hint:
+  en: "Changes show at once. The theme is kept when you press Save, like the other settings; the rest is kept right away."
+  ru: "Изменения видны сразу. Тема запоминается после нажатия \"Сохранить\", как остальные настройки, а остальное сразу."
+set.accent:
+  en: "Accent color"
+  ru: "Цвет акцента"
+set.accent_violet:
+  en: "Violet"
+  ru: "Фиолетовый"
+set.accent_blue:
+  en: "Blue"
+  ru: "Синий"
+set.accent_teal:
+  en: "Teal"
+  ru: "Бирюзовый"
+set.accent_green:
+  en: "Green"
+  ru: "Зелёный"
+set.accent_orange:
+  en: "Orange"
+  ru: "Оранжевый"
+set.accent_pink:
+  en: "Pink"
+  ru: "Розовый"
+set.corners:
+  en: "Corners"
+  ru: "Углы"
+set.corners_square:
+  en: "Square"
+  ru: "Прямые"
+set.corners_rounded:
+  en: "Rounded"
+  ru: "Скруглённые"
+set.corners_round:
+  en: "Round"
+  ru: "Круглые"
+set.density:
+  en: "Density"
+  ru: "Плотность"
+set.density_compact:
+  en: "Compact"
+  ru: "Компактно"
+set.density_normal:
+  en: "Normal"
+  ru: "Обычно"
+set.density_spacious:
+  en: "Spacious"
+  ru: "Просторно"
+set.accent_custom:
+  en: "Custom"
+  ru: "Свой"
+app.advanced_tabs:
+  en: "Advanced"
+  ru: "Расширенные"
+dev.battery_level:
+  en: "Battery %{level}%"
+  ru: "Заряд %{level}%"
+hs.apps_title:
+  en: "Apps on the headset"
+  ru: "Приложения на шлеме"
+hs.copy:
+  en: "copy"
+  ru: "копия"
+hs.up_to_date:
+  en: "Up to date"
+  ru: "Последняя версия"
+hs.actions:
+  en: "Start, stop, back up, restore or uninstall"
+  ru: "Запустить, остановить, сделать бэкап, восстановить или удалить"
+hs.restore_latest:
+  en: "Restore backup from %{date}"
+  ru: "Восстановить бэкап от %{date}"
+hs.details_tools:
+  en: "Headset details and tools"
+  ru: "Сведения о шлеме и инструменты"
+lib.games_count:
+  en: "%{n} games"
+  ru: "игр: %{n}"

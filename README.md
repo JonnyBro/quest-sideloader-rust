@@ -13,6 +13,30 @@ Desktop sideloader for Meta Quest headsets, written in Rust with egui.
 - `crates/app` is the egui desktop application. It sends commands to the engine
   and draws the events it gets back.
 
+## Everyday use
+
+The sidebar on the left holds the Headset, Library, Downloads, Tasks and
+Settings pages; advanced mode in Settings adds Devices, Rename, Inspector and
+Console. At its bottom are the running tasks with their progress and a card
+for the headset: a green dot with its battery and free space when it's
+ready, yellow while it waits for you to allow USB debugging, grey when there
+is none. Click the card to open the Headset page, which walks you through
+connecting a headset when there isn't one. Check all, on the card, lists what
+is ready to install games and what to fix: adb, the headset, free space on
+the headset and this computer, and the mirror.
+
+The Headset page lists the installed apps with their cover, version, size
+and whether the library has a newer version. Each app's actions (start,
+stop, back up, restore the latest backup, uninstall) are in its "..." menu.
+The headset's details and tools and the save backups are in sections below,
+closed until you open them.
+
+Install errors from the headset come with a plain explanation, such as
+running out of space or a newer version being installed already. Notices
+show up in the corner for a few seconds; errors stay until closed. The
+Library's search ignores spaces and punctuation and also matches initials,
+so "beatsaber" finds Beat Saber and "re4" finds Resident Evil 4.
+
 ## Headset tab
 
 The Headset tab shows the connected headset's build, battery temperature,
@@ -257,10 +281,18 @@ screenshots, in a `userdata` folder beside it. Paths in the settings are stored
 relative to that folder, so the copy still works from another drive letter or
 computer. The window title shows "(portable)" in this mode.
 
+Appearance in Settings sets the theme, the accent color, square or round
+corners, compact or spacious spacing, and the interface scale.
+
 The interface is in English and Russian. It follows the system language by
 default and can be switched in Settings without a restart. Translations are in
 `crates/*/locales/*.yml`, and a string without a translation is shown in
 English.
+
+## Credits
+
+Icons are from [Tabler Icons](https://tabler.io/icons) 3.52.0, MIT license;
+the license is in `crates/app/assets/icons/LICENSE`.
 
 ## License
 

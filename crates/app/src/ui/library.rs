@@ -133,6 +133,10 @@ struct RowsKey {
 pub struct LibraryView {
 	catalog: Option<Arc<Catalog>>,
 	lowercase_names: Vec<String>,
+	/// Free space where downloads go, kept fresh by the app.
+	pc_free: Option<u64>,
+	/// Per game: the name with only letters and digits, and its initials.
+	search_keys: Vec<(String, String)>,
 	/// Popularity rank of each game, `#1` being the most downloaded.
 	ranks: Vec<Option<u32>>,
 	status: CatalogStatus,
@@ -160,6 +164,8 @@ impl LibraryView {
 		Self {
 			catalog: None,
 			lowercase_names: Vec::new(),
+			search_keys: Vec::new(),
+			pc_free: None,
 			ranks: Vec::new(),
 			status: CatalogStatus::Idle,
 			search: String::new(),
@@ -193,6 +199,10 @@ impl LibraryView {
 					.map(|g| (g.package.clone(), g.name.clone()))
 					.collect()
 			})
+			.unwrap_or_default();
+		self.search_keys = catalog
+			.as_ref()
+			.map(|c| c.games.iter().map(|g| search_key(&g.name)).collect())
 			.unwrap_or_default();
 		self.lowercase_names = catalog
 			.as_ref()
@@ -272,7 +282,8 @@ impl LibraryView {
 				let game = &games[i];
 				let matches_search = key.search.is_empty()
 					|| self.lowercase_names[i].contains(&key.search)
-					|| game.package.to_lowercase().contains(&key.search);
+					|| game.package.to_lowercase().contains(&key.search)
+					|| matches_loosely(&self.search_keys[i], &key.search);
 				let status = installed.map_or(GameStatus::NotInstalled, |apps| apps.status(game));
 				let matches_filter = match filter {
 					Filter::All => true,
@@ -297,6 +308,38 @@ impl LibraryView {
 		self.rows_key = Some(key);
 	}
 
+	/// How many games the synced catalog has, and what the sync is doing.
+	pub fn catalog_state(&self) -> (Option<usize>, &CatalogStatus) {
+		(self.catalog.as_ref().map(|c| c.games.len()), &self.status)
+	}
+
+	/// The cover of the game a downloaded release folder holds, if the
+	/// catalog knows it.
+	pub fn cover_for_release(&self, release: &str) -> Option<std::path::PathBuf> {
+		let catalog = self.catalog.as_ref()?;
+		let game = catalog.games.iter().find(|g| g.release_name == release)?;
+		catalog.thumbnail(&game.package)
+	}
+
+	pub fn cover_for_package(&self, package: &str) -> Option<std::path::PathBuf> {
+		self.catalog.as_ref()?.thumbnail(package)
+	}
+
+	/// The newest version the catalog has of a package.
+	pub fn catalog_version(&self, package: &str) -> Option<u64> {
+		self.catalog
+			.as_ref()?
+			.games
+			.iter()
+			.filter(|g| g.package == package)
+			.filter_map(|g| g.version_code)
+			.max()
+	}
+
+	pub fn set_pc_free(&mut self, free: Option<u64>) {
+		self.pc_free = free;
+	}
+
 	pub fn show(
 		&mut self,
 		ui: &mut egui::Ui,
@@ -305,6 +348,13 @@ impl LibraryView {
 		contribute_ignored: &std::collections::HashSet<String>,
 		commands: &mut Vec<Command>,
 	) {
+		ui.horizontal(|ui| {
+			ui.heading(t!("tab.library"));
+			if let Some(catalog) = &self.catalog {
+				ui.weak(t!("lib.games_count", n = catalog.games.len()));
+			}
+		});
+		ui.add_space(4.0);
 		self.toolbar(ui, mirror_name, installed, commands);
 		if let (Some(catalog), Some(apps)) = (&self.catalog, installed) {
 			let catalog = catalog.clone();
@@ -339,7 +389,7 @@ impl LibraryView {
 				.resizable(true)
 				.default_size(320.0)
 				.show(ui, |ui| {
-					close = details(ui, &catalog, game, rank, installed, commands)
+					close = details(ui, &catalog, game, rank, installed, self.pc_free, commands)
 				});
 			if close {
 				self.selected = None;
@@ -550,7 +600,7 @@ impl LibraryView {
 		commands: &mut Vec<Command>,
 	) {
 		if self.rows.is_empty() {
-			ui.centered_and_justified(|ui| ui.weak(t!("lib.no_match")));
+			crate::theme::empty_state(ui, t!("lib.no_match_title"), t!("lib.no_match"));
 			return;
 		}
 		let row_height = 44.0;
@@ -622,7 +672,9 @@ impl LibraryView {
 					let index = self.rows[row.index()];
 					let game = &catalog.games[index];
 					row.set_selected(self.selected == Some(index));
-					row.col(|ui| thumbnail(ui, catalog, game, egui::vec2(72.0, 40.0)));
+					row.col(|ui| {
+						thumbnail(ui, catalog, game, egui::vec2(72.0, 40.0));
+					});
 					row.col(|ui| {
 						ui.vertical(|ui| {
 							ui.label(&game.name);
@@ -691,7 +743,7 @@ impl LibraryView {
 		commands: &mut Vec<Command>,
 	) {
 		if self.rows.is_empty() {
-			ui.centered_and_justified(|ui| ui.weak(t!("lib.no_match")));
+			crate::theme::empty_state(ui, t!("lib.no_match_title"), t!("lib.no_match"));
 			return;
 		}
 		let spacing = ui.spacing().item_spacing;
@@ -778,6 +830,39 @@ fn sort_rows(
 			.then_with(|| by_name(a, b))
 			.then_with(|| ga.release_name.cmp(&gb.release_name))
 	});
+}
+
+/// Letters and digits only, lowercased: "Beat Saber!" -> "beatsaber".
+fn squash(text: &str) -> String {
+	text.chars()
+		.filter(|c| c.is_alphanumeric())
+		.flat_map(char::to_lowercase)
+		.collect()
+}
+
+/// The squashed name and its initials, numbers kept whole:
+/// "Resident Evil 4" -> ("residentevil4", "re4").
+fn search_key(name: &str) -> (String, String) {
+	let mut initials = String::new();
+	for word in name
+		.split(|c: char| !c.is_alphanumeric())
+		.filter(|w| !w.is_empty())
+	{
+		if word.chars().all(|c| c.is_ascii_digit()) {
+			initials.push_str(word);
+		} else if let Some(first) = word.chars().next() {
+			initials.extend(first.to_lowercase());
+		}
+	}
+	(squash(name), initials)
+}
+
+/// Finds games despite spacing, punctuation and abbreviations: "beatsaber",
+/// "beat-saber" and "bs" all find Beat Saber.
+fn matches_loosely(key: &(String, String), search: &str) -> bool {
+	let wanted = squash(search);
+	!wanted.is_empty()
+		&& (key.0.contains(&wanted) || (wanted.chars().count() >= 2 && key.1.starts_with(&wanted)))
 }
 
 /// Ranks packages by their best download score, like androidsideloader;
@@ -877,7 +962,8 @@ fn game_card(
 	} else {
 		visuals.faint_bg_color
 	};
-	ui.painter().rect_filled(rect, 4.0, fill);
+	ui.painter()
+		.rect_filled(rect, crate::theme::radius(4.0), fill);
 	let mut content = ui.new_child(
 		egui::UiBuilder::new()
 			.max_rect(rect.shrink(6.0))
@@ -887,6 +973,11 @@ fn game_card(
 	content.style_mut().interaction.selectable_labels = false;
 	thumbnail(&mut content, catalog, game, thumb);
 	content.add(egui::Label::new(egui::RichText::new(&game.name).strong()).truncate());
+	// Installed games say so in place of the version line, in the status color.
+	if let Some((text, color)) = installed.and_then(|apps| status_badge(apps.status(game))) {
+		content.add(egui::Label::new(egui::RichText::new(text).small().color(color)).truncate());
+		return response;
+	}
 	let mut line = Vec::new();
 	if let Some(version) = game.version_code {
 		line.push(format!("v{version}"));
@@ -896,9 +987,6 @@ fn game_card(
 		line.push(size_text);
 	}
 	content.add(egui::Label::new(egui::RichText::new(line.join(", ")).small()).truncate());
-	if let Some(apps) = installed {
-		status_label(&mut content, apps.status(game));
-	}
 	response
 }
 
@@ -908,21 +996,32 @@ fn fit(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) -> egui::Response {
 	ui.add(egui::Label::new(text).truncate())
 }
 
-fn thumbnail(ui: &mut egui::Ui, catalog: &Catalog, game: &Game, size: egui::Vec2) {
+/// Draws the cover and returns where it went, for drawing over it.
+fn thumbnail(ui: &mut egui::Ui, catalog: &Catalog, game: &Game, size: egui::Vec2) -> egui::Rect {
 	match catalog.thumbnail(&game.package) {
 		Some(path) => {
 			ui.add(
 				egui::Image::new(format!("file://{}", path.display()))
 					.max_size(size)
 					.maintain_aspect_ratio(true)
-					.corner_radius(3.0),
-			);
+					.corner_radius(crate::theme::radius(6.0)),
+			)
+			.rect
 		}
 		None => {
 			let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
 			ui.painter()
-				.rect_filled(rect, 3.0, ui.visuals().faint_bg_color);
+				.rect_filled(rect, crate::theme::radius(6.0), ui.visuals().faint_bg_color);
+			rect
 		}
+	}
+}
+
+fn status_badge(status: GameStatus) -> Option<(std::borrow::Cow<'static, str>, egui::Color32)> {
+	match status {
+		GameStatus::NotInstalled => None,
+		GameStatus::Installed => Some((t!("lib.status_installed"), crate::theme::GOOD)),
+		GameStatus::UpdateAvailable => Some((t!("lib.status_update"), crate::theme::WARN)),
 	}
 }
 
@@ -932,6 +1031,7 @@ fn details(
 	game: &Game,
 	rank: Option<u32>,
 	installed: Option<&InstalledApps<'_>>,
+	pc_free: Option<u64>,
 	commands: &mut Vec<Command>,
 ) -> bool {
 	let status = installed.map(|apps| apps.status(game));
@@ -947,7 +1047,10 @@ fn details(
 		});
 	});
 	ui.horizontal_wrapped(|ui| {
-		let install = ui.add_enabled(target.is_some(), egui::Button::new(install_label(status)));
+		let install = ui.add_enabled(
+			target.is_some(),
+			super::toned(install_label(status), super::Tone::Go),
+		);
 		let install = match target {
 			Some((_, name)) => install.on_hover_text(t!("lib.installs_on", name = name)),
 			None => install.on_disabled_hover_text(t!("lib.connect_install")),
@@ -977,10 +1080,46 @@ fn details(
 			),
 		);
 	}
+	// The archive and the unpacked release are on disk together for a while.
+	if let (Some(free), Some(mb)) = (pc_free, game.size_mb) {
+		let needed = (mb * 2.0 * 1024.0 * 1024.0) as u64;
+		if needed > free {
+			ui.colored_label(
+				ui.visuals().warn_fg_color,
+				t!(
+					"lib.low_pc_space",
+					needed = format_bytes(needed),
+					free = format_bytes(free)
+				),
+			);
+		}
+	}
 	ui.add_space(4.0);
 	egui::ScrollArea::vertical().show(ui, |ui| {
 		let width = ui.available_width();
-		thumbnail(ui, catalog, game, egui::vec2(width, width * 0.56));
+		let cover = thumbnail(ui, catalog, game, egui::vec2(width, width * 0.56));
+		// The name over a dark band at the bottom of the cover, like a store page.
+		let band =
+			egui::Rect::from_min_max(egui::pos2(cover.left(), cover.bottom() - 30.0), cover.max);
+		let painter = ui.painter();
+		painter.rect_filled(
+			band,
+			egui::CornerRadius {
+				nw: 0,
+				ne: 0,
+				sw: crate::theme::radius(6.0) as u8,
+				se: crate::theme::radius(6.0) as u8,
+			},
+			egui::Color32::from_black_alpha(150),
+		);
+		let name = painter.layout(
+			game.name.clone(),
+			egui::FontId::proportional(16.0),
+			egui::Color32::WHITE,
+			band.width() - 16.0,
+		);
+		let y = band.center().y - name.size().y / 2.0;
+		painter.galley(egui::pos2(band.left() + 8.0, y), name, egui::Color32::WHITE);
 		ui.add_space(8.0);
 		egui::Grid::new("game_details_grid")
 			.num_columns(2)
@@ -1090,6 +1229,19 @@ mod tests {
 			size_mb: None,
 			downloads: None,
 		}
+	}
+
+	#[test]
+	fn loose_search() {
+		let key = search_key("Resident Evil 4");
+		assert_eq!(key, ("residentevil4".into(), "re4".into()));
+		assert!(matches_loosely(&key, "re4"));
+		assert!(matches_loosely(&key, "resident-evil 4"));
+		assert!(matches_loosely(&key, "Evil4"));
+		assert!(!matches_loosely(&key, "r"));
+		assert!(!matches_loosely(&key, "re5"));
+		assert!(matches_loosely(&search_key("Beat Saber"), "beatsaber"));
+		assert!(matches_loosely(&search_key("Beat Saber"), "bs"));
 	}
 
 	#[test]

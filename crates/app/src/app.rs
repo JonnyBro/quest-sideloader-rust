@@ -21,16 +21,39 @@ pub enum Tab {
 
 impl Tab {
 	const ALL: [Tab; 9] = [
-		Tab::Devices,
 		Tab::Headset,
 		Tab::Library,
 		Tab::Downloads,
+		Tab::Tasks,
+		Tab::Devices,
 		Tab::Rename,
 		Tab::Inspector,
-		Tab::Tasks,
 		Tab::Console,
 		Tab::Settings,
 	];
+
+	/// Tabs for people who know adb; hidden until advanced mode is on.
+	fn advanced(self) -> bool {
+		matches!(
+			self,
+			Tab::Devices | Tab::Rename | Tab::Inspector | Tab::Console
+		)
+	}
+
+	fn icon(self) -> crate::icons::Icon {
+		use crate::icons::Icon;
+		match self {
+			Tab::Headset => Icon::Headset,
+			Tab::Library => Icon::Library,
+			Tab::Downloads => Icon::Downloads,
+			Tab::Tasks => Icon::Tasks,
+			Tab::Settings => Icon::Settings,
+			Tab::Devices => Icon::Devices,
+			Tab::Rename => Icon::Rename,
+			Tab::Inspector => Icon::Inspector,
+			Tab::Console => Icon::Console,
+		}
+	}
 
 	fn label(self) -> std::borrow::Cow<'static, str> {
 		match self {
@@ -52,17 +75,41 @@ pub enum Status {
 	Error(String),
 }
 
+/// How long a notice stays in the corner.
+const TOAST_TIME: std::time::Duration = std::time::Duration::from_secs(5);
+
+struct Toast {
+	status: Status,
+	shown: std::time::Instant,
+}
+
+impl Toast {
+	fn new(status: Status) -> Self {
+		Self {
+			status,
+			shown: std::time::Instant::now(),
+		}
+	}
+}
+
 pub struct SideloaderApp {
 	engine: Engine,
 	paths: AppPaths,
 	tab: Tab,
-	status: Option<Status>,
+	/// Messages in the corner: notices fade, errors stay until closed.
+	toasts: Vec<Toast>,
 	devices_view: ui::devices::DevicesView,
 	tasks_view: ui::tasks::TasksView,
 	console_view: ui::console::ConsoleView,
 	rename_view: ui::rename::RenameView,
 	inspector_view: ui::inspector::InspectorView,
 	keys_view: ui::keys::KeysView,
+	/// Shows the tabs for advanced users.
+	advanced: bool,
+	appearance: crate::theme::Appearance,
+	checkup: ui::checkup::Checkup,
+	/// When free space in the downloads folder was last read.
+	pc_free_checked: Option<std::time::Instant>,
 	/// Packages of renamed copies made here, never offered for upload.
 	copies: std::collections::HashSet<String>,
 	downloads_view: ui::downloads::DownloadsView,
@@ -102,6 +149,12 @@ impl SideloaderApp {
 			Arc::new(move || ctx.request_repaint()),
 		)?;
 		apply_theme(&cc.egui_ctx, settings.theme);
+		crate::theme::install_font(&cc.egui_ctx);
+		let appearance: crate::theme::Appearance = cc
+			.storage
+			.and_then(|s| eframe::get_value(s, APPEARANCE_KEY))
+			.unwrap_or_default();
+		crate::theme::apply(&cc.egui_ctx, &appearance);
 		apply_language(settings.language);
 		egui_extras::install_image_loaders(&cc.egui_ctx);
 
@@ -129,9 +182,15 @@ impl SideloaderApp {
 			title: base_title(paths.portable_root().is_some()).to_owned(),
 			engine,
 			paths,
-			tab: Tab::Devices,
-			status: load_error
-				.map(|e| Status::Error(t!("app.settings_load_error", error = e).into_owned())),
+			tab: Tab::Headset,
+			toasts: load_error
+				.map(|e| {
+					Toast::new(Status::Error(
+						t!("app.settings_load_error", error = e).into_owned(),
+					))
+				})
+				.into_iter()
+				.collect(),
 			devices_view,
 			tasks_view: ui::tasks::TasksView::new(),
 			console_view: ui::console::ConsoleView::new(),
@@ -139,6 +198,13 @@ impl SideloaderApp {
 			inspector_view: ui::inspector::InspectorView::new(),
 			copies: keys_view.packages().into_iter().collect(),
 			keys_view,
+			pc_free_checked: None,
+			appearance,
+			checkup: ui::checkup::Checkup::default(),
+			advanced: cc
+				.storage
+				.and_then(|s| eframe::get_value(s, ADVANCED_KEY))
+				.unwrap_or(false),
 			downloads_view: ui::downloads::DownloadsView::new(),
 			headset_view: ui::headset::HeadsetView::new(),
 			logs_view: ui::logs::LogsView::new(log_buffer, logs_dir),
@@ -158,11 +224,11 @@ impl SideloaderApp {
 				apply_language(settings.language);
 				self.downloads_view.invalidate();
 				self.settings_view.saved(settings, &self.paths.rclone_dir());
-				self.status = Some(Status::Info(t!("app.settings_saved").into_owned()));
+				self.notify(Status::Info(t!("app.settings_saved").into_owned()));
 			}
 			Event::SettingsSaveFailed(message) => {
 				self.settings_view.save_failed();
-				self.status = Some(Status::Error(message));
+				self.notify(Status::Error(message));
 			}
 			Event::AdbStatus(status) => {
 				if matches!(status, quest_sideloader_core::AdbStatus::Missing(_)) {
@@ -223,11 +289,11 @@ impl SideloaderApp {
 			Event::Inspection { id, result } => self.inspector_view.on_result(id, result),
 			Event::Notice(message) => {
 				tracing::info!("{message}");
-				self.status = Some(Status::Info(message));
+				self.notify(Status::Info(message));
 			}
 			Event::Error(message) => {
 				tracing::error!("{message}");
-				self.status = Some(Status::Error(message));
+				self.notify(Status::Error(message));
 			}
 		}
 	}
@@ -259,7 +325,7 @@ impl SideloaderApp {
 			return;
 		}
 		let Some((serial, _)) = target else {
-			self.status = Some(Status::Error(t!("app.no_headset").into_owned()));
+			self.notify(Status::Error(t!("app.no_headset").into_owned()));
 			return;
 		};
 		for path in dropped {
@@ -282,30 +348,220 @@ impl SideloaderApp {
 		}
 	}
 
-	fn status_bar(&mut self, ui: &mut egui::Ui) {
-		let mut dismiss = false;
-		ui.horizontal(|ui| {
-			match &self.status {
-				None => {
-					ui.weak(t!("app.ready"));
+	/// Everything that has to be right to install games, for "Check all".
+	fn checks(&self) -> Vec<ui::checkup::Check> {
+		use quest_sideloader_core::AdbStatus;
+		use ui::checkup::{Check, Level};
+		use ui::devices::Readiness;
+		let mut checks = Vec::new();
+		checks.push(match self.devices_view.adb_status() {
+			AdbStatus::Running { .. } => Check::new(Level::Ok, t!("chk.adb_ok"), ""),
+			AdbStatus::Starting => Check::new(Level::Warning, t!("chk.adb_starting"), ""),
+			AdbStatus::Missing(e) | AdbStatus::Unavailable(e) => {
+				Check::new(Level::Problem, t!("chk.adb_missing"), e.clone())
+			}
+		});
+		checks.push(match self.devices_view.readiness() {
+			Readiness::Ready => {
+				let name = self
+					.devices_view
+					.install_target()
+					.map(|d| d.display_name())
+					.unwrap_or_default();
+				Check::new(Level::Ok, t!("chk.headset_ok", name = name), "")
+			}
+			Readiness::Waiting(state) => Check::new(
+				Level::Warning,
+				t!("chk.headset_waiting"),
+				ui::devices::state_hint(&state).unwrap_or_default(),
+			),
+			Readiness::NoHeadset | Readiness::NoAdb => Check::new(
+				Level::Problem,
+				t!("chk.headset_none"),
+				t!("chk.headset_none_detail"),
+			),
+		});
+		let info = self
+			.devices_view
+			.install_target()
+			.and_then(|d| self.devices_view.info(&d.serial));
+		if let Some(storage) = info.and_then(|i| i.storage) {
+			const GB: u64 = 1024 * 1024 * 1024;
+			let level = match storage.free_bytes {
+				f if f < 2 * GB => Level::Problem,
+				f if f < 10 * GB => Level::Warning,
+				_ => Level::Ok,
+			};
+			checks.push(Check::new(
+				level,
+				t!(
+					"chk.headset_space",
+					free = ui::format_bytes(storage.free_bytes)
+				),
+				if level == Level::Ok {
+					"".into()
+				} else {
+					t!("chk.space_detail")
+				},
+			));
+		}
+		if let Some(battery) = info.and_then(|i| i.battery) {
+			let level = if battery.level < 15 && !battery.charging {
+				Level::Warning
+			} else {
+				Level::Ok
+			};
+			checks.push(Check::new(
+				level,
+				t!("chk.battery", level = battery.level),
+				"",
+			));
+		}
+		match quest_sideloader_core::downloaded::free_space(self.settings_view.downloads_dir()) {
+			Some(free) => {
+				const GB: u64 = 1024 * 1024 * 1024;
+				let level = match free {
+					f if f < 3 * GB => Level::Problem,
+					f if f < 10 * GB => Level::Warning,
+					_ => Level::Ok,
+				};
+				checks.push(Check::new(
+					level,
+					t!("chk.pc_space", free = ui::format_bytes(free)),
+					if level == Level::Ok {
+						"".into()
+					} else {
+						t!("chk.pc_space_detail")
+					},
+				));
+			}
+			None => checks.push(Check::new(
+				Level::Warning,
+				t!("chk.pc_space_unknown"),
+				self.settings_view.downloads_dir().display().to_string(),
+			)),
+		}
+		let (games, status) = self.library_view.catalog_state();
+		checks.push(
+			match (self.settings_view.active_mirror_name(), status, games) {
+				(None, _, _) => Check::new(
+					Level::Skipped,
+					t!("chk.mirror_none"),
+					t!("chk.mirror_none_detail"),
+				),
+				(Some(_), quest_sideloader_core::CatalogStatus::Failed(e), _) => {
+					Check::new(Level::Problem, t!("chk.mirror_failed"), e.clone())
 				}
-				Some(status) => {
-					match status {
-						Status::Info(text) => ui.label(text),
-						Status::Error(text) => ui.colored_label(ui.visuals().error_fg_color, text),
-					};
-					dismiss = ui
-						.small_button("✕")
-						.on_hover_text(t!("common.close"))
-						.clicked();
+				(Some(_), quest_sideloader_core::CatalogStatus::Syncing { .. }, _) => {
+					Check::new(Level::Warning, t!("chk.mirror_syncing"), "")
+				}
+				(Some(name), _, Some(n)) => {
+					Check::new(Level::Ok, t!("chk.mirror_ok", name = name, n = n), "")
+				}
+				(Some(name), _, None) => {
+					Check::new(Level::Warning, t!("chk.mirror_empty", name = name), "")
+				}
+			},
+		);
+		checks
+	}
+
+	fn notify(&mut self, status: Status) {
+		// Only the latest few; a burst of errors shouldn't cover the window.
+		if self.toasts.len() >= 4 {
+			self.toasts.remove(0);
+		}
+		self.toasts.push(Toast::new(status));
+	}
+
+	/// Navigation on top; running tasks, the headset and the logs at the bottom.
+	fn sidebar(&mut self, ui: &mut egui::Ui) {
+		ui.add_space(6.0);
+		ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+			for tab in Tab::ALL.into_iter().filter(|t| !t.advanced()) {
+				if crate::icons::nav_item(ui, tab.icon(), &tab.label(), self.tab == tab, 18.0) {
+					self.tab = tab;
 				}
 			}
-			ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-				self.logs_view.button(ui);
+			if self.advanced {
+				ui.add_space(8.0);
+				ui.weak(egui::RichText::new(t!("app.advanced_tabs")).small());
+				for tab in Tab::ALL.into_iter().filter(|t| t.advanced()) {
+					if crate::icons::nav_item(ui, tab.icon(), &tab.label(), self.tab == tab, 15.0) {
+						self.tab = tab;
+					}
+				}
+			}
+		});
+		ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+			ui.add_space(6.0);
+			self.logs_view.button(ui);
+			ui.add_space(4.0);
+			let (open, check) = self.devices_view.sidebar_card(ui);
+			if open {
+				self.tab = Tab::Headset;
+			}
+			if check {
+				self.checkup.open();
+			}
+			ui.add_space(8.0);
+			ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+				if self.tasks_view.sidebar(ui) {
+					self.tab = Tab::Tasks;
+				}
 			});
 		});
-		if dismiss {
-			self.status = None;
+	}
+
+	fn show_toasts(&mut self, ctx: &egui::Context) {
+		self.toasts
+			.retain(|t| matches!(t.status, Status::Error(_)) || t.shown.elapsed() < TOAST_TIME);
+		if self.toasts.is_empty() {
+			return;
+		}
+		if self
+			.toasts
+			.iter()
+			.any(|t| matches!(t.status, Status::Info(_)))
+		{
+			ctx.request_repaint_after(std::time::Duration::from_millis(250));
+		}
+		let mut close = None;
+		egui::Area::new(egui::Id::unique("toasts"))
+			.anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-12.0, -12.0))
+			.order(egui::Order::Foreground)
+			.show(ctx, |ui| {
+				for (i, toast) in self.toasts.iter().enumerate() {
+					let (text, stripe) = match &toast.status {
+						Status::Info(text) => (text, ui.visuals().selection.bg_fill),
+						Status::Error(text) => (text, crate::theme::BAD),
+					};
+					egui::Frame::popup(ui.style())
+						.corner_radius(crate::theme::radius(8.0))
+						.show(ui, |ui| {
+							ui.set_max_width(380.0);
+							ui.horizontal(|ui| {
+								let (rect, _) = ui.allocate_exact_size(
+									egui::vec2(4.0, 20.0),
+									egui::Sense::hover(),
+								);
+								ui.painter()
+									.rect_filled(rect, crate::theme::radius(2.0), stripe);
+								ui.add(egui::Label::new(text.as_str()).wrap());
+								if ui
+									.small_button("✕")
+									.on_hover_text(t!("common.close"))
+									.clicked()
+								{
+									close = Some(i);
+								}
+							});
+						});
+					ui.add_space(6.0);
+				}
+			});
+		if let Some(i) = close {
+			self.toasts.remove(i);
 		}
 	}
 }
@@ -313,10 +569,14 @@ impl SideloaderApp {
 const LIBRARY_KEY: &str = "library";
 const WIRELESS_KEY: &str = "wireless_address";
 const LOADER_KEY: &str = "rename_loader";
+const ADVANCED_KEY: &str = "advanced_mode";
+const APPEARANCE_KEY: &str = "appearance";
 
 impl eframe::App for SideloaderApp {
 	fn save(&mut self, storage: &mut dyn eframe::Storage) {
 		eframe::set_value(storage, LIBRARY_KEY, &self.library_view.prefs());
+		eframe::set_value(storage, ADVANCED_KEY, &self.advanced);
+		eframe::set_value(storage, APPEARANCE_KEY, &self.appearance);
 		if let Some(path) = self.rename_view.loader() {
 			eframe::set_value(storage, LOADER_KEY, &path);
 		}
@@ -333,33 +593,30 @@ impl eframe::App for SideloaderApp {
 	}
 
 	fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-		egui::Panel::top("tabs").show(ui, |ui| {
-			ui.horizontal(|ui| {
-				for tab in Tab::ALL {
-					ui.selectable_value(&mut self.tab, tab, tab.label());
-				}
-			});
-		});
-
-		egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
-
-		let mut commands = Vec::new();
-		if self.tab != Tab::Tasks {
-			let mut open = false;
-			egui::Panel::bottom("tasks_summary")
-				.resizable(false)
-				.show(ui, |ui| open = self.tasks_view.summary(ui));
-			if open {
-				self.tab = Tab::Tasks;
-			}
+		if !self.advanced && self.tab.advanced() {
+			self.tab = Tab::Library;
 		}
+		let mut commands = Vec::new();
+		egui::Panel::left("sidebar")
+			.resizable(false)
+			.default_size(190.0)
+			.show(ui, |ui| self.sidebar(ui));
 		egui::CentralPanel::default().show(ui, |ui| match self.tab {
 			Tab::Devices => {
 				if self.devices_view.show(ui, &mut commands) {
 					self.adb_setup.reopen();
 				}
 			}
+			Tab::Headset if self.devices_view.install_target().is_none() => {
+				ui.add_space(16.0);
+				if self.devices_view.help(ui, &mut commands) {
+					self.adb_setup.reopen();
+				}
+			}
 			Tab::Headset => {
+				let library = &self.library_view;
+				let cover = |p: &str| library.cover_for_package(p);
+				let latest = |p: &str| library.catalog_version(p);
 				let target = self
 					.devices_view
 					.install_target()
@@ -369,10 +626,23 @@ impl eframe::App for SideloaderApp {
 						info: self.devices_view.info(&d.serial),
 						names: self.library_view.names(),
 						copies: &self.copies,
+						cover: &cover,
+						latest: &latest,
 					});
 				self.headset_view.show(ui, target, &mut commands);
 			}
 			Tab::Library => {
+				// Reading free space is a system call; a few seconds old is fine.
+				if self
+					.pc_free_checked
+					.is_none_or(|t| t.elapsed() > std::time::Duration::from_secs(5))
+				{
+					self.pc_free_checked = Some(std::time::Instant::now());
+					self.library_view
+						.set_pc_free(quest_sideloader_core::downloaded::free_space(
+							self.settings_view.downloads_dir(),
+						));
+				}
 				let installed = self.devices_view.installed_apps();
 				let mut ignored = self.settings_view.contribute_ignored();
 				ignored.extend(self.copies.iter().cloned());
@@ -394,6 +664,8 @@ impl eframe::App for SideloaderApp {
 					ui,
 					self.settings_view.downloads_dir(),
 					target,
+					self.advanced,
+					&|release| self.library_view.cover_for_release(release),
 					&mut commands,
 				) {
 					match action {
@@ -434,20 +706,33 @@ impl eframe::App for SideloaderApp {
 			}
 			Tab::Settings => {
 				let default_downloads = self.paths.default_downloads_dir();
+				let before = self.appearance;
 				self.settings_view.show(
 					ui,
 					&default_downloads,
 					&self.paths.rclone_dir(),
 					&mut commands,
-					&mut self.keys_view,
+					ui::settings::Prefs {
+						keys: &mut self.keys_view,
+						advanced: &mut self.advanced,
+						appearance: &mut self.appearance,
+					},
 				);
 				if self.keys_view.take_changed() {
 					self.copies = self.keys_view.packages().into_iter().collect();
+				}
+				if self.appearance != before {
+					crate::theme::apply(ui.ctx(), &self.appearance);
 				}
 			}
 		});
 		let ctx = ui.ctx().clone();
 		self.update_title(&ctx);
+		self.show_toasts(&ctx);
+		if self.checkup.is_open() {
+			let checks = self.checks();
+			self.checkup.show(&ctx, &checks);
+		}
 		self.review_dialog.show(&ctx, &mut commands);
 		self.logs_view.window(&ctx);
 		let default_downloads = self.paths.default_downloads_dir();

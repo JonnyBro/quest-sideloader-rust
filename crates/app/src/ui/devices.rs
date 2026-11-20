@@ -6,6 +6,14 @@ use quest_sideloader_core::{AdbStatus, Command};
 
 use super::format_bytes;
 
+/// Whether there is a headset to work with, and if not, why.
+pub enum Readiness {
+	NoAdb,
+	NoHeadset,
+	Waiting(DeviceState),
+	Ready,
+}
+
 enum InfoState {
 	Loading,
 	Loaded(DeviceInfo),
@@ -200,20 +208,180 @@ impl DevicesView {
 			}
 
 			ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-				let address = self.wireless_address.trim().to_owned();
-				let connect =
-					ui.add_enabled(!address.is_empty(), egui::Button::new(t!("dev.connect")));
-				let field = ui.add(
-					egui::TextEdit::singleline(&mut self.wireless_address)
-						.hint_text("192.168.1.50:5555")
-						.desired_width(160.0),
-				);
-				let submitted = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-				ui.label(t!("dev.wifi"));
-				if (connect.clicked() || submitted) && !address.is_empty() {
-					commands.push(Command::ConnectWireless(address));
-				}
+				self.wireless_form(ui, commands);
 			});
+		});
+		setup
+	}
+
+	/// The Wi-Fi address field and Connect button, laid out right to left.
+	fn wireless_form(&mut self, ui: &mut egui::Ui, commands: &mut Vec<Command>) {
+		let address = self.wireless_address.trim().to_owned();
+		let connect = ui.add_enabled(!address.is_empty(), egui::Button::new(t!("dev.connect")));
+		let field = ui.add(
+			egui::TextEdit::singleline(&mut self.wireless_address)
+				.hint_text("192.168.1.50:5555")
+				.desired_width(160.0),
+		);
+		let submitted = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+		ui.label(t!("dev.wifi"));
+		if (connect.clicked() || submitted) && !address.is_empty() {
+			commands.push(Command::ConnectWireless(address));
+		}
+	}
+
+	pub fn adb_status(&self) -> &AdbStatus {
+		&self.adb_status
+	}
+
+	pub fn readiness(&self) -> Readiness {
+		if matches!(
+			self.adb_status,
+			AdbStatus::Missing(_) | AdbStatus::Unavailable(_)
+		) {
+			return Readiness::NoAdb;
+		}
+		if self.install_target().is_some() {
+			return Readiness::Ready;
+		}
+		match self.devices.first() {
+			Some(device) => Readiness::Waiting(device.state.clone()),
+			None => Readiness::NoHeadset,
+		}
+	}
+
+	/// The headset in the corner of the sidebar: its state, battery and free
+	/// space. Returns (card clicked, "check all" clicked).
+	pub fn sidebar_card(&self, ui: &mut egui::Ui) -> (bool, bool) {
+		use crate::theme;
+		let mut check = false;
+		let response = theme::panel(ui)
+			.show(ui, |ui| {
+				ui.set_width(ui.available_width());
+				// The sidebar stacks from the bottom; the card itself reads top down.
+				ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+					let (title, color) = match self.readiness() {
+						Readiness::Ready => (
+							self.install_target()
+								.map(|d| d.display_name())
+								.unwrap_or_default(),
+							theme::GOOD,
+						),
+						Readiness::Waiting(state) => (state_label(&state), theme::WARN),
+						Readiness::NoHeadset => (t!("dev.pill_none").into_owned(), theme::MUTED),
+						Readiness::NoAdb => (t!("dev.pill_no_adb").into_owned(), theme::BAD),
+					};
+					ui.horizontal(|ui| {
+						let (dot, _) =
+							ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
+						ui.painter().circle_filled(dot.center(), 4.0, color);
+						ui.add(egui::Label::new(egui::RichText::new(title).strong()).truncate());
+					});
+					let info = self.install_target().and_then(|d| self.info(&d.serial));
+					if let Some(b) = info.and_then(|i| i.battery) {
+						ui.weak(
+							egui::RichText::new(t!("dev.battery_level", level = b.level)).small(),
+						);
+						let color = if b.level < 15 {
+							theme::BAD
+						} else {
+							theme::GOOD
+						};
+						theme::meter(ui, f32::from(b.level) / 100.0, color);
+					}
+					if let Some(s) = info.and_then(|i| i.storage).filter(|s| s.total_bytes > 0) {
+						ui.weak(
+							egui::RichText::new(t!(
+								"dev.free_short",
+								size = format_bytes(s.free_bytes)
+							))
+							.small(),
+						);
+						let free = s.free_bytes as f32 / s.total_bytes as f32;
+						let color = if free < 0.1 {
+							theme::BAD
+						} else if free < 0.2 {
+							theme::WARN
+						} else {
+							theme::GOOD
+						};
+						theme::meter(ui, 1.0 - free, color);
+					}
+					ui.add_space(2.0);
+					let icon = crate::icons::Icon::Check.image(14.0, ui.visuals().text_color());
+					check = ui
+						.add(egui::Button::image_and_text(icon, t!("chk.button")).small())
+						.on_hover_text(t!("chk.hint"))
+						.clicked();
+				});
+			})
+			.response
+			.interact(egui::Sense::click())
+			.on_hover_text(t!("dev.pill_hint"));
+		(response.clicked(), check)
+	}
+
+	/// Steps to get the headset ready, for when it isn't. Returns true when
+	/// the user asks to set up adb.
+	pub fn help(&mut self, ui: &mut egui::Ui, commands: &mut Vec<Command>) -> bool {
+		let mut setup = false;
+		crate::theme::panel(ui).show(ui, |ui| {
+			ui.set_width(ui.available_width().min(560.0));
+			match self.readiness() {
+				Readiness::Ready => {}
+				Readiness::NoAdb => {
+					ui.heading(t!("help.no_adb_title"));
+					ui.label(t!("help.no_adb"));
+					ui.add_space(6.0);
+					setup = ui
+						.add(super::toned(t!("dev.set_up_adb"), super::Tone::Go))
+						.clicked();
+				}
+				Readiness::Waiting(DeviceState::Unauthorized) => {
+					ui.heading(t!("help.unauthorized_title"));
+					ui.label(t!("help.unauthorized"));
+				}
+				Readiness::Waiting(state) => {
+					ui.heading(t!("help.waiting_title"));
+					if let Some(hint) = state_hint(&state) {
+						ui.label(hint);
+					}
+				}
+				Readiness::NoHeadset => {
+					ui.heading(t!("help.none_title"));
+					for (i, step) in [
+						t!("help.step_dev_mode"),
+						t!("help.step_cable"),
+						t!("help.step_allow"),
+					]
+					.into_iter()
+					.enumerate()
+					{
+						ui.label(format!("{}. {step}", i + 1));
+					}
+					if cfg!(windows) {
+						ui.horizontal_wrapped(|ui| {
+							ui.label(t!("help.windows_driver"));
+							ui.hyperlink_to(
+								t!("adb.driver_link"),
+								quest_sideloader_core::platform_tools::QUEST_DRIVER_URL,
+							);
+						});
+					}
+					ui.add_space(8.0);
+					ui.weak(t!("help.or_wifi"));
+					ui.horizontal(|ui| {
+						ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+							ui.with_layout(
+								egui::Layout::right_to_left(egui::Align::Center),
+								|ui| {
+									self.wireless_form(ui, commands);
+								},
+							);
+						});
+					});
+				}
+			}
 		});
 		setup
 	}
@@ -271,7 +439,9 @@ impl DevicesView {
 
 		if device.state == DeviceState::Online {
 			ui.horizontal(|ui| {
-				if ui.button(t!("dev.install_file")).clicked()
+				if ui
+					.add(super::toned(t!("dev.install_file"), super::Tone::Go))
+					.clicked()
 					&& let Some(file) = rfd::FileDialog::new()
 						.add_filter(t!("dev.apk_or_zip"), &["apk", "zip"])
 						.pick_file()
@@ -281,7 +451,9 @@ impl DevicesView {
 						path: file,
 					});
 				}
-				if ui.button(t!("dev.install_folder")).clicked()
+				if ui
+					.add(super::toned(t!("dev.install_folder"), super::Tone::Go))
+					.clicked()
 					&& let Some(folder) = rfd::FileDialog::new().pick_folder()
 				{
 					commands.push(Command::Install {
@@ -330,7 +502,7 @@ fn state_label(state: &DeviceState) -> String {
 	}
 }
 
-fn state_hint(state: &DeviceState) -> Option<std::borrow::Cow<'static, str>> {
+pub fn state_hint(state: &DeviceState) -> Option<std::borrow::Cow<'static, str>> {
 	match state {
 		DeviceState::Online => None,
 		DeviceState::Unauthorized => Some(t!("dev.hint_unauthorized")),

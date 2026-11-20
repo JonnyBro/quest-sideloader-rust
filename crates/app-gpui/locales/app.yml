@@ -1,0 +1,298 @@
+_version: 2
+nav.main:
+  en: "Main"
+  ru: "Основное"
+nav.advanced:
+  en: "Advanced"
+  ru: "Расширенные"
+tab.headset:
+  en: "Headset"
+  ru: "Шлем"
+tab.catalog:
+  en: "Catalog"
+  ru: "Каталог"
+tab.downloads:
+  en: "Downloads"
+  ru: "Загрузки"
+tab.rename:
+  en: "Rename"
+  ru: "Переименование"
+tab.devices:
+  en: "Devices"
+  ru: "Устройства"
+tab.inspector:
+  en: "Inspector"
+  ru: "Инспектор"
+tab.console:
+  en: "Console"
+  ru: "Консоль"
+tab.logs:
+  en: "Logs"
+  ru: "Логи"
+tab.settings:
+  en: "Settings"
+  ru: "Настройки"
+proto.not_ported:
+  en: "Not in the prototype yet"
+  ru: "В прототип ещё не перенесено"
+dev.none:
+  en: "No headset"
+  ru: "Нет шлема"
+dev.connect_hint:
+  en: "Connect a headset by USB"
+  ru: "Подключите шлем по USB"
+dev.manage:
+  en: "Manage devices..."
+  ru: "Управление устройствами..."
+dev.unauthorized:
+  en: "allow USB debugging in the headset"
+  ru: "разрешите отладку по USB в шлеме"
+dev.offline:
+  en: "offline"
+  ru: "не в сети"
+hs.apps:
+  en: "Apps"
+  ru: "Приложения"
+hs.filter:
+  en: "Filter"
+  ru: "Фильтр"
+hs.largest:
+  en: "Largest"
+  ru: "Крупные"
+hs.by_name:
+  en: "Name"
+  ru: "Имя"
+hs.system:
+  en: "System"
+  ru: "Системные"
+hs.install_folder:
+  en: "Install folder..."
+  ru: "Установить папку..."
+hs.install_file:
+  en: "Install APK or ZIP..."
+  ru: "Установить APK или ZIP..."
+hs.refresh:
+  en: "Refresh"
+  ru: "Обновить"
+hs.col_name:
+  en: "Name"
+  ru: "Название"
+hs.col_package:
+  en: "Package"
+  ru: "Пакет"
+hs.col_version:
+  en: "Version"
+  ru: "Версия"
+hs.col_size:
+  en: "Size"
+  ru: "Размер"
+hs.latest:
+  en: "latest"
+  ru: "последняя"
+hs.update:
+  en: "update"
+  ru: "обновление"
+hs.launch:
+  en: "Launch"
+  ru: "Запустить"
+hs.stop:
+  en: "Stop"
+  ru: "Остановить"
+hs.back_up:
+  en: "Back up saves"
+  ru: "Сохранить бэкап"
+hs.nothing:
+  en: "Nothing matches the filter"
+  ru: "Под фильтр ничего не подходит"
+hs.loading:
+  en: "Reading the headset..."
+  ru: "Читаю шлем..."
+dev.free_of:
+  en: "%{free} free of %{total}"
+  ru: "свободно %{free} из %{total}"
+common.cancel:
+  en: "Cancel"
+  ru: "Отмена"
+wifi.menu:
+  en: "Connect over Wi-Fi..."
+  ru: "Подключить по Wi-Fi..."
+wifi.title:
+  en: "Connect over Wi-Fi"
+  ru: "Подключение по Wi-Fi"
+wifi.hint:
+  en: "Headset address with port. Wireless ADB has to be on: turn it on from the Device tab while the headset is on USB."
+  ru: "Адрес шлема с портом. Беспроводной ADB должен быть включён: это делается на вкладке Устройство, пока шлем подключён по USB."
+wifi.connect:
+  en: "Connect"
+  ru: "Подключить"
+adb.starting:
+  en: "adb starting"
+  ru: "adb запускается"
+adb.down:
+  en: "adb not running"
+  ru: "adb не работает"
+hs.tab_apps:
+  en: "Apps"
+  ru: "Приложения"
+hs.tab_device:
+  en: "Device"
+  ru: "Устройство"
+hs.tab_backups:
+  en: "Backups"
+  ru: "Бэкапы"
+hs.battery:
+  en: "Battery"
+  ru: "Батарея"
+hs.storage:
+  en: "Storage"
+  ru: "Память"
+hs.tools:
+  en: "Tools"
+  ru: "Инструменты"
+hs.info:
+  en: "About"
+  ru: "Сведения"
+hs.no_backups:
+  en: "No backups yet. Back up an app's saves from its menu on the Apps tab."
+  ru: "Бэкапов пока нет. Сохранить бэкап можно из меню приложения на вкладке Приложения."
+hs.col_date:
+  en: "Date"
+  ru: "Дата"
+hs.col_files:
+  en: "Files"
+  ru: "Файлы"
+hs.uninstall_text:
+  en: "Its saves are backed up first, then the app and its OBB files are removed."
+  ru: "Сначала сохранения копируются в бэкап, потом приложение и его OBB удаляются."
+hs.restore_title:
+  en: "Restore %{name}?"
+  ru: "Восстановить %{name}?"
+hs.reboot_title:
+  en: "%{action}?"
+  ru: "%{action}?"
+hs.reboot_text:
+  en: "The connection drops until the headset is back."
+  ru: "Соединение пропадёт, пока шлем не загрузится."
+dev.model:
+  en: "Model"
+  ru: "Модель"
+dev.android:
+  en: "Android"
+  ru: "Android"
+hs.codename:
+  en: "Codename"
+  ru: "Кодовое имя"
+hs.build:
+  en: "Build"
+  ru: "Сборка"
+hs.memory:
+  en: "Memory"
+  ru: "Память (ОЗУ)"
+hs.uptime:
+  en: "Uptime"
+  ru: "Время работы"
+hs.wifi:
+  en: "Wi-Fi"
+  ru: "Wi-Fi"
+hs.not_connected:
+  en: "not connected"
+  ru: "не подключён"
+hs.wireless_adb:
+  en: "Wireless ADB"
+  ru: "Беспроводной ADB"
+hs.off:
+  en: "off"
+  ru: "выключен"
+hs.on_port:
+  en: "on, port %{port}"
+  ru: "включён, порт %{port}"
+hs.enable_wireless:
+  en: "Enable wireless ADB"
+  ru: "Включить беспроводной ADB"
+hs.enable_wireless_hint:
+  en: "Turns on ADB over Wi-Fi (port 5555) and connects to it; the USB connection resets"
+  ru: "Включает ADB по Wi-Fi (порт 5555) и подключается к нему; соединение по USB при этом сбросится"
+hs.no_wifi:
+  en: "The headset isn't on Wi-Fi"
+  ru: "Шлем не подключён к Wi-Fi"
+hs.screenshot:
+  en: "Screenshot"
+  ru: "Скриншот"
+hs.screenshot_hint:
+  en: "Saved to your Pictures folder"
+  ru: "Сохраняется в папку \"Изображения\""
+hs.restart_menu:
+  en: "Restart..."
+  ru: "Перезагрузка..."
+hs.restart:
+  en: "Restart"
+  ru: "Перезагрузить"
+hs.power_off:
+  en: "Power off"
+  ru: "Выключить"
+hs.restart_recovery:
+  en: "Restart to recovery"
+  ru: "Перезагрузить в recovery"
+hs.restart_bootloader:
+  en: "Restart to bootloader"
+  ru: "Перезагрузить в bootloader"
+hs.performance:
+  en: "Performance"
+  ru: "Производительность"
+hs.refresh_rate:
+  en: "Refresh rate"
+  ru: "Частота обновления"
+hs.cpu_level:
+  en: "CPU level"
+  ru: "Уровень CPU"
+hs.gpu_level:
+  en: "GPU level"
+  ru: "Уровень GPU"
+hs.default:
+  en: "default"
+  ru: "по умолчанию"
+hs.restore:
+  en: "Restore"
+  ru: "Восстановить"
+hs.restore_hint:
+  en: "Copies these saves to the headset, over what's there"
+  ru: "Копирует эти сохранения на шлем поверх текущих"
+hs.uninstall_title:
+  en: "Uninstall %{name}?"
+  ru: "Удалить %{name}?"
+hs.uninstall:
+  en: "Uninstall"
+  ru: "Удалить"
+hs.delete_backup_title:
+  en: "Delete this backup?"
+  ru: "Удалить этот бэкап?"
+hs.delete_backup_text:
+  en: "%{name} from %{date}. This can't be undone."
+  ru: "%{name} от %{date}. Это нельзя отменить."
+hs.uptime_m:
+  en: "%{m} min"
+  ru: "%{m} мин"
+hs.uptime_hm:
+  en: "%{h} h %{m} min"
+  ru: "%{h} ч %{m} мин"
+hs.uptime_dh:
+  en: "%{d} d %{h} h"
+  ru: "%{d} д %{h} ч"
+hs.usb:
+  en: "USB"
+  ru: "USB"
+hs.usb_mtp:
+  en: "File transfer (MTP)"
+  ru: "Передача файлов (MTP)"
+hs.usb_charging:
+  en: "Charging only"
+  ru: "Только зарядка"
+hs.mtp_on:
+  en: "Turn on file transfer"
+  ru: "Включить передачу файлов"
+hs.mtp_off:
+  en: "Turn off file transfer"
+  ru: "Выключить передачу файлов"
+hs.mtp_hint:
+  en: "Switches USB to MTP, so the headset's storage opens in the computer's file manager over the cable. adb keeps working; the USB connection resets for a moment."
+  ru: "Переключает USB в режим MTP, чтобы память шлема открылась в файловом менеджере компьютера по кабелю. adb продолжает работать; USB-соединение на секунду переподключится."

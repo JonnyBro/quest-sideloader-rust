@@ -152,7 +152,10 @@ impl ContributeView {
 									if self.requested.contains(&candidate.package) {
 										ui.weak(t!("con.queued"));
 									} else {
-										if ui.button(t!("con.upload")).clicked() {
+										if ui
+											.add(super::toned(t!("con.upload"), super::Tone::Go))
+											.clicked()
+										{
 											send = Some(candidate.clone());
 										}
 										if ui.small_button(t!("con.ignore")).clicked() {

@@ -15,6 +15,11 @@ pub struct DownloadedRelease {
 
 /// Release folders in `root`, newest first. Hidden entries (like the
 /// `.incomplete` staging folder) and loose files are left out.
+/// Free bytes on the drive holding `path`, if it can be read.
+pub fn free_space(path: &Path) -> Option<u64> {
+	fs4::available_space(path).ok()
+}
+
 pub fn list(root: &Path) -> Vec<DownloadedRelease> {
 	let Ok(entries) = std::fs::read_dir(root) else {
 		return Vec::new();

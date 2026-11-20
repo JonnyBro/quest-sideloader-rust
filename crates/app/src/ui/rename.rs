@@ -141,7 +141,7 @@ impl RenameView {
 		});
 		if self.items.is_empty() {
 			egui::CentralPanel::default().show(ui, |ui| {
-				ui.centered_and_justified(|ui| ui.weak(t!("rn.empty")));
+				crate::theme::empty_state(ui, t!("rn.empty_title"), t!("rn.empty"));
 			});
 			return;
 		}
@@ -244,7 +244,12 @@ fn details(
 		ui.heading(item.title());
 		let analyzing = matches!(item.state, State::Analyzing);
 		reanalyze = ui
-			.add_enabled(!analyzing, egui::Button::new("⟳"))
+			.add_enabled(
+				!analyzing,
+				egui::Button::image(
+					crate::icons::Icon::Refresh.image(16.0, ui.visuals().text_color()),
+				),
+			)
 			.on_hover_text(t!("rn.reanalyze"))
 			.clicked();
 	});
@@ -406,7 +411,7 @@ fn details(
 	let can_build = problem.is_none() && !loader_missing && !out.exists();
 	let mut build = false;
 	ui.horizontal(|ui| {
-		let button = ui.add_enabled(can_build, egui::Button::new(t!("rn.build")));
+		let button = ui.add_enabled(can_build, super::toned(t!("rn.build"), super::Tone::Go));
 		let button = if out.exists() {
 			button.on_disabled_hover_text(t!("rn.output_exists"))
 		} else if loader_missing {

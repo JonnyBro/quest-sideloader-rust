@@ -1,3 +1,4 @@
+pub mod checkup;
 pub mod console;
 pub mod contribute;
 pub mod devices;
@@ -16,6 +17,24 @@ pub mod tool_setup;
 pub mod welcome;
 
 pub use quest_sideloader_core::format_bytes;
+
+#[derive(Clone, Copy)]
+pub enum Tone {
+	/// Installs, restores, builds: the step the user came for.
+	Go,
+	/// Deletes, uninstalls, powers off: hard or impossible to undo.
+	Danger,
+}
+
+/// A button colored for what it does. White text on a dark fill reads the
+/// same in the light and dark themes.
+pub fn toned(text: impl Into<String>, tone: Tone) -> egui::Button<'static> {
+	let fill = match tone {
+		Tone::Go => egui::Color32::from_rgb(46, 125, 50),
+		Tone::Danger => egui::Color32::from_rgb(183, 28, 28),
+	};
+	egui::Button::new(egui::RichText::new(text.into()).color(egui::Color32::WHITE)).fill(fill)
+}
 
 pub fn open_folder(path: &std::path::Path) {
 	let program = if cfg!(windows) {

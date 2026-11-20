@@ -51,28 +51,51 @@ impl TasksView {
 		})
 	}
 
-	/// One line for the bottom bar; returns true when clicked.
-	pub fn summary(&self, ui: &mut egui::Ui) -> bool {
-		let Some((current, active)) = self.current() else {
+	/// Running and queued tasks for the sidebar, with their progress.
+	/// Returns true when the block was clicked.
+	pub fn sidebar(&self, ui: &mut egui::Ui) -> bool {
+		let active: Vec<&TaskSnapshot> = self.active().collect();
+		if active.is_empty() {
 			return false;
-		};
-		let mut clicked = false;
-		ui.horizontal(|ui| {
-			if let Some(p) = current.progress {
-				ui.add(
-					egui::ProgressBar::new(p)
-						.desired_width(120.0)
-						.show_percentage(),
-				);
-			} else {
-				ui.spinner();
-			}
-			let text = format!("{}: {}", current.title, current.stage);
-			clicked |= ui.link(text).clicked();
-			if active > 1 {
-				ui.weak(t!("tasks.more", n = active - 1));
-			}
-		});
+		}
+		let mut clicked = ui
+			.link(egui::RichText::new(t!("tasks.heading")).small())
+			.clicked();
+		for task in active.iter().take(3) {
+			let response = ui
+				.vertical(|ui| {
+					ui.horizontal(|ui| {
+						ui.add(
+							egui::Label::new(egui::RichText::new(&task.title).small()).truncate(),
+						);
+						if let Some(p) = task.progress {
+							ui.with_layout(
+								egui::Layout::right_to_left(egui::Align::Center),
+								|ui| {
+									ui.weak(
+										egui::RichText::new(format!("{:.0}%", p * 100.0)).small(),
+									);
+								},
+							);
+						}
+					});
+					match task.progress {
+						Some(p) => crate::theme::meter(ui, p, ui.visuals().selection.bg_fill),
+						None => {
+							ui.add(
+								egui::Label::new(egui::RichText::new(&task.stage).small().weak())
+									.truncate(),
+							);
+						}
+					}
+				})
+				.response
+				.interact(egui::Sense::click());
+			clicked |= response.clicked();
+		}
+		if active.len() > 3 {
+			ui.weak(egui::RichText::new(t!("tasks.more", n = active.len() - 3)).small());
+		}
 		clicked
 	}
 
@@ -99,9 +122,7 @@ impl TasksView {
 		});
 		ui.separator();
 		if self.tasks.is_empty() {
-			ui.centered_and_justified(|ui| {
-				ui.weak(t!("tasks.empty"));
-			});
+			crate::theme::empty_state(ui, t!("tasks.empty_title"), t!("tasks.empty"));
 			return;
 		}
 
@@ -206,7 +227,7 @@ fn task_row(
 			ui.colored_label(ui.visuals().error_fg_color, error);
 			if let (Some(conflict), Some(serial)) = (&task.conflict, &task.serial)
 				&& ui
-					.button(t!("tasks.reinstall"))
+					.add(super::toned(t!("tasks.reinstall"), super::Tone::Go))
 					.on_hover_text(t!("tasks.reinstall_hint"))
 					.clicked()
 			{
@@ -252,7 +273,7 @@ fn task_buttons(
 		}
 		if let (Some(path), Some((serial, name))) = (&task.output, install_target)
 			&& ui
-				.small_button(t!("common.install"))
+				.add(super::toned(t!("common.install"), super::Tone::Go).small())
 				.on_hover_text(t!("common.install_on", name = name))
 				.clicked()
 		{

@@ -36,8 +36,14 @@ impl LogsView {
 		} else {
 			egui::RichText::new(t!("logs.button"))
 		};
+		let color = if unseen > 0 {
+			ui.visuals().error_fg_color
+		} else {
+			ui.visuals().text_color()
+		};
+		let icon = crate::icons::Icon::Logs.image(14.0, color);
 		if ui
-			.small_button(text)
+			.add(egui::Button::image_and_text(icon, text).small())
 			.on_hover_text(t!("logs.button_hint"))
 			.clicked()
 		{

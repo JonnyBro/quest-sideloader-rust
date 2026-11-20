@@ -17,6 +17,10 @@ pub struct Target<'a> {
 	pub names: &'a HashMap<String, String>,
 	/// Renamed copies made here, listed first when restoring into another app.
 	pub copies: &'a std::collections::HashSet<String>,
+	/// A package's cover from the library, if it has one.
+	pub cover: &'a dyn Fn(&str) -> Option<std::path::PathBuf>,
+	/// The version the library has of a package.
+	pub latest: &'a dyn Fn(&str) -> Option<u64>,
 }
 
 /// Details and per-app storage as the engine reports them.
@@ -116,13 +120,26 @@ impl HeadsetView {
 		egui::ScrollArea::vertical()
 			.auto_shrink([false, false])
 			.show(ui, |ui| {
-				self.overview(ui, &target, commands);
-				ui.add_space(12.0);
-				self.tools(ui, &target, commands);
-				ui.add_space(12.0);
+				let section = |ui: &mut egui::Ui, body: &mut dyn FnMut(&mut egui::Ui)| {
+					crate::theme::panel(ui).show(ui, |ui| {
+						ui.set_width(ui.available_width());
+						body(ui);
+					});
+					ui.add_space(10.0);
+				};
 				self.apps(ui, &target, commands);
 				ui.add_space(12.0);
-				self.saves(ui, &target, commands);
+				egui::CollapsingHeader::new(t!("hs.details_tools"))
+					.id_salt("headset_details")
+					.show(ui, |ui| {
+						section(ui, &mut |ui| self.overview(ui, &target, commands));
+						section(ui, &mut |ui| self.tools(ui, &target, commands));
+					});
+				egui::CollapsingHeader::new(t!("hs.backups", n = self.backups.len()))
+					.id_salt("headset_backups_section")
+					.show(ui, |ui| {
+						section(ui, &mut |ui| self.saves(ui, &target, commands));
+					});
 			});
 		self.dialog(ui.ctx(), target.serial, commands);
 	}
@@ -165,29 +182,6 @@ impl HeadsetView {
 				if let Some(info) = target.info {
 					row(t!("dev.model"), info.model.clone());
 					row(t!("dev.android"), info.android_version.clone());
-					if let Some(b) = info.battery {
-						let temp = details
-							.and_then(|d| d.battery_temperature)
-							.map(|t| format!(", {t:.1} C"))
-							.unwrap_or_default();
-						let charging = if b.charging {
-							t!("dev.charging")
-						} else {
-							"".into()
-						};
-						row(t!("dev.battery"), format!("{}%{charging}{temp}", b.level));
-					}
-					if let Some(s) = info.storage {
-						row(
-							t!("dev.storage"),
-							t!(
-								"dev.free_of",
-								free = format_bytes(s.free_bytes),
-								total = format_bytes(s.total_bytes)
-							)
-							.into_owned(),
-						);
-					}
 				}
 				if let Some(d) = details {
 					if !d.codename.is_empty() {
@@ -346,11 +340,50 @@ impl HeadsetView {
 			_ => None,
 		};
 		ui.horizontal(|ui| {
-			ui.strong(t!("hs.apps", n = info.packages.len()));
+			ui.heading(t!("hs.apps_title"));
+			ui.weak(info.packages.len().to_string());
+			ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+				if ui
+					.add(super::toned(t!("dev.install_file"), super::Tone::Go))
+					.clicked()
+					&& let Some(file) = rfd::FileDialog::new()
+						.add_filter(t!("dev.apk_or_zip"), &["apk", "zip"])
+						.pick_file()
+				{
+					commands.push(Command::Install {
+						serial: target.serial.to_owned(),
+						path: file,
+					});
+				}
+				if ui.button(t!("dev.install_folder")).clicked()
+					&& let Some(folder) = rfd::FileDialog::new().pick_folder()
+				{
+					commands.push(Command::Install {
+						serial: target.serial.to_owned(),
+						path: folder,
+					});
+				}
+				let refresh = crate::icons::Icon::Refresh.image(16.0, ui.visuals().text_color());
+				if ui
+					.add_enabled(!self.loading, egui::Button::image(refresh))
+					.on_hover_text(t!("common.refresh"))
+					.clicked()
+				{
+					self.loading = true;
+					commands.push(Command::RefreshHeadset(target.serial.to_owned()));
+					commands.push(Command::RefreshDevice(target.serial.to_owned()));
+				}
+				if self.loading {
+					ui.spinner();
+				}
+			});
+		});
+		ui.add_space(4.0);
+		ui.horizontal(|ui| {
 			ui.add(
 				egui::TextEdit::singleline(&mut self.filter)
 					.hint_text(t!("dev.filter"))
-					.desired_width(180.0),
+					.desired_width(220.0),
 			);
 			ui.selectable_value(&mut self.sort, AppSort::Size, t!("hs.largest"));
 			ui.selectable_value(&mut self.sort, AppSort::Name, t!("hs.by_name"));
@@ -391,81 +424,132 @@ impl HeadsetView {
 		}
 
 		let mut uninstall = None;
+		let backups = &self.backups;
 		egui_extras::TableBuilder::new(ui)
 			.id_salt("headset_apps")
 			.striped(true)
 			// The tab scrolls as a whole; a second scroll area inside would fight it.
 			.vscroll(false)
 			.cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-			.column(egui_extras::Column::remainder().at_least(220.0).clip(true))
-			.column(egui_extras::Column::auto().at_least(70.0))
-			.column(egui_extras::Column::auto().at_least(70.0))
+			.column(egui_extras::Column::exact(52.0))
+			.column(egui_extras::Column::remainder().at_least(200.0).clip(true))
 			.column(egui_extras::Column::auto().at_least(90.0))
 			.column(egui_extras::Column::auto())
-			.header(22.0, |mut header| {
-				for title in [
-					t!("hs.col_app"),
-					t!("hs.col_version"),
-					t!("hs.col_obb"),
-					t!("hs.col_data"),
-					"".into(),
-				] {
-					header.col(|ui| {
-						ui.strong(title);
-					});
-				}
-			})
 			.body(|mut body| {
 				for (app, usage) in rows {
-					body.row(40.0, |mut row| {
+					body.row(44.0, |mut row| {
+						row.col(|ui| {
+							let size = egui::vec2(48.0, 27.0);
+							match (target.cover)(&app.package) {
+								Some(path) => {
+									ui.add(
+										egui::Image::new(format!("file://{}", path.display()))
+											.max_size(size)
+											.corner_radius(crate::theme::radius(3.0)),
+									);
+								}
+								None => {
+									let (rect, _) =
+										ui.allocate_exact_size(size, egui::Sense::hover());
+									ui.painter().rect_filled(
+										rect,
+										crate::theme::radius(3.0),
+										ui.visuals().faint_bg_color,
+									);
+								}
+							}
+						});
 						row.col(|ui| {
 							ui.vertical(|ui| {
 								ui.add(egui::Label::new(&app.name).truncate());
-								if app.name != app.package {
-									ui.add(
-										egui::Label::new(
-											egui::RichText::new(&app.package).small().weak(),
-										)
-										.truncate(),
-									);
+								let mut line = Vec::new();
+								if let Some(v) = app.version_code {
+									line.push(format!("v{v}"));
 								}
+								let total = usage.obb + usage.data;
+								if total > 0 {
+									line.push(format_bytes(total));
+								}
+								if target.copies.contains(&app.package) {
+									line.push(t!("hs.copy").into_owned());
+								}
+								if app.name != app.package {
+									line.push(app.package.clone());
+								}
+								ui.add(
+									egui::Label::new(
+										egui::RichText::new(line.join(", ")).small().weak(),
+									)
+									.truncate(),
+								);
 							});
 						});
 						row.col(|ui| {
-							ui.label(app.version_code.map(|v| v.to_string()).unwrap_or_default());
+							if let Some(latest) = (target.latest)(&app.package) {
+								let (text, color) = if app.version_code.is_some_and(|v| latest > v)
+								{
+									(t!("lib.status_update"), crate::theme::WARN)
+								} else {
+									(t!("hs.up_to_date"), crate::theme::GOOD)
+								};
+								crate::theme::pill(ui, text, color);
+							}
 						});
 						row.col(|ui| {
-							ui.label(size_or_dash(usage.obb));
-						});
-						row.col(|ui| {
-							ui.label(size_or_dash(usage.data));
-						});
-						row.col(|ui| {
-							if ui.small_button(t!("hs.start")).clicked() {
-								commands.push(Command::LaunchApp {
-									serial: target.serial.to_owned(),
-									package: app.package.clone(),
-								});
-							}
-							if ui.small_button(t!("hs.stop")).clicked() {
-								commands.push(Command::StopApp {
-									serial: target.serial.to_owned(),
-									package: app.package.clone(),
-								});
-							}
-							if ui
-								.small_button(t!("hs.back_up"))
-								.on_hover_text(t!("hs.back_up_hint"))
-								.clicked()
-							{
-								commands.push(Command::BackUpSaves {
-									serial: target.serial.to_owned(),
-									app: app.clone(),
-								});
-							}
-							if ui.small_button(t!("hs.uninstall_button")).clicked() {
-								uninstall = Some(app.clone());
-							}
+							let dots =
+								crate::icons::Icon::Menu.image(16.0, ui.visuals().text_color());
+							ui.menu_image_button(dots, |ui| {
+								if ui.button(t!("hs.start")).clicked() {
+									commands.push(Command::LaunchApp {
+										serial: target.serial.to_owned(),
+										package: app.package.clone(),
+									});
+								}
+								if ui.button(t!("hs.stop")).clicked() {
+									commands.push(Command::StopApp {
+										serial: target.serial.to_owned(),
+										package: app.package.clone(),
+									});
+								}
+								ui.separator();
+								if ui
+									.button(t!("hs.back_up"))
+									.on_hover_text(t!("hs.back_up_hint"))
+									.clicked()
+								{
+									commands.push(Command::BackUpSaves {
+										serial: target.serial.to_owned(),
+										app: app.clone(),
+									});
+								}
+								let latest_backup = backups
+									.iter()
+									.filter(|b| b.meta.package == app.package)
+									.max_by_key(|b| b.meta.created);
+								if let Some(backup) = latest_backup
+									&& ui
+										.button(t!(
+											"hs.restore_latest",
+											date = super::format_unix_time(backup.meta.created)
+										))
+										.on_hover_text(t!("hs.restore_hint"))
+										.clicked()
+								{
+									commands.push(Command::RestoreBackup {
+										serial: target.serial.to_owned(),
+										backup: backup.clone(),
+										package: app.package.clone(),
+									});
+								}
+								ui.separator();
+								let remove = egui::RichText::new(t!("hs.uninstall_button"))
+									.color(ui.visuals().error_fg_color);
+								if ui.button(remove).clicked() {
+									uninstall = Some(app.clone());
+								}
+							})
+							.response
+							.on_hover_text(t!("hs.actions"));
 						});
 					});
 				}
@@ -556,7 +640,7 @@ impl HeadsetView {
 						});
 						row.col(|ui| {
 							if ui
-								.small_button(t!("hs.restore"))
+								.add(super::toned(t!("hs.restore"), super::Tone::Go).small())
 								.on_hover_text(t!("hs.restore_hint"))
 								.clicked()
 							{
@@ -602,7 +686,13 @@ impl HeadsetView {
 							if ui.small_button(t!("common.open")).clicked() {
 								super::open_folder(&backup.dir);
 							}
-							if ui.small_button(t!("hs.delete_button")).clicked() {
+							if ui
+								.add(
+									super::toned(t!("hs.delete_button"), super::Tone::Danger)
+										.small(),
+								)
+								.clicked()
+							{
 								delete = Some(backup.clone());
 							}
 						});
@@ -638,7 +728,10 @@ impl HeadsetView {
 					ui.checkbox(back_up, t!("hs.backup_first"));
 					ui.checkbox(remove_obb, t!("hs.delete_obb"));
 					ui.horizontal(|ui| {
-						if ui.button(t!("hs.uninstall")).clicked() {
+						if ui
+							.add(super::toned(t!("hs.uninstall"), super::Tone::Danger))
+							.clicked()
+						{
 							commands.push(Command::Uninstall {
 								serial: serial.to_owned(),
 								app: app.clone(),
@@ -659,7 +752,10 @@ impl HeadsetView {
 						RebootMode::Bootloader => t!("hs.confirm_bootloader"),
 					});
 					ui.horizontal(|ui| {
-						if ui.button(t!("common.yes")).clicked() {
+						if ui
+							.add(super::toned(t!("common.yes"), super::Tone::Danger))
+							.clicked()
+						{
 							commands.push(Command::Reboot {
 								serial: serial.to_owned(),
 								mode: *mode,
@@ -683,7 +779,10 @@ impl HeadsetView {
 						package = package
 					));
 					ui.horizontal(|ui| {
-						if ui.button(t!("hs.restore")).clicked() {
+						if ui
+							.add(super::toned(t!("hs.restore"), super::Tone::Go))
+							.clicked()
+						{
 							commands.push(Command::RestoreBackup {
 								serial: serial.to_owned(),
 								backup: backup.clone(),
@@ -702,7 +801,10 @@ impl HeadsetView {
 						date = super::format_unix_time(backup.meta.created)
 					));
 					ui.horizontal(|ui| {
-						if ui.button(t!("common.delete")).clicked() {
+						if ui
+							.add(super::toned(t!("common.delete"), super::Tone::Danger))
+							.clicked()
+						{
 							commands.push(Command::DeleteBackup(backup.clone()));
 							close = true;
 						}
@@ -714,14 +816,6 @@ impl HeadsetView {
 		if close || modal.should_close() {
 			self.dialog = None;
 		}
-	}
-}
-
-fn size_or_dash(bytes: u64) -> String {
-	if bytes == 0 {
-		"-".into()
-	} else {
-		format_bytes(bytes)
 	}
 }
 

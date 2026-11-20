@@ -49,7 +49,11 @@ impl AdbSetup {
 			}
 			ui.add_space(6.0);
 			ui.horizontal(|ui| {
-				if can_install && ui.button(t!("adb.install")).clicked() {
+				if can_install
+					&& ui
+						.add(super::toned(t!("adb.install"), super::Tone::Go))
+						.clicked()
+				{
 					commands.push(Command::InstallAdb);
 					close = true;
 				}
@@ -95,7 +99,11 @@ impl RcloneSetup {
 			}
 			ui.add_space(6.0);
 			ui.horizontal(|ui| {
-				if can_install && ui.button(t!("adb.install")).clicked() {
+				if can_install
+					&& ui
+						.add(super::toned(t!("adb.install"), super::Tone::Go))
+						.clicked()
+				{
 					commands.push(Command::InstallRclone);
 					close = true;
 				}

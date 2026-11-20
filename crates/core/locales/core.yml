@@ -614,3 +614,36 @@ eng.mtp_on:
 eng.mtp_off:
   en: "File transfer (MTP) is off; USB is back to charging only"
   ru: "Передача файлов (MTP) выключена; USB снова только заряжает"
+err.adb_install_explained:
+  en: "installation failed: %{reason} (%{error})"
+  ru: "установка не удалась: %{reason} (%{error})"
+err.inst_storage:
+  en: "the headset is out of space; delete something on it and try again"
+  ru: "на шлеме не хватает места; удалите что-нибудь и попробуйте снова"
+err.inst_signature:
+  en: "the installed version is signed with another key; uninstall it first, or reinstall keeping the saves"
+  ru: "установленная версия подписана другим ключом; сначала удалите её или переустановите с сохранениями"
+err.inst_downgrade:
+  en: "a newer version is already installed"
+  ru: "на шлеме уже стоит более новая версия"
+err.inst_older_sdk:
+  en: "the game needs newer headset firmware"
+  ru: "игре нужна более новая прошивка шлема"
+err.inst_abi:
+  en: "the APK isn't built for this headset's processor"
+  ru: "APK собран не под процессор этого шлема"
+err.inst_permission:
+  en: "another installed app already declares the same permission, usually the original game or its copy"
+  ru: "другое установленное приложение уже объявило то же разрешение, обычно это оригинал игры или её копия"
+err.inst_provider:
+  en: "another installed app already uses the same content provider, usually the original game or its copy"
+  ru: "другое установленное приложение уже использует тот же провайдер, обычно это оригинал игры или её копия"
+err.inst_restricted:
+  en: "the headset doesn't allow installing apps over USB right now"
+  ru: "шлем сейчас не разрешает устанавливать приложения по USB"
+err.inst_broken:
+  en: "the APK is damaged or not signed; download it again"
+  ru: "APK повреждён или не подписан; скачайте его заново"
+dev.connected:
+  en: "Connected to %{address} over Wi-Fi"
+  ru: "Подключено к %{address} по Wi-Fi"

@@ -71,7 +71,9 @@ impl InspectorView {
 				&& ui
 					.add_enabled(
 						!matches!(self.state, State::Loading),
-						egui::Button::new("⟳"),
+						egui::Button::image(
+							crate::icons::Icon::Refresh.image(16.0, ui.visuals().text_color()),
+						),
 					)
 					.on_hover_text(t!("rn.reanalyze"))
 					.clicked()
@@ -85,7 +87,7 @@ impl InspectorView {
 		ui.separator();
 		match &self.state {
 			State::Empty => {
-				ui.centered_and_justified(|ui| ui.weak(t!("ins.empty")));
+				crate::theme::empty_state(ui, t!("ins.empty_title"), t!("ins.empty"));
 			}
 			State::Loading => {
 				ui.horizontal(|ui| {

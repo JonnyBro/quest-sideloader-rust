@@ -5,9 +5,17 @@ use quest_sideloader_core::settings::{Language, MAX_CONCURRENT_DOWNLOADS, SpeedU
 use quest_sideloader_core::{Command, Settings};
 
 use super::mirrors::{self, MirrorForm};
+use crate::theme::{Accent, Appearance, Corners, Density};
 
 fn path_text(path: Option<&PathBuf>) -> String {
 	path.map(|p| p.display().to_string()).unwrap_or_default()
+}
+
+/// The parts of Settings kept outside the settings file: they apply at once.
+pub struct Prefs<'a> {
+	pub keys: &'a mut super::keys::KeysView,
+	pub advanced: &'a mut bool,
+	pub appearance: &'a mut Appearance,
 }
 
 pub struct SettingsView {
@@ -68,7 +76,7 @@ impl SettingsView {
 		default_downloads: &Path,
 		rclone_dir: &Path,
 		commands: &mut Vec<Command>,
-		keys: &mut super::keys::KeysView,
+		prefs: Prefs<'_>,
 	) {
 		egui::Panel::bottom("settings_actions").show(ui, |ui| {
 			ui.add_space(4.0);
@@ -77,7 +85,14 @@ impl SettingsView {
 		});
 		egui::CentralPanel::default().show(ui, |ui| {
 			egui::ScrollArea::vertical().show(ui, |ui| {
-				self.general(ui, default_downloads);
+				let Prefs {
+					keys,
+					advanced,
+					appearance,
+				} = prefs;
+				self.general(ui, default_downloads, advanced);
+				ui.add_space(16.0);
+				self.appearance(ui, appearance);
 				ui.add_space(16.0);
 				mirrors::show(ui, &mut self.draft, &mut self.mirror_form, rclone_dir);
 				ui.add_space(16.0);
@@ -86,7 +101,7 @@ impl SettingsView {
 		});
 	}
 
-	fn general(&mut self, ui: &mut egui::Ui, default_downloads: &Path) {
+	fn general(&mut self, ui: &mut egui::Ui, default_downloads: &Path, advanced: &mut bool) {
 		ui.heading(t!("set.general"));
 		egui::Grid::new("settings_grid")
 			.num_columns(2)
@@ -113,6 +128,12 @@ impl SettingsView {
 						self.draft.downloads_dir = default_downloads.to_path_buf();
 					}
 				});
+				ui.end_row();
+
+				// Applied at once and kept with the window state, like the scale.
+				ui.label(t!("set.mode"));
+				ui.checkbox(advanced, t!("set.advanced"))
+					.on_hover_text(t!("set.advanced_hint"));
 				ui.end_row();
 
 				ui.label(t!("set.after_installing"));
@@ -172,15 +193,6 @@ impl SettingsView {
 				);
 				ui.end_row();
 
-				ui.label(t!("set.theme"));
-				ui.horizontal(|ui| {
-					let theme = &mut self.draft.theme;
-					ui.selectable_value(theme, Theme::System, t!("set.theme_system"));
-					ui.selectable_value(theme, Theme::Dark, t!("set.theme_dark"));
-					ui.selectable_value(theme, Theme::Light, t!("set.theme_light"));
-				});
-				ui.end_row();
-
 				ui.label(t!("set.language"));
 				ui.horizontal(|ui| {
 					let language = &mut self.draft.language;
@@ -188,6 +200,88 @@ impl SettingsView {
 					// Language names stay in their own language.
 					ui.selectable_value(language, Language::English, "English");
 					ui.selectable_value(language, Language::Russian, "Русский");
+				});
+				ui.end_row();
+			});
+	}
+
+	fn appearance(&mut self, ui: &mut egui::Ui, appearance: &mut Appearance) {
+		ui.heading(t!("set.appearance"));
+		ui.weak(t!("set.appearance_hint"));
+		ui.add_space(4.0);
+		egui::Grid::new("appearance_grid")
+			.num_columns(2)
+			.spacing([16.0, 10.0])
+			.show(ui, |ui| {
+				ui.label(t!("set.theme"));
+				ui.horizontal(|ui| {
+					let theme = &mut self.draft.theme;
+					ui.selectable_value(theme, Theme::System, t!("set.theme_system"));
+					ui.selectable_value(theme, Theme::Dark, t!("set.theme_dark"));
+					ui.selectable_value(theme, Theme::Light, t!("set.theme_light"));
+				});
+				// Shown right away; saved with the other settings.
+				if self.draft.theme != self.saved.theme {
+					crate::app::apply_theme(ui.ctx(), self.draft.theme);
+				}
+				ui.end_row();
+
+				ui.label(t!("set.accent"));
+				ui.horizontal(|ui| {
+					for accent in Accent::PRESETS {
+						let selected = appearance.accent == accent;
+						let (rect, response) =
+							ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::click());
+						ui.painter()
+							.circle_filled(rect.center(), 10.0, accent.color());
+						if selected {
+							ui.painter().circle_stroke(
+								rect.center(),
+								10.0,
+								egui::Stroke::new(2.0, ui.visuals().strong_text_color()),
+							);
+						}
+						if response.on_hover_text(accent_name(accent)).clicked() {
+							appearance.accent = accent;
+						}
+					}
+					ui.add_space(6.0);
+					let previous = appearance.accent_color();
+					if ui
+						.selectable_label(
+							appearance.accent == Accent::Custom,
+							t!("set.accent_custom"),
+						)
+						.clicked()
+						&& appearance.accent != Accent::Custom
+					{
+						// Start the picker from the color in use, not from black.
+						if appearance.custom == [0; 3] {
+							appearance.custom = [previous.r(), previous.g(), previous.b()];
+						}
+						appearance.accent = Accent::Custom;
+					}
+					if appearance.accent == Accent::Custom {
+						ui.color_edit_button_srgb(&mut appearance.custom);
+					}
+				});
+				ui.end_row();
+
+				ui.label(t!("set.corners"));
+				ui.horizontal(|ui| {
+					let corners = &mut appearance.corners;
+					ui.selectable_value(corners, Corners::Square, t!("set.corners_square"));
+					ui.selectable_value(corners, Corners::Rounded, t!("set.corners_rounded"));
+					ui.selectable_value(corners, Corners::Round, t!("set.corners_round"));
+				});
+				ui.end_row();
+
+				ui.label(t!("set.density"));
+				ui.horizontal(|ui| {
+					let density = &mut appearance.density;
+					ui.selectable_value(density, Density::Compact, t!("set.density_compact"));
+					ui.selectable_value(density, Density::Normal, t!("set.density_normal"));
+					ui.selectable_value(density, Density::Spacious, t!("set.density_spacious"));
 				});
 				ui.end_row();
 
@@ -236,6 +330,8 @@ impl SettingsView {
 				)
 				.clicked()
 			{
+				// The theme shows as soon as it's picked, so undo that too.
+				crate::app::apply_theme(ui.ctx(), self.saved.theme);
 				*self = SettingsView::new(self.saved.clone());
 			}
 			if self.saving {
@@ -271,4 +367,16 @@ fn binary_field(ui: &mut egui::Ui, text: &mut String, value: &mut Option<PathBuf
 			*value = None;
 		}
 	});
+}
+
+fn accent_name(accent: Accent) -> std::borrow::Cow<'static, str> {
+	match accent {
+		Accent::Violet => t!("set.accent_violet"),
+		Accent::Blue => t!("set.accent_blue"),
+		Accent::Teal => t!("set.accent_teal"),
+		Accent::Green => t!("set.accent_green"),
+		Accent::Orange => t!("set.accent_orange"),
+		Accent::Pink => t!("set.accent_pink"),
+		Accent::Custom => t!("set.accent_custom"),
+	}
 }
