@@ -3,9 +3,11 @@ pub mod contribute;
 pub mod devices;
 pub mod downloads;
 pub mod headset;
+pub mod keys;
 pub mod library;
 pub mod logs;
 pub mod mirrors;
+pub mod rename;
 pub mod review;
 pub mod settings;
 pub mod tasks;
@@ -14,7 +16,6 @@ pub mod welcome;
 
 pub use quest_sideloader_core::format_bytes;
 
-/// Shows a folder in the system file manager.
 pub fn open_folder(path: &std::path::Path) {
 	let program = if cfg!(windows) {
 		"explorer"

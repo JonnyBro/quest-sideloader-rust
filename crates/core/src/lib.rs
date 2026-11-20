@@ -12,6 +12,7 @@ mod format;
 pub mod paths;
 pub mod platform_tools;
 pub mod rclone_tool;
+pub mod rename;
 pub mod saves;
 pub mod settings;
 pub mod sideload;

@@ -68,6 +68,7 @@ impl SettingsView {
 		default_downloads: &Path,
 		rclone_dir: &Path,
 		commands: &mut Vec<Command>,
+		keys: &mut super::keys::KeysView,
 	) {
 		egui::Panel::bottom("settings_actions").show(ui, |ui| {
 			ui.add_space(4.0);
@@ -79,6 +80,8 @@ impl SettingsView {
 				self.general(ui, default_downloads);
 				ui.add_space(16.0);
 				mirrors::show(ui, &mut self.draft, &mut self.mirror_form, rclone_dir);
+				ui.add_space(16.0);
+				keys.show(ui);
 			});
 		});
 	}

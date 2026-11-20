@@ -76,6 +76,10 @@ pub struct Recorded {
 	pub installs: Vec<usize>,
 	/// Failure messages the next installs answer with, in order.
 	pub install_failures: Vec<String>,
+	/// Device files that are listed but can't be pulled.
+	pub unreadable: Vec<String>,
+	/// The app isn't debuggable, so `run-as` refuses.
+	pub run_as_refused: bool,
 }
 
 /// A fake adb server with one online device `SER1`: answers version and
@@ -171,6 +175,29 @@ async fn try_serve(s: &mut TcpStream, rec: &Shared) -> std::io::Result<()> {
 				if command.starts_with("mkdir -p ") {
 					apply_move(command, &mut rec.lock().unwrap().pushed);
 				}
+				if command.contains("run-as ") {
+					let (refused, data) = {
+						let rec = rec.lock().unwrap();
+						let words = shell_words::split(command).unwrap_or_default();
+						let data = (words.get(2).map(String::as_str) == Some("cat"))
+							.then(|| words.get(3))
+							.flatten()
+							.and_then(|path| rec.device_files.iter().find(|(p, _)| p == path))
+							.map(|(_, d)| d.clone());
+						(rec.run_as_refused, data)
+					};
+					if refused {
+						s.write_all(&packet(2, b"run-as: package not debuggable\n"))
+							.await?;
+						s.write_all(&packet(3, &[1])).await?;
+						return Ok(());
+					}
+					if let Some(data) = data {
+						s.write_all(&packet(1, &data)).await?;
+						s.write_all(&packet(3, &[0])).await?;
+						return Ok(());
+					}
+				}
 				if command.starts_with("pm path ") {
 					s.write_all(&packet(1, b"package:/data/app/~~x/pkg-1/base.apk\n"))
 						.await?;
@@ -249,13 +276,13 @@ async fn receive_and_record(s: &mut TcpStream, rec: &Shared) -> std::io::Result<
 				let mut path = vec![0u8; len];
 				s.read_exact(&mut path).await?;
 				let path = String::from_utf8_lossy(&path).into_owned();
-				let data = rec
-					.lock()
-					.unwrap()
-					.device_files
-					.iter()
-					.find(|(p, _)| *p == path)
-					.map(|(_, d)| d.clone());
+				let data = {
+					let rec = rec.lock().unwrap();
+					rec.device_files
+						.iter()
+						.find(|(p, _)| *p == path && !rec.unreadable.contains(p))
+						.map(|(_, d)| d.clone())
+				};
 				match data {
 					Some(data) => {
 						for chunk in data.chunks(64 * 1024) {
@@ -266,7 +293,11 @@ async fn receive_and_record(s: &mut TcpStream, rec: &Shared) -> std::io::Result<
 						s.write_all(b"DONE\0\0\0\0").await?;
 					}
 					None => {
-						let message = b"No such file or directory";
+						let message: &[u8] = if rec.lock().unwrap().unreadable.contains(&path) {
+							b"open failed: Permission denied"
+						} else {
+							b"No such file or directory"
+						};
 						s.write_all(b"FAIL").await?;
 						s.write_all(&(message.len() as u32).to_le_bytes()).await?;
 						s.write_all(message).await?;

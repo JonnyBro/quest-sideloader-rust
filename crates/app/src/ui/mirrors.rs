@@ -11,7 +11,6 @@ enum FormKind {
 	Rclone,
 }
 
-/// The "add mirror" form.
 pub struct MirrorForm {
 	open: bool,
 	kind: FormKind,

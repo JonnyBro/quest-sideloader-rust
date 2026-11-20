@@ -21,12 +21,19 @@ stopped, backed up or uninstalled; uninstalling can back up the saves first and
 remove the app's OBB files.
 
 A save backup is a copy of the app's `Android/data` folder. When the app allows
-`run-as` (debuggable builds), its private data in `/data/data` is copied too.
-Caches are skipped. Backups are kept under the data directory and can be
-deleted, or restored if the app is installed.
+`run-as` (debuggable builds), its private data in `/data/data` is copied too,
+and so are files in `Android/data` that only the app itself may read. Without
+`run-as` such files are left out, and the backup task says so; when one of
+them looks like a save, the warning says that the game's saves aren't in the
+backup. Caches, including Unreal's shader cache, are skipped. Backups are kept under the data directory and can be
+deleted, or restored if the app is installed. A backup can also be restored
+into another installed app, for example a renamed copy of the game; file
+names that carry the original package, such as Unity's
+`<package>.v2.playerprefs.xml`, get the new package on the way.
 
-The tab can also turn on wireless ADB in one click, take screenshots (saved to
-your Pictures folder), restart or power off the headset, and set the refresh
+The tab can also turn on wireless ADB in one click, switch USB to file
+transfer (MTP) so the headset opens in the computer's file manager, take
+screenshots (saved to your Pictures folder), restart or power off the headset, and set the refresh
 rate and CPU and GPU levels until the next restart.
 
 If an update fails because the installed app has a different signature, the
@@ -40,6 +47,41 @@ and date. Releases stay there after installing when "Keep downloaded files" is
 on in Settings, and each can be installed again, opened or deleted. Tasks lists
 the downloads, installs, uploads and backups started in this session, running
 or finished.
+
+## Rename tab
+
+The Rename tab makes a second copy of a game under another package name, so
+it can be installed beside the original. Releases are added there directly or
+with Make a copy on the Downloads tab. The tab first reads the APK and shows
+what the copy changes: the package and other names in the manifest, resource
+strings, OBB file names and install.txt lines. It warns about package names
+inside the code, which the copy keeps, and about Firebase set up for the
+original package.
+
+Build copy writes a new release folder, `<release> (<new package>)`, into the
+downloads folder, where it can be installed like any other release. The
+original isn't changed, and OBB files are shared with it through hard links
+when both are on the same drive. A `rename-report.txt` in the new folder lists
+every change.
+
+The copy is made without Java or rebuilding the APK: only the manifest, a few
+resource strings and the signature change, and every other file is copied as
+it is. Java class names stay the same, since native code looks classes up by
+those names. Each copy's package gets its own signing key, kept in the data
+folder under `signing`. Android only installs an update over an app signed
+with the same key, so without that file a copy can't be updated, only
+uninstalled and installed again. Settings lists these keys and can export
+each one to a file and import it back, for example on another computer.
+Building a copy of a newer version with the same package uses the same key,
+so it installs over the older copy.
+
+Copies are never offered for upload on the Library tab, and the app refuses
+to upload a package it has a key for.
+
+If the game has the Platform SDK loader (`libovrplatformloader.so`), it can be
+replaced with a patched one, so the game starts on older headset firmware. The
+app doesn't download that file; you choose one you got yourself, and the
+report lists the SHA-256 of both.
 
 ## Console tab
 

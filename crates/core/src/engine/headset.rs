@@ -10,6 +10,7 @@ use super::task::{TaskEntry, TaskKind, TaskSnapshot, TaskState, Tracker};
 use super::{Event, EventSink};
 use crate::adb::Device;
 use crate::saves::{self, Backup, SaveError};
+use crate::sideload::run::Update;
 
 fn tracker(
 	id: u64,
@@ -99,26 +100,52 @@ pub(super) fn spawn_backup(
 			&progress,
 		)
 		.await
-		.map(|b| t!("hs.backed_up", n = b.meta.files).into_owned())
+		.map(|b| {
+			if let Some(save) = b.meta.skipped.iter().find(|p| saves::looks_like_save(p)) {
+				t.report(Update::Warning(
+					t!("hs.save_unreadable", file = save).into_owned(),
+				));
+			} else if let Some(first) = b.meta.skipped.first() {
+				t.report(Update::Warning(
+					t!(
+						"hs.skipped_unreadable",
+						n = b.meta.skipped.len(),
+						first = first
+					)
+					.into_owned(),
+				));
+			}
+			t!("hs.backed_up", n = b.meta.files).into_owned()
+		})
 		.map_err(|e| e.to_string());
 		finish(&t, result, &sink, &device);
 	});
 	entry(handle, tracker)
 }
 
-pub(super) fn spawn_restore(id: u64, device: Device, backup: Backup, sink: EventSink) -> TaskEntry {
-	let tracker = tracker(
-		id,
-		TaskKind::Restore,
-		&device,
-		t!("hs.restore_title", name = backup.meta.name).into_owned(),
-		&sink,
-	);
+/// `package` is where the saves go: the backed-up app or another one.
+pub(super) fn spawn_restore(
+	id: u64,
+	device: Device,
+	backup: Backup,
+	package: String,
+	sink: EventSink,
+) -> TaskEntry {
+	let title = if package == backup.meta.package {
+		t!("hs.restore_title", name = backup.meta.name)
+	} else {
+		t!(
+			"hs.restore_into_title",
+			name = backup.meta.name,
+			package = package
+		)
+	};
+	let tracker = tracker(id, TaskKind::Restore, &device, title.into_owned(), &sink);
 	let t = tracker.clone();
 	let handle = tokio::spawn(async move {
 		t.stage(t!("hs.copying_to"));
 		let progress = byte_progress(&t, backup.meta.bytes);
-		let result = saves::restore(&device, &backup, &progress)
+		let result = saves::restore(&device, &backup, &package, &progress)
 			.await
 			.map(|()| t!("hs.restored").into_owned())
 			.map_err(|e| e.to_string());
@@ -241,7 +268,7 @@ pub(super) fn spawn_reinstall(
 			if let Some(backup) = &backup {
 				t.stage(t!("hs.restoring"));
 				let progress = byte_progress(&t, backup.meta.bytes);
-				saves::restore(&device, backup, &progress)
+				saves::restore(&device, backup, &backup.meta.package, &progress)
 					.await
 					.map_err(|e| t!("hs.restore_failed", error = e, kept = kept).into_owned())?;
 			}

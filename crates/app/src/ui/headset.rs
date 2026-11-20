@@ -15,6 +15,8 @@ pub struct Target<'a> {
 	pub info: Option<&'a DeviceInfo>,
 	/// Game names from the library, by package.
 	pub names: &'a HashMap<String, String>,
+	/// Renamed copies made here, listed first when restoring into another app.
+	pub copies: &'a std::collections::HashSet<String>,
 }
 
 /// Details and per-app storage as the engine reports them.
@@ -28,6 +30,11 @@ enum Dialog {
 	},
 	Reboot(RebootMode),
 	DeleteBackup(Backup),
+	RestoreInto {
+		backup: Backup,
+		package: String,
+		name: String,
+	},
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -209,6 +216,17 @@ impl HeadsetView {
 							.clone()
 							.unwrap_or_else(|| t!("hs.not_connected").into_owned()),
 					);
+					if let Some(mtp) = d.mtp {
+						row(
+							t!("hs.usb"),
+							if mtp {
+								t!("hs.usb_mtp")
+							} else {
+								t!("hs.usb_charging")
+							}
+							.into_owned(),
+						);
+					}
 					row(
 						t!("hs.wireless_adb"),
 						d.adb_tcp_port.map_or_else(
@@ -231,6 +249,30 @@ impl HeadsetView {
 				.clicked()
 			{
 				commands.push(Command::EnableWireless(target.serial.to_owned()));
+			}
+			let mtp = match &self.details {
+				Some(Ok((d, _))) => d.mtp,
+				_ => None,
+			};
+			let label = if mtp == Some(true) {
+				t!("hs.mtp_off")
+			} else {
+				t!("hs.mtp_on")
+			};
+			if ui
+				.add_enabled(mtp.is_some(), egui::Button::new(label))
+				.on_hover_text(t!("hs.mtp_hint"))
+				.clicked()
+			{
+				let enabled = mtp != Some(true);
+				commands.push(Command::SetMtp {
+					serial: target.serial.to_owned(),
+					enabled,
+				});
+				// The headset only reports the new mode after the USB reset.
+				if let Some(Ok((d, _))) = &mut self.details {
+					d.mtp = Some(enabled);
+				}
 			}
 			if ui
 				.button(t!("hs.screenshot"))
@@ -454,6 +496,25 @@ impl HeadsetView {
 			return;
 		}
 		let mut delete = None;
+		let mut restore_into = None;
+		// Copies first, then the rest by name.
+		let mut others: Vec<(bool, String, String)> = target
+			.info
+			.map(|info| {
+				info.packages
+					.iter()
+					.map(|p| {
+						let name = target
+							.names
+							.get(&p.name)
+							.cloned()
+							.unwrap_or_else(|| p.name.clone());
+						(!target.copies.contains(&p.name), name, p.name.clone())
+					})
+					.collect()
+			})
+			.unwrap_or_default();
+		others.sort_by_key(|(not_copy, name, _)| (*not_copy, name.to_lowercase()));
 		egui_extras::TableBuilder::new(ui)
 			.id_salt("headset_backups")
 			.striped(true)
@@ -502,8 +563,42 @@ impl HeadsetView {
 								commands.push(Command::RestoreBackup {
 									serial: target.serial.to_owned(),
 									backup: backup.clone(),
+									package: backup.meta.package.clone(),
 								});
 							}
+							ui.add_enabled_ui(!others.is_empty(), |ui| {
+								ui.menu_button(t!("hs.restore_into"), |ui| {
+									egui::ScrollArea::vertical()
+										.max_height(320.0)
+										.show(ui, |ui| {
+											for (not_copy, name, package) in &others {
+												if package == &backup.meta.package {
+													continue;
+												}
+												let label = if *not_copy {
+													format!("{name} ({package})")
+												} else {
+													t!(
+														"hs.copy_entry",
+														name = name,
+														package = package
+													)
+													.into_owned()
+												};
+												if ui.button(label).clicked() {
+													restore_into = Some((
+														backup.clone(),
+														package.clone(),
+														name.clone(),
+													));
+													ui.close();
+												}
+											}
+										});
+								})
+								.response
+								.on_hover_text(t!("hs.restore_into_hint"));
+							});
 							if ui.small_button(t!("common.open")).clicked() {
 								super::open_folder(&backup.dir);
 							}
@@ -516,6 +611,13 @@ impl HeadsetView {
 			});
 		if let Some(backup) = delete {
 			self.dialog = Some(Dialog::DeleteBackup(backup));
+		}
+		if let Some((backup, package, name)) = restore_into {
+			self.dialog = Some(Dialog::RestoreInto {
+				backup,
+				package,
+				name,
+			});
 		}
 	}
 
@@ -561,6 +663,31 @@ impl HeadsetView {
 							commands.push(Command::Reboot {
 								serial: serial.to_owned(),
 								mode: *mode,
+							});
+							close = true;
+						}
+						close |= ui.button(t!("common.cancel")).clicked();
+					});
+				}
+				Dialog::RestoreInto {
+					backup,
+					package,
+					name,
+				} => {
+					ui.heading(t!("hs.restore_into_title"));
+					ui.label(t!(
+						"hs.restore_into_text",
+						backup = backup.meta.name,
+						date = super::format_unix_time(backup.meta.created),
+						name = name,
+						package = package
+					));
+					ui.horizontal(|ui| {
+						if ui.button(t!("hs.restore")).clicked() {
+							commands.push(Command::RestoreBackup {
+								serial: serial.to_owned(),
+								backup: backup.clone(),
+								package: package.clone(),
 							});
 							close = true;
 						}

@@ -157,6 +157,7 @@ fn task_row(
 					(TaskKind::Uninstall, _) => t!("tasks.kind_uninstall"),
 					(TaskKind::AdbSetup, _) => t!("tasks.kind_adb"),
 					(TaskKind::RcloneSetup, _) => t!("tasks.kind_rclone"),
+					(TaskKind::Rename, _) => t!("tasks.kind_rename"),
 				};
 				ui.add(egui::Label::new(egui::RichText::new(kind).weak()).truncate());
 			});

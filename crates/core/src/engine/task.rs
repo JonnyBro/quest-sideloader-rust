@@ -26,8 +26,9 @@ pub enum TaskKind {
 	Uninstall,
 	/// Downloading adb (Android SDK Platform-Tools).
 	AdbSetup,
-	/// Downloading rclone.
 	RcloneSetup,
+	/// Building a copy of a release under another package name.
+	Rename,
 }
 
 /// The headset has the app signed with another key, so it must be

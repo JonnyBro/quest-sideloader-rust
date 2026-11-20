@@ -1,5 +1,3 @@
-//! Desktop notifications.
-
 /// Shows a notification without blocking the UI; failures only go to the log
 /// (there may be no notification service at all).
 pub fn send(title: String, body: String) {

@@ -33,13 +33,15 @@ impl DownloadsView {
 	}
 
 	/// `install_target` is `(serial, name)` of the headset to install on.
+	/// Returns a release the user wants to make a renamed copy of.
 	pub fn show(
 		&mut self,
 		ui: &mut egui::Ui,
 		folder: &Path,
 		install_target: Option<(&str, &str)>,
 		commands: &mut Vec<Command>,
-	) {
+	) -> Option<std::path::PathBuf> {
+		let mut rename = None;
 		if self.stale {
 			self.stale = false;
 			commands.push(Command::ListDownloads);
@@ -71,13 +73,13 @@ impl DownloadsView {
 
 		let Some(releases) = &self.releases else {
 			ui.spinner();
-			return;
+			return None;
 		};
 		if releases.is_empty() {
 			ui.centered_and_justified(|ui| {
 				ui.weak(t!("dl.empty"));
 			});
-			return;
+			return None;
 		}
 		let needle = self.search.trim().to_lowercase();
 		let rows: Vec<&DownloadedRelease> = releases
@@ -142,6 +144,13 @@ impl DownloadsView {
 									path: release.path.clone(),
 								});
 							}
+							if ui
+								.small_button(t!("dl.copy"))
+								.on_hover_text(t!("dl.copy_hint"))
+								.clicked()
+							{
+								rename = Some(release.path.clone());
+							}
 							if ui.small_button(t!("common.open")).clicked() {
 								super::open_folder(&release.path);
 							}
@@ -154,6 +163,7 @@ impl DownloadsView {
 			});
 
 		self.delete_dialog(ui.ctx(), commands);
+		rename
 	}
 
 	fn delete_dialog(&mut self, ctx: &egui::Context, commands: &mut Vec<Command>) {

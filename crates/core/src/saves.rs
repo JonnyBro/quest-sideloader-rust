@@ -49,6 +49,9 @@ pub struct BackupMeta {
 	/// How many of the files came from the app's private data.
 	#[serde(default)]
 	pub private_files: u64,
+	/// Files the headset wouldn't let us read, so they aren't in the backup.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub skipped: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,6 +94,9 @@ pub fn delete(backup: &Backup) -> Result<(), SaveError> {
 
 /// Folders apps rebuild on their own; not worth backing up.
 const SKIPPED_TOP_DIRS: [&str; 2] = ["cache", "code_cache"];
+/// The same, anywhere in the tree. Unreal's shader cache is also only
+/// readable by the app itself.
+const SKIPPED_DIRS: [&str; 1] = ["VulkanProgramBinaryCache"];
 
 /// Scratch folders on the headset for moving private data through `run-as`.
 const BACKUP_TMP: &str = "/sdcard/backup_tmp";
@@ -109,6 +115,9 @@ fn relative_files(files: &[(String, u64)], remote_root: &str) -> Vec<(String, St
 				|| parts
 					.next()
 					.is_some_and(|top| SKIPPED_TOP_DIRS.contains(&top) && relative.contains('/'))
+				|| relative
+					.rsplit_once('/')
+					.is_some_and(|(dirs, _)| dirs.split('/').any(|d| SKIPPED_DIRS.contains(&d)))
 			{
 				return None;
 			}
@@ -119,10 +128,11 @@ fn relative_files(files: &[(String, u64)], remote_root: &str) -> Vec<(String, St
 
 /// Copies `/data/data/<package>` to a scratch folder with `run-as`. Only
 /// debuggable apps allow that; for the rest this finds nothing, which is fine.
+/// The flag says whether `run-as` worked.
 async fn stage_private_data(
 	device: &Device,
 	package: &str,
-) -> Result<Vec<(String, String, u64)>, SaveError> {
+) -> Result<(Vec<(String, String, u64)>, bool), SaveError> {
 	let q = |s: &str| shell_words::quote(s).into_owned();
 	let tmp = format!("{BACKUP_TMP}/{package}");
 	let out = device
@@ -136,10 +146,21 @@ async fn stage_private_data(
 		.await?;
 	if out.stderr.contains("run-as:") {
 		tracing::debug!(%package, stderr = %out.stderr.trim(), "no private data (run-as refused)");
-		return Ok(Vec::new());
+		return Ok((Vec::new(), false));
 	}
 	let files = device.list_files(&tmp).await?;
-	Ok(relative_files(&files, &tmp))
+	Ok((relative_files(&files, &tmp), true))
+}
+
+/// A skipped file that is probably the game's save, so the user is told
+/// plainly that the backup doesn't have it.
+pub fn looks_like_save(path: &str) -> bool {
+	// Inside the app's folder, so the package name doesn't get a say.
+	let inside = path
+		.split_once("/files/")
+		.map_or(path, |(_, rest)| rest)
+		.to_ascii_lowercase();
+	inside.contains("save") || inside.ends_with(".sav")
 }
 
 /// Copies the app's saves from the headset: its `Android/data` folder, and
@@ -159,7 +180,7 @@ pub async fn back_up(
 	let cleanup = async {
 		let _ = device.shell(&format!("rm -rf {BACKUP_TMP}")).await;
 	};
-	let private = match private {
+	let (private, run_as) = match private {
 		Ok(private) => private,
 		Err(e) => {
 			cleanup.await;
@@ -171,10 +192,14 @@ pub async fn back_up(
 		return Err(SaveError::NothingToBackUp(package.to_owned()));
 	}
 
-	let created = SystemTime::now()
+	let mut created = SystemTime::now()
 		.duration_since(UNIX_EPOCH)
 		.map_or(0, |d| d.as_secs());
 	let package_dir = root.join(package);
+	// Backups are named by the second; two in the same second would collide.
+	while package_dir.join(created.to_string()).exists() {
+		created += 1;
+	}
 	let staging = package_dir.join(format!(".{created}.partial"));
 	let _ = tokio::fs::remove_dir_all(&staging).await;
 
@@ -185,18 +210,56 @@ pub async fn back_up(
 			(remote.clone(), staging.join(PRIVATE_DIR).join(relative))
 		}))
 		.collect();
-	let pulled = device.pull(&pulls, progress).await;
+	let pulled = device.pull_readable(&pulls, progress).await;
 	cleanup.await;
-	pulled?;
+	let mut skipped = pulled?;
+	// Files only the app may read: an app that allows `run-as` can read them
+	// for us, streamed straight to the computer.
+	if run_as && !skipped.is_empty() {
+		let mut still = Vec::new();
+		for remote in skipped {
+			let Some((_, local)) = pulls.iter().find(|(r, _)| *r == remote) else {
+				continue;
+			};
+			let command = format!(
+				"run-as {} cat {}",
+				shell_words::quote(package),
+				shell_words::quote(&remote)
+			);
+			match device.shell_to_file(&command, local).await {
+				Ok((Some(0), _)) => {
+					let size = tokio::fs::metadata(local).await.map_or(0, |m| m.len());
+					progress(size);
+				}
+				result => {
+					tracing::warn!("run-as couldn't read {remote} either: {result:?}");
+					let _ = tokio::fs::remove_file(local).await;
+					still.push(remote);
+				}
+			}
+		}
+		skipped = still;
+	}
+	let kept = |remote: &String| !skipped.contains(remote);
+	if pulls.len() == skipped.len() {
+		let _ = tokio::fs::remove_dir_all(&staging).await;
+		return Err(SaveError::NothingToBackUp(package.to_owned()));
+	}
 
 	let meta = BackupMeta {
 		package: package.to_owned(),
 		name: name.to_owned(),
 		version_code,
 		created,
-		files: pulls.len() as u64,
-		bytes: shared.iter().chain(&private).map(|(_, _, size)| size).sum(),
-		private_files: private.len() as u64,
+		files: (pulls.len() - skipped.len()) as u64,
+		bytes: shared
+			.iter()
+			.chain(&private)
+			.filter(|(remote, _, _)| kept(remote))
+			.map(|(_, _, size)| size)
+			.sum(),
+		private_files: private.iter().filter(|(remote, _, _)| kept(remote)).count() as u64,
+		skipped: skipped.clone(),
 	};
 	let json = serde_json::to_vec_pretty(&meta).expect("backup metadata serializes");
 	let meta_path = staging.join(META_FILE);
@@ -210,30 +273,35 @@ pub async fn back_up(
 	Ok(Backup { dir, meta })
 }
 
-/// Puts a backup back. The app has to be installed first, or Android hands
-/// the restored folders to the wrong owner. Files in the backup replace those
-/// on the headset; others are left alone.
+/// Puts a backup back into `package`, which is the backed-up app itself or
+/// another one, such as its renamed copy. The app has to be installed first,
+/// or Android hands the restored folders to the wrong owner. Files in the
+/// backup replace those on the headset; others are left alone.
 pub async fn restore(
 	device: &Device,
 	backup: &Backup,
+	package: &str,
 	progress: Progress<'_>,
 ) -> Result<(), SaveError> {
-	let package = &backup.meta.package;
 	if device.apk_path(package).await.is_err() {
-		return Err(SaveError::NotInstalled(package.clone()));
+		return Err(SaveError::NotInstalled(package.to_owned()));
 	}
+	let old = backup.meta.package.as_str();
 	let shared = backup.dir.join(DATA_DIR);
 	if shared.is_dir() {
+		let staged = Staged::new(&shared, old, package)?;
 		device
-			.push(&shared, &device_data_dir(package), progress)
+			.push(staged.path(), &device_data_dir(package), progress)
 			.await?;
 	}
 	let private = backup.dir.join(PRIVATE_DIR);
 	if private.is_dir() {
+		let staged = Staged::new(&private, old, package)?;
+		let private = staged.path();
 		let q = |s: &str| shell_words::quote(s).into_owned();
 		let tmp = format!("{RESTORE_TMP}/{package}");
 		let _ = device.shell(&format!("rm -rf {}", q(RESTORE_TMP))).await;
-		let pushed = device.push(&private, &tmp, progress).await;
+		let pushed = device.push(private, &tmp, progress).await;
 		let result = match pushed {
 			Ok(()) => device
 				.shell(&format!(
@@ -255,6 +323,77 @@ pub async fn restore(
 	Ok(())
 }
 
+/// Backup files as another package expects them. Some names carry the
+/// package, like Unity's `shared_prefs/<package>.v2.playerprefs.xml`, and
+/// the other app would never look at them. Those get the new package in a
+/// temporary folder of links; with nothing to rename the backup is used as it is.
+struct Staged {
+	original: PathBuf,
+	temp: Option<PathBuf>,
+}
+
+impl Staged {
+	fn new(dir: &Path, old: &str, new: &str) -> Result<Self, SaveError> {
+		let unchanged = Self {
+			original: dir.to_path_buf(),
+			temp: None,
+		};
+		if old == new {
+			return Ok(unchanged);
+		}
+		let files = crate::adb::list_files(dir).map_err(io_err(dir))?;
+		let mut any_renamed = false;
+		let renamed: Vec<(PathBuf, String)> = files
+			.into_iter()
+			.map(
+				|f| match crate::rename::rename_value(&f.relative, old, new) {
+					Some(relative) => {
+						any_renamed = true;
+						(f.path, relative)
+					}
+					None => (f.path, f.relative),
+				},
+			)
+			.collect();
+		if !any_renamed {
+			return Ok(unchanged);
+		}
+		let stamp = SystemTime::now()
+			.duration_since(UNIX_EPOCH)
+			.map_or(0, |d| d.as_nanos());
+		let temp = std::env::temp_dir().join(format!(
+			"quest-sideloader-restore-{}-{stamp}",
+			std::process::id()
+		));
+		let staged = Self {
+			original: dir.to_path_buf(),
+			temp: Some(temp.clone()),
+		};
+		for (path, relative) in renamed {
+			let dest = temp.join(&relative);
+			if let Some(parent) = dest.parent() {
+				std::fs::create_dir_all(parent).map_err(io_err(parent))?;
+			}
+			if std::fs::hard_link(&path, &dest).is_err() {
+				std::fs::copy(&path, &dest).map_err(io_err(&dest))?;
+			}
+		}
+		Ok(staged)
+	}
+
+	fn path(&self) -> &Path {
+		self.temp.as_deref().unwrap_or(&self.original)
+	}
+}
+
+impl Drop for Staged {
+	fn drop(&mut self) {
+		if let Some(temp) = &self.temp {
+			let _ = std::fs::remove_dir_all(temp);
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -271,6 +410,7 @@ mod tests {
 			files: 1,
 			bytes: 3,
 			private_files: 0,
+			skipped: Vec::new(),
 		};
 		std::fs::write(dir.join(META_FILE), serde_json::to_vec(&meta).unwrap()).unwrap();
 	}
@@ -307,6 +447,10 @@ mod tests {
 				b"<x/>".to_vec(),
 			),
 			(
+				"/sdcard/backup_tmp/com.a.b/shared_prefs/com.a.b.v2.playerprefs.xml".into(),
+				b"<prefs/>".to_vec(),
+			),
+			(
 				"/sdcard/backup_tmp/com.a.b/code_cache/x.dex".into(),
 				b"dex".to_vec(),
 			),
@@ -317,7 +461,7 @@ mod tests {
 		let backup = back_up(&device, dir.path(), "com.a.b", "Game", Some(5), &|_| {})
 			.await
 			.unwrap();
-		assert_eq!((backup.meta.files, backup.meta.private_files), (2, 1));
+		assert_eq!((backup.meta.files, backup.meta.private_files), (3, 2));
 		assert_eq!(
 			std::fs::read(backup.dir.join("data/files/save.dat")).unwrap(),
 			b"save"
@@ -346,7 +490,7 @@ mod tests {
 			);
 		}
 
-		restore(&device, &backup, &|_| {}).await.unwrap();
+		restore(&device, &backup, "com.a.b", &|_| {}).await.unwrap();
 		{
 			let rec = fake.recorded.lock().unwrap();
 			let mut pushed: Vec<_> = rec.pushed.iter().map(|(p, _)| p.clone()).collect();
@@ -355,6 +499,7 @@ mod tests {
 				pushed,
 				[
 					"/sdcard/Android/data/com.a.b/files/save.dat",
+					"/sdcard/restore_tmp/com.a.b/shared_prefs/com.a.b.v2.playerprefs.xml",
 					"/sdcard/restore_tmp/com.a.b/shared_prefs/prefs.xml"
 				]
 			);
@@ -365,6 +510,71 @@ mod tests {
 			);
 			assert_eq!(rec.shell.last().unwrap(), "rm -rf /sdcard/restore_tmp");
 		}
+
+		fake.recorded.lock().unwrap().pushed.clear();
+		restore(&device, &backup, "com.a.b.copy", &|_| {})
+			.await
+			.unwrap();
+		{
+			let rec = fake.recorded.lock().unwrap();
+			let mut pushed: Vec<_> = rec.pushed.iter().map(|(p, _)| p.clone()).collect();
+			pushed.sort();
+			assert_eq!(
+				pushed,
+				[
+					"/sdcard/Android/data/com.a.b.copy/files/save.dat",
+					"/sdcard/restore_tmp/com.a.b.copy/shared_prefs/com.a.b.copy.v2.playerprefs.xml",
+					"/sdcard/restore_tmp/com.a.b.copy/shared_prefs/prefs.xml"
+				]
+			);
+			assert!(
+				rec.shell
+					.iter()
+					.any(|c| c
+						.contains("| run-as com.a.b.copy tar -xf - -C /data/data/com.a.b.copy"))
+			);
+		}
+
+		// Files only the app may read are left out, the rest is still saved;
+		// Unreal's shader cache isn't even tried.
+		{
+			let mut rec = fake.recorded.lock().unwrap();
+			rec.device_files.push((
+				"/sdcard/Android/data/com.a.b/files/locked.bin".into(),
+				b"x".to_vec(),
+			));
+			rec.device_files.push((
+				"/sdcard/Android/data/com.a.b/files/VulkanProgramBinaryCache/pso.bin".into(),
+				b"x".to_vec(),
+			));
+			rec.unreadable = vec!["/sdcard/Android/data/com.a.b/files/locked.bin".into()];
+		}
+		// With run-as the app reads its own locked file for us.
+		let full = back_up(&device, dir.path(), "com.a.b", "Game", Some(5), &|_| {})
+			.await
+			.unwrap();
+		assert!(full.meta.skipped.is_empty());
+		assert_eq!(
+			std::fs::read(full.dir.join("data/files/locked.bin")).unwrap(),
+			b"x"
+		);
+		assert!(
+			!full
+				.dir
+				.join("data/files/VulkanProgramBinaryCache")
+				.exists()
+		);
+
+		fake.recorded.lock().unwrap().run_as_refused = true;
+		let partial = back_up(&device, dir.path(), "com.a.b", "Game", Some(5), &|_| {})
+			.await
+			.unwrap();
+		assert_eq!(
+			partial.meta.skipped,
+			["/sdcard/Android/data/com.a.b/files/locked.bin"]
+		);
+		assert!(partial.dir.join("data/files/save.dat").exists());
+		assert!(!partial.dir.join("data/files/locked.bin").exists());
 
 		fake.recorded.lock().unwrap().device_files.clear();
 		let err = back_up(&device, dir.path(), "com.empty.x", "Empty", None, &|_| {})

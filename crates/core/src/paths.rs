@@ -90,6 +90,11 @@ impl AppPaths {
 		self.data_dir.join("downloads")
 	}
 
+	/// Keys of renamed copies; see [`crate::rename::KeyStore`].
+	pub fn signing_dir(&self) -> PathBuf {
+		self.data_dir.join("signing")
+	}
+
 	pub fn backups_dir(&self) -> PathBuf {
 		self.data_dir.join("backups")
 	}

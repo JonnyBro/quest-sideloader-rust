@@ -12,17 +12,19 @@ pub enum Tab {
 	Headset,
 	Library,
 	Downloads,
+	Rename,
 	Tasks,
 	Console,
 	Settings,
 }
 
 impl Tab {
-	const ALL: [Tab; 7] = [
+	const ALL: [Tab; 8] = [
 		Tab::Devices,
 		Tab::Headset,
 		Tab::Library,
 		Tab::Downloads,
+		Tab::Rename,
 		Tab::Tasks,
 		Tab::Console,
 		Tab::Settings,
@@ -34,6 +36,7 @@ impl Tab {
 			Tab::Headset => t!("tab.headset"),
 			Tab::Library => t!("tab.library"),
 			Tab::Downloads => t!("tab.downloads"),
+			Tab::Rename => t!("tab.rename"),
 			Tab::Tasks => t!("tab.tasks"),
 			Tab::Console => t!("tab.console"),
 			Tab::Settings => t!("tab.settings"),
@@ -54,6 +57,10 @@ pub struct SideloaderApp {
 	devices_view: ui::devices::DevicesView,
 	tasks_view: ui::tasks::TasksView,
 	console_view: ui::console::ConsoleView,
+	rename_view: ui::rename::RenameView,
+	keys_view: ui::keys::KeysView,
+	/// Packages of renamed copies made here, never offered for upload.
+	copies: std::collections::HashSet<String>,
 	downloads_view: ui::downloads::DownloadsView,
 	headset_view: ui::headset::HeadsetView,
 	logs_view: ui::logs::LogsView,
@@ -99,6 +106,14 @@ impl SideloaderApp {
 		if let Some(prefs) = cc.storage.and_then(|s| eframe::get_value(s, LIBRARY_KEY)) {
 			library_view.restore(prefs);
 		}
+		let keys_view = ui::keys::KeysView::new(paths.signing_dir());
+		let mut rename_view = ui::rename::RenameView::new();
+		if let Some(path) = cc
+			.storage
+			.and_then(|s| eframe::get_value::<std::path::PathBuf>(s, LOADER_KEY))
+		{
+			rename_view.restore_loader(path);
+		}
 		let mut devices_view = ui::devices::DevicesView::new();
 		if let Some(address) = cc
 			.storage
@@ -116,6 +131,9 @@ impl SideloaderApp {
 			devices_view,
 			tasks_view: ui::tasks::TasksView::new(),
 			console_view: ui::console::ConsoleView::new(),
+			rename_view,
+			copies: keys_view.packages().into_iter().collect(),
+			keys_view,
 			downloads_view: ui::downloads::DownloadsView::new(),
 			headset_view: ui::headset::HeadsetView::new(),
 			logs_view: ui::logs::LogsView::new(log_buffer, logs_dir),
@@ -162,6 +180,10 @@ impl SideloaderApp {
 			Event::RcloneMissing => self.rclone_setup.on_missing(),
 			Event::TaskUpdated(snapshot) => {
 				if snapshot.state == quest_sideloader_core::TaskState::Done {
+					if snapshot.kind == quest_sideloader_core::TaskKind::Rename {
+						self.keys_view.invalidate();
+						self.copies = self.keys_view.packages().into_iter().collect();
+					}
 					self.headset_view.invalidate();
 					// Installs can remove the release folder afterwards.
 					self.downloads_view.invalidate();
@@ -192,6 +214,7 @@ impl SideloaderApp {
 				analysis,
 			} => self.review_dialog.push(task, title, analysis),
 			Event::Shell { id, output } => self.console_view.on_output(id, output),
+			Event::RenameAnalysis { id, result } => self.rename_view.on_analysis(id, result),
 			Event::Notice(message) => {
 				tracing::info!("{message}");
 				self.status = Some(Status::Info(message));
@@ -283,10 +306,14 @@ impl SideloaderApp {
 
 const LIBRARY_KEY: &str = "library";
 const WIRELESS_KEY: &str = "wireless_address";
+const LOADER_KEY: &str = "rename_loader";
 
 impl eframe::App for SideloaderApp {
 	fn save(&mut self, storage: &mut dyn eframe::Storage) {
 		eframe::set_value(storage, LIBRARY_KEY, &self.library_view.prefs());
+		if let Some(path) = self.rename_view.loader() {
+			eframe::set_value(storage, LOADER_KEY, &path);
+		}
 		if let Some(address) = self.devices_view.last_wireless() {
 			eframe::set_value(storage, WIRELESS_KEY, &address);
 		}
@@ -335,12 +362,14 @@ impl eframe::App for SideloaderApp {
 						name: d.display_name(),
 						info: self.devices_view.info(&d.serial),
 						names: self.library_view.names(),
+						copies: &self.copies,
 					});
 				self.headset_view.show(ui, target, &mut commands);
 			}
 			Tab::Library => {
 				let installed = self.devices_view.installed_apps();
-				let ignored = self.settings_view.contribute_ignored();
+				let mut ignored = self.settings_view.contribute_ignored();
+				ignored.extend(self.copies.iter().cloned());
 				self.library_view.show(
 					ui,
 					self.settings_view.active_mirror_name(),
@@ -355,12 +384,19 @@ impl eframe::App for SideloaderApp {
 					.install_target()
 					.map(|d| (d.serial.clone(), d.display_name()));
 				let target = target.as_ref().map(|(s, n)| (s.as_str(), n.as_str()));
-				self.downloads_view.show(
+				if let Some(path) = self.downloads_view.show(
 					ui,
 					self.settings_view.downloads_dir(),
 					target,
 					&mut commands,
-				);
+				) {
+					self.rename_view.add(path, &mut commands);
+					self.tab = Tab::Rename;
+				}
+			}
+			Tab::Rename => {
+				self.rename_view
+					.show(ui, self.settings_view.downloads_dir(), &mut commands);
 			}
 			Tab::Tasks => {
 				let target = self
@@ -385,7 +421,11 @@ impl eframe::App for SideloaderApp {
 					&default_downloads,
 					&self.paths.rclone_dir(),
 					&mut commands,
+					&mut self.keys_view,
 				);
+				if self.keys_view.take_changed() {
+					self.copies = self.keys_view.packages().into_iter().collect();
+				}
 			}
 		});
 		let ctx = ui.ctx().clone();

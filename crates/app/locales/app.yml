@@ -11,6 +11,9 @@ tab.library:
 tab.downloads:
   en: "Downloads"
   ru: "Загрузки"
+tab.rename:
+  en: "Rename"
+  ru: "Переименование"
 tab.tasks:
   en: "Tasks"
   ru: "Задачи"
@@ -980,3 +983,165 @@ console.ended:
 console.only_shell:
   en: "Only shell commands run here; for other adb commands use the Devices and Headset tabs."
   ru: "Здесь выполняются только команды shell; для других команд adb есть вкладки Устройства и Шлем."
+dl.copy:
+  en: "Make a copy"
+  ru: "Сделать копию"
+dl.copy_hint:
+  en: "Build a copy under another package name, to install beside the original"
+  ru: "Собрать копию с другим именем пакета, чтобы поставить рядом с оригиналом"
+rn.heading:
+  en: "Renamed copies"
+  ru: "Копии с другим пакетом"
+rn.add_folder:
+  en: "Add folder..."
+  ru: "Добавить папку..."
+rn.add_apk:
+  en: "Add APK..."
+  ru: "Добавить APK..."
+rn.empty:
+  en: "Add a release folder or an APK here, or use Make a copy on the Downloads tab."
+  ru: "Добавьте папку релиза или APK здесь или нажмите \"Сделать копию\" на вкладке Загрузки."
+rn.select:
+  en: "Select a release on the left."
+  ru: "Выберите релиз слева."
+rn.remove:
+  en: "Remove from the list"
+  ru: "Убрать из списка"
+rn.analyzing:
+  en: "Reading..."
+  ru: "Чтение..."
+rn.analyzing_long:
+  en: "Reading the APK. Large games take a while, since every native library is checked."
+  ru: "Чтение APK. Для больших игр это занимает время: проверяется каждая нативная библиотека."
+rn.failed:
+  en: "Can't be read"
+  ru: "Не читается"
+rn.reanalyze:
+  en: "Read again"
+  ru: "Прочитать заново"
+rn.package:
+  en: "Package"
+  ru: "Пакет"
+rn.version:
+  en: "Version"
+  ru: "Версия"
+rn.new_package:
+  en: "Copy's package"
+  ru: "Пакет копии"
+rn.suggest:
+  en: "Default"
+  ru: "По умолчанию"
+rn.manifest:
+  en: "Manifest: %{n} changes"
+  ru: "Манифест: изменений %{n}"
+rn.expanded:
+  en: "Written relative to the package; spelled out in full so it keeps pointing at the same class"
+  ru: "Записано относительно пакета; раскрывается полностью, чтобы указывать на тот же класс"
+rn.resources:
+  en: "Resource strings: %{n}"
+  ru: "Строки ресурсов: %{n}"
+rn.obb:
+  en: "OBB files: %{n}"
+  ru: "Файлы OBB: %{n}"
+rn.script:
+  en: "install.txt lines: %{n}"
+  ru: "Строки install.txt: %{n}"
+rn.dex_warning:
+  en: "The code has %{n} strings with the package name. They stay as they are, so the copy may still use some of the original's names (for example a file provider)."
+  ru: "В коде %{n} строк с именем пакета. Они останутся прежними, поэтому копия может обращаться к именам оригинала (например, к провайдеру файлов)."
+rn.dex_examples:
+  en: "Strings in the code"
+  ru: "Строки в коде"
+rn.firebase:
+  en: "The game uses Firebase set up for the original package; in the copy it may not work."
+  ru: "Игра использует Firebase, настроенный на оригинальный пакет; в копии он может не работать."
+rn.other_apks:
+  en: "The release has more APKs (%{n}); only the first one is renamed."
+  ru: "В релизе есть ещё APK (%{n}); переименуется только первый."
+rn.jni:
+  en: "%{n} native libraries call Java classes of the package. Classes keep their names, so this is fine."
+  ru: "Нативных библиотек, вызывающих Java-классы пакета: %{n}. Классы сохраняют имена, так что это не мешает."
+rn.loader:
+  en: "Has the Platform SDK loader (lib/arm64-v8a/libovrplatformloader.so), SHA-256:"
+  ru: "Есть загрузчик Platform SDK (lib/arm64-v8a/libovrplatformloader.so), SHA-256:"
+rn.build:
+  en: "Build copy"
+  ru: "Собрать копию"
+rn.use_loader:
+  en: "Replace the Platform SDK loader, so the game starts on older firmware"
+  ru: "Заменить загрузчик Platform SDK, чтобы игра запускалась на старых прошивках"
+rn.pick_loader:
+  en: "Choose file..."
+  ru: "Выбрать файл..."
+rn.no_loader_file:
+  en: "No file chosen"
+  ru: "Файл не выбран"
+rn.loader_hint:
+  en: "A patched libovrplatformloader.so you got yourself, for example from the eventhorizon project. The app doesn't download it; the report in the copy's folder lists both files' SHA-256."
+  ru: "Пропатченный libovrplatformloader.so, который вы взяли сами, например из проекта eventhorizon. Программа его не скачивает; в отчёте в папке копии записаны SHA-256 обоих файлов."
+rn.output:
+  en: "The copy goes to %{path}"
+  ru: "Копия будет в %{path}"
+rn.output_exists:
+  en: "That folder already exists; delete it on the Downloads tab to build again"
+  ru: "Такая папка уже есть; удалите её на вкладке Загрузки, чтобы собрать заново"
+rn.started:
+  en: "Building; progress is on the Tasks tab"
+  ru: "Идёт сборка; ход на вкладке Задачи"
+tasks.kind_rename:
+  en: "renamed copy"
+  ru: "копия с другим пакетом"
+keys.heading:
+  en: "Signing keys of copies"
+  ru: "Ключи подписи копий"
+keys.intro:
+  en: "Each renamed copy is signed with its own key. Android only installs an update over a copy signed with the same key, so back these files up: without its key, a copy can only be uninstalled and installed again. Apps with a key here are never offered for upload to the mirror."
+  ru: "Каждая копия подписана своим ключом. Android ставит обновление поверх копии только с тем же ключом, поэтому сохраните эти файлы: без них копию можно только удалить и поставить заново. Приложения с ключом здесь никогда не предлагаются к загрузке на зеркало."
+keys.none:
+  en: "No keys yet; one is made when the first copy of a package is built."
+  ru: "Ключей пока нет; ключ создаётся при сборке первой копии пакета."
+keys.export:
+  en: "Export..."
+  ru: "Экспорт..."
+keys.import:
+  en: "Import key..."
+  ru: "Импортировать ключ..."
+keys.imported:
+  en: "Key for %{package} imported"
+  ru: "Ключ для %{package} импортирован"
+keys.exported:
+  en: "Key saved to %{path}"
+  ru: "Ключ сохранён в %{path}"
+hs.restore_into:
+  en: "Into..."
+  ru: "В другое..."
+hs.restore_into_hint:
+  en: "Restore these saves into another installed app, such as a renamed copy of this game"
+  ru: "Восстановить эти сохранения в другое установленное приложение, например в копию этой игры с другим пакетом"
+hs.copy_entry:
+  en: "%{name} (%{package}), copy"
+  ru: "%{name} (%{package}), копия"
+hs.restore_into_title:
+  en: "Restore into another app?"
+  ru: "Восстановить в другое приложение?"
+hs.restore_into_text:
+  en: "The saves of %{backup} from %{date} go into %{name} (%{package}). Its files with the same names are replaced. File names that contain the original package get the new one, so the app finds them. Games that encrypt saves with their package or signature may not read them."
+  ru: "Сохранения %{backup} от %{date} будут записаны в %{name} (%{package}). Его файлы с теми же именами заменятся. В именах файлов с оригинальным пакетом он заменяется на новый, чтобы приложение их нашло. Игры, которые шифруют сохранения с привязкой к пакету или подписи, могут их не прочитать."
+hs.usb:
+  en: "USB"
+  ru: "USB"
+hs.usb_mtp:
+  en: "File transfer (MTP)"
+  ru: "Передача файлов (MTP)"
+hs.usb_charging:
+  en: "Charging only"
+  ru: "Только зарядка"
+hs.mtp_on:
+  en: "Turn on file transfer"
+  ru: "Включить передачу файлов"
+hs.mtp_off:
+  en: "Turn off file transfer"
+  ru: "Выключить передачу файлов"
+hs.mtp_hint:
+  en: "Switches USB to MTP, so the headset's storage opens in the computer's file manager over the cable. adb keeps working; the USB connection resets for a moment."
+  ru: "Переключает USB в режим MTP, чтобы память шлема открылась в файловом менеджере компьютера по кабелю. adb продолжает работать; USB-соединение на секунду переподключится."

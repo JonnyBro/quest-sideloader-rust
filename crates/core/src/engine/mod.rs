@@ -8,6 +8,7 @@ mod downloads;
 mod headset;
 mod install;
 mod library;
+mod rename;
 mod task;
 
 use rust_i18n::t;
@@ -57,6 +58,9 @@ pub enum Command {
 	RestoreBackup {
 		serial: String,
 		backup: crate::saves::Backup,
+		/// Where the saves go: the backed-up app, or another one such as its
+		/// renamed copy.
+		package: String,
 	},
 	DeleteBackup(crate::saves::Backup),
 	ListBackups,
@@ -77,6 +81,12 @@ pub enum Command {
 	/// Turn on wireless ADB and connect to the headset over Wi-Fi.
 	EnableWireless(String),
 	Screenshot(String),
+	/// USB file transfer (MTP) on or off, so the headset shows up in the
+	/// computer's file manager.
+	SetMtp {
+		serial: String,
+		enabled: bool,
+	},
 	SetTweak {
 		serial: String,
 		tweak: crate::adb::Tweak,
@@ -135,6 +145,20 @@ pub enum Command {
 	},
 	/// Stop a console command; the headset ends it when the connection closes.
 	StopShell(u64),
+	/// Work out what renaming a release would change; answered with
+	/// [`Event::RenameAnalysis`] carrying the same `id`.
+	AnalyzeRename {
+		id: u64,
+		path: PathBuf,
+	},
+	/// Build a renamed copy of a release into the downloads folder.
+	BuildCopy {
+		source: PathBuf,
+		new_package: String,
+		/// The user's replacement for the Platform SDK loader.
+		loader: Option<PathBuf>,
+		title: String,
+	},
 }
 
 /// An app on the headset, as the UI knows it.
@@ -208,6 +232,10 @@ pub enum Event {
 	Shell {
 		id: u64,
 		output: ShellEvent,
+	},
+	RenameAnalysis {
+		id: u64,
+		result: std::result::Result<crate::rename::Analysis, String>,
 	},
 	Notice(String),
 	Error(String),
@@ -297,7 +325,7 @@ impl Drop for Engine {
 	}
 }
 
-/// Mirrors forbid bulk downloading; a short queue keeps the app on the right side of that.
+/// Mirrors forbid bulk downloading, so the queue stays short.
 const MAX_DOWNLOAD_JOBS: usize = 10;
 
 struct State {
@@ -392,6 +420,13 @@ impl State {
 	}
 
 	fn start_contribution(&mut self, serial: String, package: String, name: String) {
+		// A renamed copy is re-signed by us; it must never reach the mirror.
+		if crate::rename::KeyStore::new(self.paths.signing_dir()).has(&package) {
+			self.sink.emit(Event::Error(
+				t!("eng.copy_not_shared", package = package).into_owned(),
+			));
+			return;
+		}
 		let Some(target) = self.library.current().and_then(|c| c.upload_target()) else {
 			self.sink
 				.emit(Event::Error(t!("eng.no_uploads").into_owned()));
@@ -665,6 +700,31 @@ async fn run(
 				let shell = console::spawn(id, device, command, state.sink.clone());
 				state.shells.insert(id, shell);
 			}
+			Command::AnalyzeRename { id, path } => {
+				let sink = state.sink.clone();
+				tokio::task::spawn_blocking(move || {
+					let result = crate::rename::analyze(&path).map_err(|e| e.to_string());
+					sink.emit(Event::RenameAnalysis { id, result });
+				});
+			}
+			Command::BuildCopy {
+				source,
+				new_package,
+				loader,
+				title,
+			} => {
+				let id = state.new_task_id();
+				let request = crate::rename::BuildRequest {
+					source,
+					new_package: new_package.clone(),
+					loader,
+					dest_dir: state.settings.downloads_dir.clone(),
+				};
+				let keys = crate::rename::KeyStore::new(state.paths.signing_dir());
+				let title = t!("ren.task_title", name = title, package = new_package).into_owned();
+				let entry = rename::spawn(id, request, keys, title, state.sink.clone());
+				state.tasks.insert(id, entry);
+			}
 			Command::StopShell(id) => {
 				if let Some(shell) = state.shells.remove(&id) {
 					shell.abort();
@@ -749,12 +809,17 @@ async fn run(
 				);
 				state.tasks.insert(id, entry);
 			}
-			Command::RestoreBackup { serial, backup } => {
+			Command::RestoreBackup {
+				serial,
+				backup,
+				package,
+			} => {
 				let id = state.new_task_id();
 				let entry = headset::spawn_restore(
 					id,
 					state.adb.device(serial),
 					backup,
+					package,
 					state.sink.clone(),
 				);
 				state.tasks.insert(id, entry);
@@ -838,6 +903,17 @@ async fn run(
 							t!("eng.wireless_failed", error = e).into_owned(),
 						)),
 					}
+				});
+			}
+			Command::SetMtp { serial, enabled } => {
+				let device = state.adb.device(serial);
+				let done = if enabled {
+					t!("eng.mtp_on")
+				} else {
+					t!("eng.mtp_off")
+				};
+				quick(&state.sink, done.into_owned(), async move {
+					device.set_mtp(enabled).await
 				});
 			}
 			Command::Screenshot(serial) => {

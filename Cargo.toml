@@ -18,3 +18,7 @@ all = { level = "deny", priority = -1 }
 lto = "thin"
 codegen-units = 1
 strip = true
+
+# RSA key generation and signing are very slow unoptimized, in tests too.
+[profile.dev.package.rsa]
+opt-level = 3

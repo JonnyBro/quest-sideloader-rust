@@ -104,6 +104,9 @@ hs.backed_up:
 hs.restore_title:
   en: "Restore %{name}"
   ru: "Восстановление %{name}"
+hs.restore_into_title:
+  en: "Restore %{name} into %{package}"
+  ru: "Восстановление %{name} в %{package}"
 hs.copying_to:
   en: "Copying saves to the headset"
   ru: "Копирование сохранений на шлем"
@@ -548,3 +551,66 @@ rc.zip_no_rclone:
 lib.refused_no_key:
   en: "%{error}. The mirror refused access. This build has no API key, and mirrors that require one only work with official builds."
   ru: "%{error}. Зеркало отказало в доступе. В этой сборке нет API-ключа, а зеркала, которым он нужен, работают только с официальными сборками."
+ren.no_manifest:
+  en: "the APK has no AndroidManifest.xml"
+  ru: "в APK нет AndroidManifest.xml"
+ren.bad_package:
+  en: "not a valid package name: use two or more parts separated by dots, each starting with a letter"
+  ru: "недопустимое имя пакета: нужно не меньше двух частей через точку, и каждая должна начинаться с буквы"
+ren.same_package:
+  en: "the copy needs a package different from the original"
+  ru: "у копии должен быть пакет, отличный от оригинала"
+err.key_bad:
+  en: "signing key: %{error}"
+  ru: "ключ подписи: %{error}"
+err.key_exists:
+  en: "%{package} already has a different signing key; replacing it would make the installed copy impossible to update"
+  ru: "у %{package} уже есть другой ключ подписи; если его заменить, установленную копию нельзя будет обновить"
+ren.exists:
+  en: "%{path} already exists; delete it on the Downloads tab to build the copy again"
+  ru: "%{path} уже существует; удалите эту папку на вкладке Загрузки, чтобы собрать копию заново"
+ren.no_loader:
+  en: "the APK has no Platform SDK loader to replace"
+  ru: "в APK нет загрузчика Platform SDK, который можно заменить"
+ren.bad_signature:
+  en: "the built copy failed its signature check: %{error}"
+  ru: "собранная копия не прошла проверку подписи: %{error}"
+ren.stage_reading:
+  en: "Reading the APK"
+  ru: "Чтение APK"
+ren.stage_key:
+  en: "Preparing the signing key"
+  ru: "Подготовка ключа подписи"
+ren.stage_signing:
+  en: "Writing and signing the APK"
+  ru: "Запись и подпись APK"
+ren.stage_checking:
+  en: "Checking the signature"
+  ru: "Проверка подписи"
+ren.stage_files:
+  en: "Copying OBB and other files"
+  ru: "Копирование OBB и остальных файлов"
+ren.task_title:
+  en: "Copy of %{name} as %{package}"
+  ru: "Копия %{name} как %{package}"
+ren.built:
+  en: "Copy built: %{path}"
+  ru: "Копия собрана: %{path}"
+err.key_not_ours:
+  en: "not a key file exported by Quest Sideloader"
+  ru: "это не файл ключа, экспортированный Quest Sideloader"
+eng.copy_not_shared:
+  en: "%{package} is a renamed copy made here, so it isn't uploaded to the mirror"
+  ru: "%{package} собран в этой программе как копия, поэтому на зеркало не загружается"
+hs.skipped_unreadable:
+  en: "%{n} files the headset doesn't let adb read were left out, for example %{first}"
+  ru: "Пропущено файлов, которые шлем не даёт прочитать через adb: %{n}, например %{first}"
+hs.save_unreadable:
+  en: "The game's saves are not in this backup: %{file} can only be read by the game itself, and it doesn't allow run-as. The other files were saved."
+  ru: "Сохранений игры в этом бэкапе нет: %{file} может читать только сама игра, а run-as она не разрешает. Остальные файлы сохранены."
+eng.mtp_on:
+  en: "File transfer (MTP) is on; the headset shows up in the computer's file manager"
+  ru: "Передача файлов (MTP) включена; шлем появится в файловом менеджере компьютера"
+eng.mtp_off:
+  en: "File transfer (MTP) is off; USB is back to charging only"
+  ru: "Передача файлов (MTP) выключена; USB снова только заряжает"

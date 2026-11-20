@@ -186,6 +186,72 @@ impl Device {
 		session.quit().await
 	}
 
+	/// Runs `command` and writes its standard output into `local`, bytes as
+	/// they come. Returns the exit code and standard error.
+	pub async fn shell_to_file(
+		&self,
+		command: &str,
+		local: &Path,
+	) -> Result<(Option<u8>, String), AdbError> {
+		let local_err = |source| AdbError::LocalIo {
+			path: local.to_path_buf(),
+			source,
+		};
+		if let Some(parent) = local.parent() {
+			tokio::fs::create_dir_all(parent).await.map_err(local_err)?;
+		}
+		let mut file = tokio::fs::File::create(local).await.map_err(local_err)?;
+		let mut stream = timed(self.open(&format!("shell,v2,raw:{command}"))).await?;
+		let mut stderr = Vec::new();
+		let mut exit_code = None;
+		while let Some(packet) = timed(read_shell_packet(&mut stream)).await? {
+			match packet.id {
+				shell_v2::STDOUT => file.write_all(&packet.data).await.map_err(local_err)?,
+				shell_v2::STDERR => stderr.extend_from_slice(&packet.data),
+				shell_v2::EXIT => {
+					exit_code = packet.data.first().copied();
+					break;
+				}
+				_ => {}
+			}
+		}
+		file.flush().await.map_err(local_err)?;
+		Ok((exit_code, String::from_utf8_lossy(&stderr).into_owned()))
+	}
+
+	/// Like [`Self::pull`], but files the device won't let the shell read are
+	/// skipped instead of ending the transfer. Returns the skipped ones.
+	pub async fn pull_readable(
+		&self,
+		files: &[(String, std::path::PathBuf)],
+		progress: Progress<'_>,
+	) -> Result<Vec<String>, AdbError> {
+		let mut skipped = Vec::new();
+		let mut rest = files;
+		'session: loop {
+			let stream = timed(self.open("sync:")).await?;
+			let mut session = SyncSession::new(stream);
+			for (i, (remote, local)) in rest.iter().enumerate() {
+				match session.recv_file(remote, local, progress).await {
+					Ok(()) => {}
+					// adbd ends the session after a failed file, so a new one
+					// carries on with the rest.
+					Err(AdbError::PullFailed { message, .. })
+						if message.contains("Permission denied") =>
+					{
+						tracing::warn!("skipped unreadable {remote}: {message}");
+						skipped.push(remote.clone());
+						rest = &rest[i + 1..];
+						continue 'session;
+					}
+					Err(e) => return Err(e),
+				}
+			}
+			session.quit().await?;
+			return Ok(skipped);
+		}
+	}
+
 	/// Regular files under `dir` with their sizes; empty if it doesn't exist.
 	pub async fn list_files(&self, dir: &str) -> Result<Vec<(String, u64)>, AdbError> {
 		let quoted = shell_words::quote(dir);
@@ -220,7 +286,8 @@ impl Device {
 	}
 
 	/// Pushes a file, or every file of a directory, to `remote`. Missing remote
-	/// directories are created by adbd.
+	/// directories are created by adbd, except inside another app's
+	/// `Android/data` or `Android/obb`, which go through a temporary folder.
 	pub async fn push(
 		&self,
 		local: &Path,

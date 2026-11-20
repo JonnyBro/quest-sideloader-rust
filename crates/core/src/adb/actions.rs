@@ -42,6 +42,8 @@ pub struct DeviceDetails {
 	pub refresh_rate: Option<String>,
 	pub cpu_level: Option<String>,
 	pub gpu_level: Option<String>,
+	/// USB is in file transfer mode; `None` when the firmware doesn't say.
+	pub mtp: Option<bool>,
 }
 
 /// Performance overrides Quest headsets read from system properties. They
@@ -193,11 +195,12 @@ impl Device {
 		let props = self.shell_ok("getprop").await?;
 		let props = parse_getprop(&props);
 		let prop = |name: &str| props.get(name).filter(|v| !v.is_empty()).cloned();
-		let (uptime, battery, memory, ip) = tokio::join!(
+		let (uptime, battery, memory, ip, usb) = tokio::join!(
 			self.shell("cat /proc/uptime"),
 			self.shell("dumpsys battery"),
 			self.shell("cat /proc/meminfo"),
 			self.shell("ip -f inet addr show wlan0"),
+			self.shell("svc usb getFunctions"),
 		);
 		let (memory_total, memory_available) = memory
 			.ok()
@@ -221,7 +224,33 @@ impl Device {
 			refresh_rate: prop(Tweak::RefreshRate.property()),
 			cpu_level: prop(Tweak::CpuLevel.property()),
 			gpu_level: prop(Tweak::GpuLevel.property()),
+			mtp: usb
+				.ok()
+				.filter(|u| u.success())
+				.map(|u| u.stdout.contains("mtp") || u.stderr.contains("mtp")),
 		})
+	}
+
+	/// Switches USB between file transfer (MTP) and charging only. adb keeps
+	/// working; the USB connection resets while the mode changes.
+	pub async fn set_mtp(&self, enabled: bool) -> Result<(), AdbError> {
+		let command = if enabled {
+			"svc usb setFunctions mtp"
+		} else {
+			"svc usb setFunctions"
+		};
+		match self.shell(command).await {
+			Ok(out) if !out.success() => Err(AdbError::Server(
+				t!(
+					"adb.command_failed",
+					command = command,
+					detail = out.stderr.trim()
+				)
+				.into_owned(),
+			)),
+			// Over USB the reset can cut the connection before the reply; that's success.
+			_ => Ok(()),
+		}
 	}
 }
 
@@ -301,6 +330,19 @@ fn parse_inet(text: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[tokio::test]
+	async fn mtp_switches_usb_functions() {
+		let fake = super::super::testing::FakeAdb::start().await;
+		let device =
+			super::super::AdbServer::with_port(Some("/no/adb".into()), fake.port).device("SER1");
+		device.set_mtp(true).await.unwrap();
+		device.set_mtp(false).await.unwrap();
+		assert_eq!(
+			fake.recorded.lock().unwrap().shell,
+			["svc usb setFunctions mtp", "svc usb setFunctions"]
+		);
+	}
 
 	#[test]
 	fn getprop_lines() {
