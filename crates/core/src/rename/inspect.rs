@@ -1,5 +1,5 @@
-//! Everything worth knowing about an APK, for the Inspector tab. Lives here
-//! because it reads the same formats renaming does.
+//! What the Inspector tab shows about an APK. It lives here because it reads
+//! the same formats renaming does.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};

@@ -90,10 +90,11 @@ report lists the SHA-256 of both.
 ## Inspector tab
 
 The Inspector tab shows what an APK or release folder contains: name,
-package, version, Android SDK levels, the headsets it supports, permissions
-and features, architectures, languages, the signature schemes and
-certificate (and whether a renamed copy made here signed it), and the APK's
-SHA-256 and MD5. Details on the Downloads tab opens a release there.
+package, version, Android SDK levels, supported headsets, permissions and
+features, architectures and languages. It also lists the signature schemes
+and the certificate, says when the APK was signed with the key of a copy made
+here, and gives the APK's SHA-256 and MD5. Details on the Downloads tab opens
+a release there.
 
 ## Console tab
 

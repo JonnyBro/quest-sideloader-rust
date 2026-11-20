@@ -70,7 +70,7 @@ fn init_logging(
 		"info,wgpu_hal=warn,wgpu_core=warn,egui_wgpu=warn"
 	};
 	let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default));
-	// tracing writes UTC unless told otherwise; people read these in their own time.
+	// tracing writes timestamps in UTC by default; these use the local time zone.
 	let timer = fmt::time::ChronoLocal::rfc_3339();
 	let stderr = fmt::layer()
 		.with_timer(timer.clone())
