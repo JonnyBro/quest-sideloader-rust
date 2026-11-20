@@ -2,1338 +2,1784 @@ _version: 2
 nav.main:
   en: "Main"
   ru: "Основное"
+  uk: "Основне"
 nav.advanced:
   en: "Advanced"
   ru: "Расширенные"
+  uk: "Розширені"
 tab.headset:
   en: "Headset"
   ru: "Шлем"
+  uk: "Шолом"
 tab.catalog:
   en: "Catalog"
   ru: "Каталог"
+  uk: "Каталог"
 tab.downloads:
   en: "Downloads"
   ru: "Загрузки"
+  uk: "Завантаження"
 tab.rename:
   en: "Rename"
   ru: "Переименование"
+  uk: "Перейменування"
 tab.devices:
   en: "Devices"
   ru: "Устройства"
+  uk: "Пристрої"
 tab.inspector:
   en: "Inspector"
   ru: "Инспектор"
+  uk: "Інспектор"
 tab.console:
   en: "Console"
   ru: "Консоль"
+  uk: "Консоль"
 tab.logs:
   en: "Logs"
   ru: "Логи"
+  uk: "Журнал"
 tab.settings:
   en: "Settings"
   ru: "Настройки"
+  uk: "Налаштування"
 dev.none:
   en: "No headset"
   ru: "Нет шлема"
+  uk: "Немає шолома"
 dev.connect_hint:
   en: "Connect a headset by USB"
   ru: "Подключите шлем по USB"
+  uk: "Підключіть шолом через USB"
 dev.manage:
   en: "Manage devices..."
   ru: "Управление устройствами..."
+  uk: "Керування пристроями..."
 dev.unauthorized:
   en: "allow USB debugging in the headset"
   ru: "разрешите отладку по USB в шлеме"
+  uk: "дозвольте налагодження через USB у шоломі"
 dev.offline:
   en: "offline"
   ru: "не в сети"
+  uk: "не в мережі"
 hs.filter:
   en: "Filter"
   ru: "Фильтр"
+  uk: "Фільтр"
 hs.system:
   en: "System"
   ru: "Системные"
+  uk: "Системні"
 hs.install_folder:
   en: "Install folder..."
   ru: "Установить папку..."
+  uk: "Встановити теку..."
 hs.install_file:
   en: "Install APK or ZIP..."
   ru: "Установить APK или ZIP..."
+  uk: "Встановити APK або ZIP..."
 hs.refresh:
   en: "Refresh"
   ru: "Обновить"
+  uk: "Оновити"
 hs.col_name:
   en: "Name"
   ru: "Название"
+  uk: "Назва"
 hs.col_package:
   en: "Package"
   ru: "Пакет"
+  uk: "Пакет"
 hs.col_version:
   en: "Version"
   ru: "Версия"
+  uk: "Версія"
 hs.col_size:
   en: "Size"
   ru: "Размер"
+  uk: "Розмір"
 hs.latest:
   en: "latest"
   ru: "последняя"
+  uk: "остання"
 hs.update:
   en: "update"
   ru: "обновление"
+  uk: "оновлення"
 hs.launch:
   en: "Launch"
   ru: "Запустить"
+  uk: "Запустити"
 hs.stop:
   en: "Stop"
   ru: "Остановить"
+  uk: "Зупинити"
 hs.back_up:
   en: "Back up saves"
   ru: "Сделать бэкап сохранений"
+  uk: "Зробити резервну копію збережень"
 hs.nothing:
   en: "Nothing matches the filter"
   ru: "По фильтру ничего не найдено"
+  uk: "За фільтром нічого не знайдено"
 hs.loading:
   en: "Reading the headset..."
   ru: "Чтение данных шлема..."
+  uk: "Читання даних шолома..."
 dev.free_of:
   en: "%{free} free of %{total}"
   ru: "свободно %{free} из %{total}"
+  uk: "вільно %{free} з %{total}"
 common.cancel:
   en: "Cancel"
   ru: "Отмена"
+  uk: "Скасувати"
 wifi.menu:
   en: "Connect over Wi-Fi..."
   ru: "Подключить по Wi-Fi..."
+  uk: "Підключити через Wi-Fi..."
 wifi.title:
   en: "Connect over Wi-Fi"
   ru: "Подключение по Wi-Fi"
+  uk: "Підключення через Wi-Fi"
 wifi.hint:
   en: "The headset's address with port. Wireless ADB has to be on: turn it on in the Device tab while the headset is on USB."
   ru: "Адрес шлема с портом. Беспроводной ADB должен быть включён: включите его на вкладке Устройство, пока шлем подключён по USB."
+  uk: "Адреса шолома з портом. Бездротовий ADB має бути увімкнений: увімкніть його на вкладці Пристрій, поки шолом підключений через USB."
 wifi.connect:
   en: "Connect"
   ru: "Подключить"
+  uk: "Підключити"
 adb.starting:
   en: "adb starting"
   ru: "adb запускается"
+  uk: "adb запускається"
 adb.down:
   en: "adb not running"
   ru: "adb не работает"
+  uk: "adb не працює"
 hs.tab_apps:
   en: "Apps"
   ru: "Приложения"
+  uk: "Застосунки"
 hs.tab_device:
   en: "Device"
   ru: "Устройство"
+  uk: "Пристрій"
 hs.tab_backups:
   en: "Backups"
   ru: "Бэкапы"
+  uk: "Резервні копії"
 hs.battery:
   en: "Battery"
   ru: "Батарея"
+  uk: "Батарея"
 hs.storage:
   en: "Storage"
   ru: "Память"
+  uk: "Пам'ять"
 hs.tools:
   en: "Tools"
   ru: "Инструменты"
+  uk: "Інструменти"
 hs.info:
   en: "About"
   ru: "Сведения"
+  uk: "Відомості"
 hs.no_backups:
   en: "No backups yet. Back up an app's saves from its menu on the Apps tab."
   ru: "Бэкапов пока нет. Сохранить бэкап можно из меню приложения на вкладке Приложения."
+  uk: "Резервних копій поки немає. Зробити резервну копію можна з меню застосунку на вкладці Застосунки."
 hs.col_date:
   en: "Date"
   ru: "Дата"
+  uk: "Дата"
 hs.restore_title:
   en: "Restore %{name}?"
   ru: "Восстановить %{name}?"
+  uk: "Відновити %{name}?"
 hs.reboot_title:
   en: "%{action}?"
   ru: "%{action}?"
+  uk: "%{action}?"
 hs.reboot_text:
   en: "The connection drops until the headset is back."
   ru: "Соединение пропадёт, пока шлем не загрузится."
+  uk: "З'єднання зникне, доки шолом не завантажиться."
 dev.model:
   en: "Model"
   ru: "Модель"
+  uk: "Модель"
 dev.android:
   en: "Android"
   ru: "Android"
+  uk: "Android"
 hs.codename:
   en: "Codename"
   ru: "Кодовое имя"
+  uk: "Кодова назва"
 hs.build:
   en: "Build"
   ru: "Сборка"
+  uk: "Збірка"
 hs.memory:
   en: "Memory"
   ru: "Память (ОЗУ)"
+  uk: "Пам'ять (ОЗП)"
 hs.uptime:
   en: "Uptime"
   ru: "Время работы"
+  uk: "Час роботи"
 hs.wifi:
   en: "Wi-Fi"
   ru: "Wi-Fi"
+  uk: "Wi-Fi"
 hs.not_connected:
   en: "not connected"
   ru: "не подключён"
+  uk: "не підключений"
 hs.wireless_adb:
   en: "Wireless ADB"
   ru: "Беспроводной ADB"
+  uk: "Бездротовий ADB"
 hs.off:
   en: "off"
   ru: "выключен"
+  uk: "вимкнений"
 hs.on_port:
   en: "on, port %{port}"
   ru: "включён, порт %{port}"
+  uk: "увімкнений, порт %{port}"
 hs.enable_wireless:
   en: "Enable wireless ADB"
   ru: "Включить беспроводной ADB"
+  uk: "Увімкнути бездротовий ADB"
 hs.enable_wireless_hint:
   en: "Turns on ADB over Wi-Fi (port 5555) and connects to it; the USB connection resets"
   ru: "Включает ADB по Wi-Fi (порт 5555) и подключается к нему; соединение по USB при этом сбросится"
+  uk: "Вмикає ADB через Wi-Fi (порт 5555) і підключається до нього; з'єднання через USB при цьому скинеться"
 hs.no_wifi:
   en: "The headset isn't on Wi-Fi"
   ru: "Шлем не подключён к Wi-Fi"
+  uk: "Шолом не підключений до Wi-Fi"
 hs.screenshot:
   en: "Screenshot"
   ru: "Скриншот"
+  uk: "Знімок екрана"
 hs.screenshot_hint:
   en: "Saved to your Pictures folder"
   ru: "Сохраняется в папку \"Изображения\""
+  uk: "Зберігається в теку \"Зображення\""
 hs.restart_menu:
   en: "Restart..."
   ru: "Перезагрузка..."
+  uk: "Перезавантаження..."
 hs.restart:
   en: "Restart"
   ru: "Перезагрузить"
+  uk: "Перезавантажити"
 hs.power_off:
   en: "Power off"
   ru: "Выключить"
+  uk: "Вимкнути"
 hs.restart_recovery:
   en: "Restart to recovery"
   ru: "Перезагрузить в recovery"
+  uk: "Перезавантажити в recovery"
 hs.restart_bootloader:
   en: "Restart to bootloader"
   ru: "Перезагрузить в bootloader"
+  uk: "Перезавантажити в bootloader"
 hs.performance:
   en: "Performance"
   ru: "Производительность"
+  uk: "Продуктивність"
 hs.refresh_rate:
   en: "Refresh rate"
   ru: "Частота обновления"
+  uk: "Частота оновлення"
 hs.cpu_level:
   en: "CPU level"
   ru: "Уровень CPU"
+  uk: "Рівень CPU"
 hs.gpu_level:
   en: "GPU level"
   ru: "Уровень GPU"
+  uk: "Рівень GPU"
 hs.default:
   en: "default"
   ru: "по умолчанию"
+  uk: "за замовчуванням"
 hs.restore:
   en: "Restore"
   ru: "Восстановить"
+  uk: "Відновити"
 hs.restore_hint:
   en: "Copies these saves to the headset, over what's there"
   ru: "Копирует эти сохранения на шлем поверх текущих"
+  uk: "Копіює ці збереження на шолом поверх поточних"
 hs.uninstall_title:
   en: "Uninstall %{name}?"
   ru: "Удалить %{name}?"
+  uk: "Видалити %{name}?"
 hs.uninstall:
   en: "Uninstall"
   ru: "Удалить"
+  uk: "Видалити"
 hs.delete_backup_title:
   en: "Delete this backup?"
   ru: "Удалить этот бэкап?"
+  uk: "Видалити цю резервну копію?"
 hs.delete_backup_text:
   en: "%{name} from %{date}. This can't be undone."
   ru: "%{name} от %{date}. Это нельзя отменить."
+  uk: "%{name} від %{date}. Це не можна скасувати."
 hs.uptime_m:
   en: "%{m} min"
   ru: "%{m} мин"
+  uk: "%{m} хв"
 hs.uptime_hm:
   en: "%{h} h %{m} min"
   ru: "%{h} ч %{m} мин"
+  uk: "%{h} год %{m} хв"
 hs.uptime_dh:
   en: "%{d} d %{h} h"
   ru: "%{d} д %{h} ч"
+  uk: "%{d} д %{h} год"
 hs.usb:
   en: "USB"
   ru: "USB"
+  uk: "USB"
 hs.usb_mtp:
   en: "File transfer (MTP)"
   ru: "Передача файлов (MTP)"
+  uk: "Передавання файлів (MTP)"
 hs.usb_charging:
   en: "Charging only"
   ru: "Только зарядка"
+  uk: "Лише заряджання"
 hs.mtp_on:
   en: "Turn on file transfer"
   ru: "Включить передачу файлов"
+  uk: "Увімкнути передавання файлів"
 hs.mtp_off:
   en: "Turn off file transfer"
   ru: "Выключить передачу файлов"
+  uk: "Вимкнути передавання файлів"
 hs.mtp_hint:
   en: "Switches USB to MTP, so the headset's storage opens in the computer's file manager over the cable. adb keeps working; the USB connection resets for a moment."
   ru: "Переключает USB в режим MTP, чтобы память шлема открылась в файловом менеджере компьютера по кабелю. adb продолжает работать; USB-соединение на секунду переподключится."
+  uk: "Перемикає USB у режим MTP, щоб пам'ять шолома відкрилася у файловому менеджері комп'ютера через кабель. adb продовжує працювати; USB-з'єднання на секунду перепідключиться."
 rev.heading:
   en: "Review install.txt: %{title}"
   ru: "Проверка install.txt: %{title}"
+  uk: "Перевірка install.txt: %{title}"
 rev.intro:
   en: "This release comes with a script of adb commands. Some lines do more than install the game, so they won't run without your permission."
   ru: "В этом релизе есть скрипт с командами adb. Некоторые строки делают что-то помимо установки игры, поэтому без вашего разрешения они не выполнятся."
+  uk: "У цьому релізі є скрипт із командами adb. Деякі рядки роблять щось окрім встановлення гри, тому без вашого дозволу вони не виконаються."
 rev.package:
   en: "Game package:"
   ru: "Пакет игры:"
+  uk: "Пакет гри:"
 rev.counts:
   en: "%{suspicious} line(s) need permission, %{blocked} line(s) will never run."
   ru: "Требуют разрешения строк: %{suspicious}, никогда не выполнятся: %{blocked}."
+  uk: "Потребують дозволу рядків: %{suspicious}, ніколи не виконаються: %{blocked}."
 rev.run_all:
   en: "Run all allowed lines"
   ru: "Выполнить все разрешённые строки"
+  uk: "Виконати всі дозволені рядки"
 rev.run_all_hint:
   en: "Runs safe and highlighted lines; blocked lines are still skipped"
   ru: "Выполняет безопасные и подсвеченные строки; заблокированные всё равно пропускаются"
+  uk: "Виконує безпечні та підсвічені рядки; заблоковані все одно пропускаються"
 rev.safe_only:
   en: "Run safe lines only"
   ru: "Только безопасные строки"
+  uk: "Лише безпечні рядки"
 rev.safe_only_hint:
   en: "The game may not work if a skipped line was needed"
   ru: "Игра может не работать, если пропущенная строка была нужна"
+  uk: "Гра може не працювати, якщо пропущений рядок був потрібен"
 rev.cancel:
   en: "Cancel installation"
   ru: "Отменить установку"
+  uk: "Скасувати встановлення"
 rev.needs_permission:
   en: "needs permission"
   ru: "требует разрешения"
+  uk: "потребує дозволу"
 rev.blocked:
   en: "blocked"
   ru: "заблокировано"
+  uk: "заблоковано"
 rev.grey:
   en: "grey lines are not adb commands and are skipped"
   ru: "серые строки не являются командами adb и пропускаются"
+  uk: "сірі рядки не є командами adb і пропускаються"
 adb.title:
   en: "ADB not found"
   ru: "ADB не найден"
+  uk: "ADB не знайдено"
 adb.text:
   en: "The app talks to the headset through adb from Android SDK Platform-Tools. It can download Platform-Tools from Google (dl.google.com) into its data folder and use them, or you can install them yourself and set the adb path in Settings."
   ru: "Приложение общается со шлемом через adb из Android SDK Platform-Tools. Оно может скачать Platform-Tools с сайта Google (dl.google.com) в свою папку данных и пользоваться ими. Или установите их сами и укажите путь к adb в Настройках."
+  uk: "Застосунок спілкується з шоломом через adb з Android SDK Platform-Tools. Він може завантажити Platform-Tools із сайту Google (dl.google.com) у свою теку даних і користуватися ними. Або встановіть їх самі й вкажіть шлях до adb у Налаштуваннях."
 adb.windows_driver:
   en: "Windows also needs Meta's ADB driver to see the headset over USB."
   ru: "Чтобы Windows видела шлем по USB, нужен ещё ADB-драйвер от Meta."
+  uk: "Щоб Windows бачила шолом через USB, потрібен ще ADB-драйвер від Meta."
 adb.driver_link:
   en: "Meta Quest ADB driver"
   ru: "ADB-драйвер Meta Quest"
+  uk: "ADB-драйвер Meta Quest"
 adb.terms:
   en: "Downloading means you accept the "
   ru: "Скачивая, вы принимаете "
+  uk: "Завантажуючи, ви приймаєте "
 adb.terms_link:
   en: "Android SDK terms"
   ru: "условия Android SDK"
+  uk: "умови Android SDK"
 adb.no_build:
   en: "Google doesn't publish adb for this system, so it has to be installed by hand."
   ru: "Google не выпускает adb для этой системы, поэтому его придётся установить вручную."
+  uk: "Google не випускає adb для цієї системи, тому його доведеться встановити вручну."
 adb.install:
   en: "Install automatically"
   ru: "Установить автоматически"
+  uk: "Встановити автоматично"
 adb.open_page:
   en: "Open download page"
   ru: "Открыть страницу загрузки"
+  uk: "Відкрити сторінку завантаження"
 adb.not_now:
   en: "Not now"
   ru: "Не сейчас"
+  uk: "Не зараз"
 rclone.title:
   en: "rclone not found"
   ru: "rclone не найден"
+  uk: "rclone не знайдено"
 rclone.text:
   en: "Mirrors are read through rclone. The app can download the official build from rclone.org into its data folder, check it against the published checksum and use it. You can also install rclone yourself and set its path in Settings."
   ru: "Зеркала читаются через rclone. Приложение может скачать официальную сборку с rclone.org в свою папку данных, сверить её с опубликованной контрольной суммой и пользоваться ею. Или установите rclone сами и укажите путь к нему в Настройках."
+  uk: "Дзеркала читаються через rclone. Застосунок може завантажити офіційну збірку з rclone.org у свою теку даних, звірити її з опублікованою контрольною сумою й користуватися нею. Або встановіть rclone самі й вкажіть шлях до нього в Налаштуваннях."
 rclone.no_build:
   en: "rclone.org has no build for this system, so rclone has to be installed by hand."
   ru: "На rclone.org нет сборки для этой системы, поэтому rclone придётся установить вручную."
+  uk: "На rclone.org немає збірки для цієї системи, тому rclone доведеться встановити вручну."
 welcome.title:
   en: "Welcome to Quest Sideloader"
   ru: "Добро пожаловать в Quest Sideloader"
+  uk: "Ласкаво просимо до Quest Sideloader"
 welcome.step:
   en: "Step %{n} of %{total}"
   ru: "Шаг %{n} из %{total}"
+  uk: "Крок %{n} з %{total}"
 welcome.intro:
   en: "A few settings to start with. All of them can be changed later in Settings."
   ru: "Несколько настроек для начала. Все их можно поменять потом в Настройках."
+  uk: "Кілька налаштувань для початку. Усі їх можна змінити згодом у Налаштуваннях."
 welcome.folder_text:
   en: "Games are downloaded and unpacked into this folder. Large games take tens of GB, so pick a drive with enough space."
   ru: "Игры скачиваются и распаковываются в эту папку. Большие игры занимают десятки ГБ, так что выберите диск, где хватит места."
+  uk: "Ігри завантажуються й розпаковуються в цю теку. Великі ігри займають десятки ГБ, тож виберіть диск, де вистачить місця."
 welcome.headset_text:
   en: "Turn on developer mode in the Meta Horizon app, then connect the headset with a USB cable and allow USB debugging when the headset asks. It then shows up on the Devices tab."
   ru: "Включите режим разработчика в приложении Meta Horizon, потом подключите шлем USB-кабелем и разрешите отладку по USB, когда шлем спросит. После этого он появится на вкладке Устройства."
+  uk: "Увімкніть режим розробника в застосунку Meta Horizon, потім підключіть шолом USB-кабелем і дозвольте налагодження через USB, коли шолом запитає. Після цього він з'явиться на вкладці Пристрої."
 welcome.mirror_text:
   en: "The catalog is optional. To download games from it, add a mirror in Settings."
   ru: "Каталог необязателен. Чтобы скачивать из него игры, добавьте зеркало в Настройках."
+  uk: "Каталог необов'язковий. Щоб завантажувати з нього ігри, додайте дзеркало в Налаштуваннях."
 welcome.skip:
   en: "Skip"
   ru: "Пропустить"
+  uk: "Пропустити"
 welcome.back:
   en: "Back"
   ru: "Назад"
+  uk: "Назад"
 welcome.next:
   en: "Next"
   ru: "Далее"
+  uk: "Далі"
 welcome.finish:
   en: "Finish"
   ru: "Готово"
+  uk: "Готово"
 welcome.add_mirror:
   en: "Add a mirror"
   ru: "Добавить зеркало"
+  uk: "Додати дзеркало"
 set.language:
   en: "Language"
   ru: "Язык"
+  uk: "Мова"
 set.language_system:
   en: "System"
   ru: "Системный"
+  uk: "Системна"
 set.theme:
   en: "Theme"
   ru: "Тема"
+  uk: "Тема"
 set.theme_system:
   en: "System"
   ru: "Системная"
+  uk: "Системна"
 set.theme_dark:
   en: "Dark"
   ru: "Тёмная"
+  uk: "Темна"
 set.theme_light:
   en: "Light"
   ru: "Светлая"
+  uk: "Світла"
 set.keep_downloads:
   en: "Keep downloaded files for reinstalling"
   ru: "Сохранять скачанные файлы для переустановки"
+  uk: "Зберігати завантажені файли для перевстановлення"
 set.default:
   en: "Default"
   ru: "По умолчанию"
+  uk: "За замовчуванням"
 common.browse:
   en: "Browse..."
   ru: "Обзор..."
+  uk: "Огляд..."
 app.no_headset:
   en: "No headset to install on: connect one or select it in Devices"
   ru: "Некуда устанавливать: подключите шлем или выберите его в Устройствах"
+  uk: "Немає куди встановлювати: підключіть шолом або виберіть його в Пристроях"
 app.task_failed:
   en: "Failed: %{title}"
   ru: "Ошибка: %{title}"
+  uk: "Помилка: %{title}"
 app.settings_saved:
   en: "Settings saved"
   ru: "Настройки сохранены"
+  uk: "Налаштування збережено"
 hs.backup_first:
   en: "Back up saves first"
   ru: "Сначала сделать бэкап сохранений"
+  uk: "Спершу зробити резервну копію збережень"
 hs.delete_obb:
   en: "Also delete its OBB files"
   ru: "Также удалить его OBB-файлы"
+  uk: "Також видалити його OBB-файли"
 hs.restore_into:
   en: "Into..."
   ru: "В другое..."
+  uk: "В інший..."
 hs.restore_into_hint:
   en: "Restore these saves into another installed app, such as a renamed copy of this game"
   ru: "Восстановить эти сохранения в другое установленное приложение, например в копию этой игры с другим пакетом"
+  uk: "Відновити ці збереження в інший встановлений застосунок, наприклад у копію цієї гри з іншим пакетом"
 hs.restore_into_title:
   en: "Restore into another app?"
   ru: "Восстановить в другое приложение?"
+  uk: "Відновити в інший застосунок?"
 hs.restore_into_text:
   en: "The saves of %{backup} from %{date} go into %{name} (%{package}). Its files with the same names are replaced. File names that contain the original package get the new one, so the app finds them. Games that encrypt saves with their package or signature may not read them."
   ru: "Сохранения %{backup} от %{date} будут записаны в %{name} (%{package}). Его файлы с теми же именами заменятся. В именах файлов с оригинальным пакетом он заменяется на новый, чтобы приложение их нашло. Игры, которые шифруют сохранения с привязкой к пакету или подписи, могут их не прочитать."
+  uk: "Збереження %{backup} від %{date} буде записано в %{name} (%{package}). Його файли з тими самими назвами заміняться. У назвах файлів з оригінальним пакетом він замінюється на новий, щоб застосунок їх знайшов. Ігри, які шифрують збереження з прив'язкою до пакета або підпису, можуть їх не прочитати."
 hs.copy_entry:
   en: "%{name} (%{package}), copy"
   ru: "%{name} (%{package}), копия"
+  uk: "%{name} (%{package}), копія"
 common.open:
   en: "Open"
   ru: "Открыть"
+  uk: "Відкрити"
 common.delete:
   en: "Delete"
   ru: "Удалить"
+  uk: "Видалити"
 common.close:
   en: "Close"
   ru: "Закрыть"
+  uk: "Закрити"
 hs.copy:
   en: "copy"
   ru: "копия"
+  uk: "копія"
 hs.uninstall_button:
   en: "Uninstall..."
   ru: "Удалить..."
+  uk: "Видалити..."
 con.banner:
   en: "%{n} app(s) on %{device} are missing from the catalog or newer than its version."
   ru: "Приложений на %{device}, которых нет в каталоге или которые новее его версии: %{n}."
+  uk: "Застосунків на %{device}, яких немає в каталозі або які новіші за його версію: %{n}."
 con.review:
   en: "Review and share..."
   ru: "Посмотреть и поделиться..."
+  uk: "Переглянути й поділитися..."
 con.title:
   en: "Share app versions with the catalog"
   ru: "Поделиться версиями приложений с каталогом"
+  uk: "Поділитися версіями застосунків із каталогом"
 con.intro:
   en: "The catalog doesn't have these apps from %{device}, or has older versions. Sending them helps everyone who uses this mirror."
   ru: "Этих приложений с %{device} нет в каталоге, или там более старые версии. Отправка поможет всем, кто пользуется этим зеркалом."
+  uk: "Цих застосунків з %{device} немає в каталозі, або там старіші версії. Надсилання допоможе всім, хто користується цим дзеркалом."
 con.privacy:
   en: "An upload sends the app's APK and OBB files, the headset model, and an anonymous headset id (a SHA-256 hash of its serial number) to the mirror. Nothing is uploaded until you press Upload, and nothing on the headset changes."
   ru: "Отправляются APK и OBB-файлы приложения, модель шлема и анонимный идентификатор шлема (SHA-256 от серийного номера). Ничего не отправится, пока вы не нажмёте \"Отправить\", и на самом шлеме ничего не меняется."
+  uk: "Надсилаються APK та OBB-файли застосунку, модель шолома й анонімний ідентифікатор шолома (SHA-256 від серійного номера). Нічого не надішлеться, доки ви не натиснете \"Надіслати\", і на самому шоломі нічого не змінюється."
 con.nothing:
   en: "Nothing left to share."
   ru: "Больше нечем поделиться."
+  uk: "Більше нічим поділитися."
 con.not_in_library:
   en: "v%{version}, not in the catalog"
   ru: "v%{version}, нет в каталоге"
+  uk: "v%{version}, немає в каталозі"
 con.newer:
   en: "v%{version}, the catalog has v%{library}"
   ru: "v%{version}, в каталоге v%{library}"
+  uk: "v%{version}, у каталозі v%{library}"
 con.queued:
   en: "sent to the queue"
   ru: "отправлено в очередь"
+  uk: "надіслано в чергу"
 con.upload:
   en: "Upload"
   ru: "Отправить"
+  uk: "Надіслати"
 con.ignore:
   en: "Don't ask again"
   ru: "Больше не спрашивать"
+  uk: "Більше не питати"
 lib.no_mirror:
   en: "No mirror yet. Add one in the Mirrors section of Settings."
   ru: "Зеркала пока нет. Добавьте его в разделе \"Зеркала\" в Настройках."
+  uk: "Дзеркала поки немає. Додайте його в розділі \"Дзеркала\" в Налаштуваннях."
 lib.downloading_list:
   en: "Downloading the game list..."
   ru: "Загрузка списка игр..."
+  uk: "Завантаження списку ігор..."
 lib.load_failed:
   en: "Could not load the game list. Check the mirror settings and press Sync."
   ru: "Не удалось загрузить список игр. Проверьте настройки зеркала и нажмите \"Синхронизировать\"."
+  uk: "Не вдалося завантажити список ігор. Перевірте налаштування дзеркала й натисніть \"Синхронізувати\"."
 lib.empty:
   en: "The game list is empty. Press Sync."
   ru: "Список игр пуст. Нажмите \"Синхронизировать\"."
+  uk: "Список ігор порожній. Натисніть \"Синхронізувати\"."
 lib.search_keys:
   en: "Search games or packages (Ctrl+F)"
   ru: "Поиск игр или пакетов (Ctrl+F)"
+  uk: "Пошук ігор або пакетів (Ctrl+F)"
 lib.view_list:
   en: "List"
   ru: "Список"
+  uk: "Список"
 lib.view_grid:
   en: "Grid"
   ru: "Сетка"
+  uk: "Сітка"
 lib.menu_details:
   en: "Details"
   ru: "Подробнее"
+  uk: "Докладніше"
 lib.copy_name:
   en: "Copy name"
   ru: "Копировать название"
+  uk: "Копіювати назву"
 lib.copy_release:
   en: "Copy release name"
   ru: "Копировать имя релиза"
+  uk: "Копіювати назву релізу"
 lib.copy_package:
   en: "Copy package name"
   ru: "Копировать имя пакета"
+  uk: "Копіювати назву пакета"
 lib.all:
   en: "All"
   ru: "Все"
+  uk: "Усі"
 lib.installed:
   en: "Installed"
   ru: "Установленные"
+  uk: "Встановлені"
 lib.updates:
   en: "Updates"
   ru: "Обновления"
+  uk: "Оновлення"
 lib.connect_compare:
   en: "Connect a headset to compare with its apps"
   ru: "Подключите шлем, чтобы сравнить с его приложениями"
+  uk: "Підключіть шолом, щоб порівняти з його застосунками"
 lib.sort_name:
   en: "Name"
   ru: "Название"
+  uk: "Назва"
 lib.sort_updated:
   en: "Last updated"
   ru: "Дата обновления"
+  uk: "Дата оновлення"
 lib.sort_size:
   en: "Size"
   ru: "Размер"
+  uk: "Розмір"
 lib.sort_popularity:
   en: "Popularity"
   ru: "Популярность"
+  uk: "Популярність"
 lib.sort_package:
   en: "Package name"
   ru: "Имя пакета"
+  uk: "Назва пакета"
 lib.sort_version:
   en: "Version"
   ru: "Версия"
+  uk: "Версія"
 lib.sort_status:
   en: "Status on the headset"
   ru: "Статус на шлеме"
+  uk: "Статус на шоломі"
 lib.col_installed:
   en: "Installed"
   ru: "Установлена"
+  uk: "Встановлена"
 lib.low_space:
   en: "Not enough space on the headset: the game needs about %{needed}, %{free} is free."
   ru: "На шлеме мало места: игре нужно около %{needed}, свободно %{free}."
+  uk: "На шоломі мало місця: грі потрібно близько %{needed}, вільно %{free}."
 lib.reverse:
   en: "Reverse order"
   ru: "Обратный порядок"
+  uk: "Зворотний порядок"
 lib.sync:
   en: "Sync"
   ru: "Синхронизировать"
+  uk: "Синхронізувати"
 lib.sync_failed:
   en: "Sync failed"
   ru: "Синхронизация не удалась"
+  uk: "Синхронізація не вдалася"
 lib.synced:
   en: "%{n} games, synced %{ago}"
   ru: "игр: %{n}, синхронизировано %{ago}"
+  uk: "ігор: %{n}, синхронізовано %{ago}"
 lib.no_match:
   en: "Nothing matches the filter."
   ru: "Ничего не подходит под фильтр."
+  uk: "Ніщо не відповідає фільтру."
 lib.col_game:
   en: "Game"
   ru: "Игра"
+  uk: "Гра"
 lib.col_version:
   en: "Version"
   ru: "Версия"
+  uk: "Версія"
 lib.col_size:
   en: "Size"
   ru: "Размер"
+  uk: "Розмір"
 lib.col_updated:
   en: "Updated"
   ru: "Обновлено"
+  uk: "Оновлено"
 lib.col_status:
   en: "Status"
   ru: "Статус"
+  uk: "Статус"
 lib.col_popularity:
   en: "Popularity"
   ru: "Популярность"
+  uk: "Популярність"
 lib.download_update:
   en: "Download and update"
   ru: "Скачать и обновить"
+  uk: "Завантажити й оновити"
 lib.download_reinstall:
   en: "Download and reinstall"
   ru: "Скачать и переустановить"
+  uk: "Завантажити й перевстановити"
 lib.download_install:
   en: "Download and install"
   ru: "Скачать и установить"
+  uk: "Завантажити й встановити"
 lib.installs_on:
   en: "Installs on %{name}"
   ru: "Установит на %{name}"
+  uk: "Встановить на %{name}"
 lib.connect_install:
   en: "Connect a headset to install"
   ru: "Подключите шлем, чтобы установить"
+  uk: "Підключіть шолом, щоб встановити"
 lib.download_only:
   en: "Download only"
   ru: "Только скачать"
+  uk: "Лише завантажити"
 lib.release:
   en: "Release"
   ru: "Релиз"
+  uk: "Реліз"
 lib.package:
   en: "Package"
   ru: "Пакет"
+  uk: "Пакет"
 lib.on_headset:
   en: "On headset"
   ru: "На шлеме"
+  uk: "На шоломі"
 lib.note:
   en: "Note"
   ru: "Заметка"
+  uk: "Нотатка"
 lib.status_installed:
   en: "Installed"
   ru: "Установлено"
+  uk: "Встановлено"
 lib.status_update:
   en: "Update available"
   ru: "Есть обновление"
+  uk: "Є оновлення"
 lib.just_now:
   en: "just now"
   ru: "только что"
+  uk: "щойно"
 lib.mins_ago:
   en: "%{n} min ago"
   ru: "%{n} мин назад"
+  uk: "%{n} хв тому"
 lib.hours_ago:
   en: "%{n} h ago"
   ru: "%{n} ч назад"
+  uk: "%{n} год тому"
 lib.days_ago:
   en: "%{n} days ago"
   ru: "%{n} дн. назад"
+  uk: "%{n} дн. тому"
 lib.low_pc_space:
   en: "This computer may not have room: the download and its unpacked copy need about %{needed}, and %{free} is free."
   ru: "На компьютере может не хватить места: скачанному архиву и распакованной копии нужно около %{needed}, а свободно %{free}."
+  uk: "На комп'ютері може не вистачити місця: завантаженому архіву й розпакованій копії потрібно близько %{needed}, а вільно %{free}."
 lib.no_match_title:
   en: "Nothing found"
   ru: "Ничего не нашлось"
+  uk: "Нічого не знайшлося"
 set.downloads_folder:
   en: "Downloads folder"
   ru: "Папка загрузок"
+  uk: "Тека завантажень"
 set.after_installing:
   en: "After installing"
   ru: "После установки"
+  uk: "Після встановлення"
 set.notifications:
   en: "Notifications"
   ru: "Уведомления"
+  uk: "Сповіщення"
 set.notify:
   en: "Notify when a task ends while the window is in the background"
   ru: "Сообщать о завершении задачи, когда окно в фоне"
+  uk: "Повідомляти про завершення завдання, коли вікно у фоні"
 set.parallel:
   en: "Parallel downloads"
   ru: "Параллельные загрузки"
+  uk: "Паралельні завантаження"
 set.speed_limit:
   en: "Speed limit"
   ru: "Ограничение скорости"
+  uk: "Обмеження швидкості"
 set.unlimited:
   en: "unlimited"
   ru: "без ограничения"
+  uk: "без обмеження"
 set.all_downloads:
   en: "for all downloads together"
   ru: "на все загрузки вместе"
+  uk: "на всі завантаження разом"
 set.adb_binary:
   en: "ADB binary"
   ru: "Программа ADB"
+  uk: "Програма ADB"
 set.adb_hint:
   en: "adb from PATH"
   ru: "adb из PATH"
+  uk: "adb з PATH"
 set.rclone_binary:
   en: "rclone binary"
   ru: "Программа rclone"
+  uk: "Програма rclone"
 set.rclone_hint:
   en: "rclone from PATH (used for all mirrors)"
   ru: "rclone из PATH (нужен для всех зеркал)"
+  uk: "rclone з PATH (потрібен для всіх дзеркал)"
 set.save:
   en: "Save"
   ru: "Сохранить"
+  uk: "Зберегти"
 set.revert:
   en: "Revert"
   ru: "Отменить"
+  uk: "Скасувати"
 set.unsaved:
   en: "Unsaved changes"
   ru: "Есть несохранённые изменения"
+  uk: "Є незбережені зміни"
 set.use_path:
   en: "Use PATH"
   ru: "Из PATH"
+  uk: "З PATH"
 mir.default_name:
   en: "Mirror"
   ru: "Зеркало"
+  uk: "Дзеркало"
 mir.choose_config:
   en: "choose an rclone config file"
   ru: "выберите файл rclone-конфига"
+  uk: "виберіть файл rclone-конфігу"
 mir.copy_failed:
   en: "could not copy the rclone config: %{error}"
   ru: "не удалось скопировать rclone-конфиг: %{error}"
+  uk: "не вдалося скопіювати rclone-конфіг: %{error}"
 mir.no_remotes:
   en: "no remotes found in this file"
   ru: "в этом файле нет remote"
+  uk: "у цьому файлі немає remote"
 mir.cannot_read:
   en: "cannot read %{path}: %{error}"
   ru: "не удалось прочитать %{path}: %{error}"
+  uk: "не вдалося прочитати %{path}: %{error}"
 mir.heading:
   en: "Mirrors"
   ru: "Зеркала"
+  uk: "Дзеркала"
 mir.intro:
   en: "Servers the catalog can be downloaded from; the highlighted one is in use."
   ru: "Серверы, с которых загружается каталог; сейчас используется выделенный."
+  uk: "Сервери, з яких завантажується каталог; зараз використовується виділений."
 mir.none:
   en: "No mirrors yet."
   ru: "Зеркал пока нет."
+  uk: "Дзеркал поки немає."
 mir.remove:
   en: "Remove"
   ru: "Удалить"
+  uk: "Видалити"
 mir.add_mirror:
   en: "Add mirror..."
   ru: "Добавить зеркало..."
+  uk: "Додати дзеркало..."
 mir.kind_json:
   en: "Server config (JSON)"
   ru: "Конфиг сервера (JSON)"
+  uk: "Конфіг сервера (JSON)"
 mir.kind_rclone:
   en: "rclone config"
   ru: "rclone-конфиг"
+  uk: "rclone-конфіг"
 mir.name:
   en: "Name"
   ru: "Имя"
+  uk: "Назва"
 mir.config:
   en: "Config"
   ru: "Конфиг"
+  uk: "Конфіг"
 mir.load_file:
   en: "Load from file..."
   ru: "Загрузить из файла..."
+  uk: "Завантажити з файлу..."
 mir.base_uri:
   en: "Base URI"
   ru: "Base URI"
+  uk: "Base URI"
 mir.password:
   en: "Password"
   ru: "Пароль"
+  uk: "Пароль"
 mir.password_hint:
   en: "base64, as in VRP configs"
   ru: "base64, как в конфигах VRP"
+  uk: "base64, як у конфігах VRP"
 mir.config_file:
   en: "Config file"
   ru: "Файл конфига"
+  uk: "Файл конфігу"
 mir.none_selected:
   en: "none"
   ru: "не выбран"
+  uk: "не вибрано"
 mir.choose:
   en: "Choose..."
   ru: "Выбрать..."
+  uk: "Вибрати..."
 mir.remote:
   en: "Remote"
   ru: "Remote"
+  uk: "Remote"
 mir.archive_password_hint:
   en: "base64 archive password"
   ru: "пароль архивов в base64"
+  uk: "пароль архівів у base64"
 mir.add:
   en: "Add"
   ru: "Добавить"
+  uk: "Додати"
 keys.intro:
   en: "Each renamed copy is signed with its own key. Android only installs an update over a copy signed with the same key, so back these files up: without its key, a copy can only be uninstalled and installed again. Apps with a key here are never offered for upload to the mirror."
   ru: "Каждая копия подписана своим ключом. Android ставит обновление поверх копии только с тем же ключом, поэтому сохраните эти файлы: без них копию можно только удалить и поставить заново. Приложения с ключом здесь никогда не предлагаются к загрузке на зеркало."
+  uk: "Кожна копія підписана своїм ключем. Android ставить оновлення поверх копії лише з тим самим ключем, тому збережіть ці файли: без них копію можна тільки видалити й поставити заново. Застосунки з ключем тут ніколи не пропонуються для надсилання на дзеркало."
 keys.none:
   en: "No keys yet; one is made when the first copy of a package is built."
   ru: "Ключей пока нет; ключ создаётся при сборке первой копии пакета."
+  uk: "Ключів поки немає; ключ створюється під час збирання першої копії пакета."
 keys.export:
   en: "Export..."
   ru: "Экспорт..."
+  uk: "Експорт..."
 keys.import:
   en: "Import key..."
   ru: "Импортировать ключ..."
+  uk: "Імпортувати ключ..."
 keys.imported:
   en: "Key for %{package} imported"
   ru: "Ключ для %{package} импортирован"
+  uk: "Ключ для %{package} імпортовано"
 keys.exported:
   en: "Key saved to %{path}"
   ru: "Ключ сохранён в %{path}"
+  uk: "Ключ збережено в %{path}"
 chk.button:
   en: "Check all"
   ru: "Проверить всё"
+  uk: "Перевірити все"
 chk.hint:
   en: "See at a glance whether everything is ready to install games"
   ru: "Сразу видно, всё ли готово для установки игр"
+  uk: "Одразу видно, чи все готово для встановлення ігор"
 chk.title:
   en: "Ready to install?"
   ru: "Всё готово к установке?"
+  uk: "Усе готово до встановлення?"
 chk.ok:
   en: "OK"
   ru: "OK"
+  uk: "OK"
 chk.warning:
   en: "Check"
   ru: "Внимание"
+  uk: "Увага"
 chk.problem:
   en: "Problem"
   ru: "Проблема"
+  uk: "Проблема"
 chk.skipped:
   en: "Not set"
   ru: "Не настроено"
+  uk: "Не налаштовано"
 chk.adb_ok:
   en: "adb is running"
   ru: "adb работает"
+  uk: "adb працює"
 chk.adb_starting:
   en: "adb is starting"
   ru: "adb запускается"
+  uk: "adb запускається"
 chk.adb_missing:
   en: "adb isn't running. To install it, click \"adb\" in the status bar."
   ru: "adb не работает. Чтобы установить его, нажмите \"adb\" в строке состояния."
+  uk: "adb не працює. Щоб встановити його, натисніть \"adb\" у рядку стану."
 chk.headset_ok:
   en: "%{name} is connected"
   ru: "%{name} подключён"
+  uk: "%{name} підключений"
 chk.headset_waiting:
   en: "The headset is connected but not ready"
   ru: "Шлем подключён, но не готов"
+  uk: "Шолом підключений, але не готовий"
 chk.headset_none:
   en: "No headset connected"
   ru: "Шлем не подключён"
+  uk: "Шолом не підключений"
 chk.headset_none_detail:
   en: "The Headset tab shows how to connect it."
   ru: "Как подключить, показано на вкладке Шлем."
+  uk: "Як підключити, показано на вкладці Шолом."
 chk.headset_space:
   en: "%{free} free on the headset"
   ru: "На шлеме свободно %{free}"
+  uk: "На шоломі вільно %{free}"
 chk.space_detail:
   en: "Big games may not fit. Uninstall what you don't play on the Headset tab."
   ru: "Большие игры могут не поместиться. Удалите ненужное на вкладке Шлем."
+  uk: "Великі ігри можуть не поміститися. Видаліть непотрібне на вкладці Шолом."
 chk.battery:
   en: "Battery %{level}%"
   ru: "Заряд %{level}%"
+  uk: "Заряд %{level}%"
 chk.pc_space:
   en: "%{free} free for downloads on this computer"
   ru: "На компьютере для загрузок свободно %{free}"
+  uk: "На комп'ютері для завантажень вільно %{free}"
 chk.pc_space_detail:
   en: "Delete releases you no longer need on the Downloads tab, or pick another folder in Settings."
   ru: "Удалите ненужные релизы на вкладке Загрузки или выберите другую папку в Настройках."
+  uk: "Видаліть непотрібні релізи на вкладці Завантаження або виберіть іншу теку в Налаштуваннях."
 chk.pc_space_unknown:
   en: "Can't tell how much space the downloads folder has"
   ru: "Не удалось узнать, сколько места в папке загрузок"
+  uk: "Не вдалося дізнатися, скільки місця в теці завантажень"
 chk.mirror_none:
   en: "No mirror added"
   ru: "Зеркало не добавлено"
+  uk: "Дзеркало не додано"
 chk.mirror_none_detail:
   en: "Only the Catalog needs it; files from the computer install without one."
   ru: "Нужно только для Каталога; файлы с компьютера ставятся и без него."
+  uk: "Потрібне лише для Каталогу; файли з комп'ютера встановлюються й без нього."
 chk.mirror_failed:
   en: "The mirror didn't sync"
   ru: "Зеркало не синхронизировалось"
+  uk: "Дзеркало не синхронізувалося"
 chk.mirror_syncing:
   en: "The mirror is syncing"
   ru: "Зеркало синхронизируется"
+  uk: "Дзеркало синхронізується"
 chk.mirror_ok:
   en: "Mirror %{name}: %{n} games"
   ru: "Зеркало %{name}: игр %{n}"
+  uk: "Дзеркало %{name}: ігор %{n}"
 chk.mirror_empty:
   en: "Mirror %{name} hasn't synced yet"
   ru: "Зеркало %{name} ещё не синхронизировано"
+  uk: "Дзеркало %{name} ще не синхронізовано"
 set.cat_appearance:
   en: "Appearance and language"
   ru: "Вид и язык"
+  uk: "Вигляд і мова"
 set.cat_downloads:
   en: "Downloads"
   ru: "Загрузки"
+  uk: "Завантаження"
 set.cat_tools:
   en: "Tools"
   ru: "Инструменты"
+  uk: "Інструменти"
 set.cat_keys:
   en: "Signing keys"
   ru: "Ключи подписи"
+  uk: "Ключі підпису"
 set.instant_hint:
   en: "These apply and save right away."
   ru: "Применяются и сохраняются сразу."
+  uk: "Застосовуються й зберігаються одразу."
 dl.summary:
   en: "%{n} release(s), %{size}"
   ru: "релизов: %{n}, %{size}"
+  uk: "релізів: %{n}, %{size}"
 dl.empty:
   en: "Games downloaded from the Catalog are kept here when \"Keep downloaded files\" is on in Settings."
   ru: "Игры из Каталога остаются здесь, если в Настройках включено \"Сохранять скачанные файлы\"."
+  uk: "Ігри з Каталогу залишаються тут, якщо в Налаштуваннях увімкнено \"Зберігати завантажені файли\"."
 dl.col_release:
   en: "Release"
   ru: "Релиз"
+  uk: "Реліз"
 dl.col_size:
   en: "Size"
   ru: "Размер"
+  uk: "Розмір"
 dl.col_date:
   en: "Downloaded"
   ru: "Скачано"
+  uk: "Завантажено"
 dl.connect_first:
   en: "Connect a headset first"
   ru: "Сначала подключите шлем"
+  uk: "Спершу підключіть шолом"
 dl.delete_title:
   en: "Delete this release?"
   ru: "Удалить этот релиз?"
+  uk: "Видалити цей реліз?"
 dl.delete_text:
   en: "%{name} (%{size}) will be removed from the downloads folder. It stays on the headset if it is installed."
   ru: "%{name} (%{size}) будет удалён из папки загрузок. На шлеме он останется, если установлен."
+  uk: "%{name} (%{size}) буде видалено з теки завантажень. На шоломі він залишиться, якщо встановлений."
 tasks.clear:
   en: "Clear finished"
   ru: "Убрать завершённые"
+  uk: "Прибрати завершені"
 tasks.kind_download_install:
   en: "download and install, %{serial}"
   ru: "загрузка и установка, %{serial}"
+  uk: "завантаження й встановлення, %{serial}"
 tasks.kind_download:
   en: "download only"
   ru: "только загрузка"
+  uk: "лише завантаження"
 tasks.kind_install_on:
   en: "install, %{serial}"
   ru: "установка, %{serial}"
+  uk: "встановлення, %{serial}"
 tasks.kind_install:
   en: "install"
   ru: "установка"
+  uk: "встановлення"
 tasks.kind_upload_on:
   en: "upload to the catalog, %{serial}"
   ru: "отправка в каталог, %{serial}"
+  uk: "надсилання в каталог, %{serial}"
 tasks.kind_upload:
   en: "upload to the catalog"
   ru: "отправка в каталог"
+  uk: "надсилання в каталог"
 tasks.kind_backup:
   en: "save backup"
   ru: "бэкап сохранений"
+  uk: "резервна копія збережень"
 tasks.kind_restore:
   en: "save restore"
   ru: "восстановление сохранений"
+  uk: "відновлення збережень"
 tasks.kind_uninstall:
   en: "uninstall"
   ru: "удаление"
+  uk: "видалення"
 tasks.dismiss:
   en: "Dismiss"
   ru: "Убрать"
+  uk: "Прибрати"
 tasks.later:
   en: "Later"
   ru: "Позже"
+  uk: "Пізніше"
 tasks.sooner:
   en: "Sooner"
   ru: "Раньше"
+  uk: "Раніше"
 tasks.cancelled:
   en: "Cancelled"
   ru: "Отменено"
+  uk: "Скасовано"
 tasks.reinstall:
   en: "Reinstall keeping saves"
   ru: "Переустановить с сохранениями"
+  uk: "Перевстановити зі збереженнями"
 tasks.reinstall_hint:
   en: "Backs up the saves, uninstalls the installed app, installs this one and restores the saves"
   ru: "Делает бэкап сохранений, удаляет установленное приложение, ставит это и восстанавливает сохранения"
+  uk: "Робить резервну копію збережень, видаляє встановлений застосунок, ставить цей і відновлює збереження"
 tasks.warnings:
   en: "%{n} warning(s)"
   ru: "предупреждений: %{n}"
+  uk: "попереджень: %{n}"
 tasks.kind_adb:
   en: "ADB setup"
   ru: "установка ADB"
+  uk: "встановлення ADB"
 tasks.kind_rclone:
   en: "rclone setup"
   ru: "установка rclone"
+  uk: "встановлення rclone"
 dl.copy_hint:
   en: "Build a copy under another package name, to install beside the original"
   ru: "Собрать копию с другим именем пакета, чтобы поставить рядом с оригиналом"
+  uk: "Зібрати копію з іншою назвою пакета, щоб поставити поруч з оригіналом"
 tasks.kind_rename:
   en: "renamed copy"
   ru: "копия с другим пакетом"
+  uk: "копія з іншим пакетом"
 dl.details:
   en: "Details"
   ru: "Подробнее"
+  uk: "Докладніше"
 dl.empty_title:
   en: "No downloads yet"
   ru: "Загрузок пока нет"
+  uk: "Завантажень поки немає"
 common.install:
   en: "Install"
   ru: "Установить"
+  uk: "Встановити"
 common.install_on:
   en: "Install on %{name}"
   ru: "Установить на %{name}"
+  uk: "Встановити на %{name}"
 common.open_folder:
   en: "Open folder"
   ru: "Открыть папку"
+  uk: "Відкрити теку"
 common.search:
   en: "Search"
   ru: "Поиск"
+  uk: "Пошук"
 common.refresh:
   en: "Refresh"
   ru: "Обновить"
+  uk: "Оновити"
 dl.queue:
   en: "Queue"
   ru: "Очередь"
+  uk: "Черга"
 dl.on_disk:
   en: "On disk"
   ru: "На диске"
+  uk: "На диску"
 hs.size_breakdown:
   en: "APK %{apk}, OBB %{obb}, data %{data}"
   ru: "APK %{apk}, OBB %{obb}, данные %{data}"
+  uk: "APK %{apk}, OBB %{obb}, дані %{data}"
 rn.heading:
   en: "Renamed copies"
   ru: "Копии с другим пакетом"
+  uk: "Копії з іншим пакетом"
 rn.add_folder:
   en: "Add folder..."
   ru: "Добавить папку..."
+  uk: "Додати теку..."
 rn.add_apk:
   en: "Add APK..."
   ru: "Добавить APK..."
+  uk: "Додати APK..."
 rn.empty:
   en: "Add a release folder or an APK here, or use Make a copy on the Downloads tab."
   ru: "Добавьте папку релиза или APK здесь или нажмите \"Сделать копию\" на вкладке Загрузки."
+  uk: "Додайте теку релізу або APK тут або натисніть \"Зробити копію\" на вкладці Завантаження."
 rn.select:
   en: "Select a release on the left."
   ru: "Выберите релиз слева."
+  uk: "Виберіть реліз ліворуч."
 rn.remove:
   en: "Remove from the list"
   ru: "Убрать из списка"
+  uk: "Прибрати зі списку"
 rn.analyzing:
   en: "Reading..."
   ru: "Чтение..."
+  uk: "Читання..."
 rn.analyzing_long:
   en: "Reading the APK. Large games take a while, since every native library is checked."
   ru: "Чтение APK. Для больших игр это занимает время: проверяется каждая нативная библиотека."
+  uk: "Читання APK. Для великих ігор це займає час: перевіряється кожна нативна бібліотека."
 rn.failed:
   en: "Can't be read"
   ru: "Не читается"
+  uk: "Не читається"
 rn.reanalyze:
   en: "Read again"
   ru: "Прочитать заново"
+  uk: "Прочитати заново"
 rn.package:
   en: "Package"
   ru: "Пакет"
+  uk: "Пакет"
 rn.version:
   en: "Version"
   ru: "Версия"
+  uk: "Версія"
 rn.new_package:
   en: "Copy's package"
   ru: "Пакет копии"
+  uk: "Пакет копії"
 rn.suggest:
   en: "Default"
   ru: "По умолчанию"
+  uk: "За замовчуванням"
 rn.manifest:
   en: "Manifest: %{n} changes"
   ru: "Манифест: изменений %{n}"
+  uk: "Маніфест: змін %{n}"
 rn.expanded:
   en: "Written relative to the package; spelled out in full so it keeps pointing at the same class"
   ru: "Записано относительно пакета; раскрывается полностью, чтобы указывать на тот же класс"
+  uk: "Записано відносно пакета; розкривається повністю, щоб вказувати на той самий клас"
 rn.resources:
   en: "Resource strings: %{n}"
   ru: "Строки ресурсов: %{n}"
+  uk: "Рядки ресурсів: %{n}"
 rn.obb:
   en: "OBB files: %{n}"
   ru: "Файлы OBB: %{n}"
+  uk: "Файли OBB: %{n}"
 rn.script:
   en: "install.txt lines: %{n}"
   ru: "Строки install.txt: %{n}"
+  uk: "Рядки install.txt: %{n}"
 rn.dex_warning:
   en: "The code has %{n} strings with the package name. They stay as they are, so the copy may still use some of the original's names (for example a file provider)."
   ru: "В коде %{n} строк с именем пакета. Они останутся прежними, поэтому копия может обращаться к именам оригинала (например, к провайдеру файлов)."
+  uk: "У коді %{n} рядків з назвою пакета. Вони залишаться незмінними, тому копія може звертатися до імен оригіналу (наприклад, до провайдера файлів)."
 rn.dex_examples:
   en: "Strings in the code"
   ru: "Строки в коде"
+  uk: "Рядки в коді"
 rn.firebase:
   en: "The game uses Firebase set up for the original package; in the copy it may not work."
   ru: "Игра использует Firebase, настроенный на оригинальный пакет; в копии он может не работать."
+  uk: "Гра використовує Firebase, налаштований на оригінальний пакет; у копії він може не працювати."
 rn.other_apks:
   en: "The release has more APKs (%{n}); only the first one is renamed."
   ru: "В релизе есть ещё APK (%{n}); переименуется только первый."
+  uk: "У релізі є ще APK (%{n}); перейменується лише перший."
 rn.jni:
   en: "%{n} native libraries call Java classes of the package. Classes keep their names, so this is fine."
   ru: "Нативных библиотек, вызывающих Java-классы пакета: %{n}. Классы сохраняют имена, так что это не мешает."
+  uk: "Нативних бібліотек, що викликають Java-класи пакета: %{n}. Класи зберігають імена, тож це не заважає."
 rn.loader:
   en: "Has the Platform SDK loader (lib/arm64-v8a/libovrplatformloader.so), SHA-256:"
   ru: "Есть загрузчик Platform SDK (lib/arm64-v8a/libovrplatformloader.so), SHA-256:"
+  uk: "Є завантажувач Platform SDK (lib/arm64-v8a/libovrplatformloader.so), SHA-256:"
 rn.build:
   en: "Build copy"
   ru: "Собрать копию"
+  uk: "Зібрати копію"
 rn.use_loader:
   en: "Replace the Platform SDK loader, so the game starts on older firmware"
   ru: "Заменить загрузчик Platform SDK, чтобы игра запускалась на старых прошивках"
+  uk: "Замінити завантажувач Platform SDK, щоб гра запускалася на старих прошивках"
 rn.pick_loader:
   en: "Choose file..."
   ru: "Выбрать файл..."
+  uk: "Вибрати файл..."
 rn.no_loader_file:
   en: "No file chosen"
   ru: "Файл не выбран"
+  uk: "Файл не вибрано"
 rn.loader_hint:
   en: "A patched libovrplatformloader.so you got yourself, for example from the eventhorizon project. The app doesn't download it; the report in the copy's folder lists both files' SHA-256."
   ru: "Пропатченный libovrplatformloader.so, который вы взяли сами, например из проекта eventhorizon. Программа его не скачивает; в отчёте в папке копии записаны SHA-256 обоих файлов."
+  uk: "Пропатчений libovrplatformloader.so, який ви взяли самі, наприклад з проєкту eventhorizon. Програма його не завантажує; у звіті в теці копії записано SHA-256 обох файлів."
 rn.output:
   en: "The copy goes to %{path}"
   ru: "Копия будет в %{path}"
+  uk: "Копія буде в %{path}"
 rn.output_exists:
   en: "That folder already exists; delete it on the Downloads tab to build again"
   ru: "Такая папка уже есть; удалите её на вкладке Загрузки, чтобы собрать заново"
+  uk: "Така тека вже є; видаліть її на вкладці Завантаження, щоб зібрати заново"
 rn.started:
   en: "Building; progress is on the Downloads tab"
   ru: "Идёт сборка; ход виден на вкладке Загрузки"
+  uk: "Іде збирання; хід видно на вкладці Завантаження"
 rn.debuggable:
   en: "Make the copy debuggable, so backups get all its saves"
   ru: "Сделать копию debuggable, чтобы бэкап брал все её сохранения"
+  uk: "Зробити копію debuggable, щоб резервна копія брала всі її збереження"
 rn.debuggable_hint:
   en: "Sets android:debuggable, so run-as works for the copy: backups then include its private data and files only the game may read. Some games behave differently or refuse to start when debuggable."
   ru: "Ставит android:debuggable, и для копии начинает работать run-as: в бэкап попадают её приватные данные и файлы, которые может читать только сама игра. Некоторые игры ведут себя иначе или не запускаются, если они debuggable."
+  uk: "Ставить android:debuggable, і для копії починає працювати run-as: у резервну копію потрапляють її приватні дані й файли, які може читати лише сама гра. Деякі ігри поводяться інакше або не запускаються, якщо вони debuggable."
 rn.already_debuggable:
   en: "The game is already debuggable: backups get all its saves."
   ru: "Игра уже debuggable: бэкап берёт все её сохранения."
+  uk: "Гра вже debuggable: резервна копія бере всі її збереження."
 rn.empty_title:
   en: "Nothing to copy yet"
   ru: "Пока нечего копировать"
+  uk: "Поки нічого копіювати"
 dev.starting:
   en: "Starting ADB..."
   ru: "Запуск ADB..."
+  uk: "Запуск ADB..."
 dev.running:
   en: "ADB server running (protocol %{version})"
   ru: "Сервер ADB работает (протокол %{version})"
+  uk: "Сервер ADB працює (протокол %{version})"
 dev.unavailable:
   en: "ADB unavailable: %{error}"
   ru: "ADB недоступен: %{error}"
+  uk: "ADB недоступний: %{error}"
 dev.connect:
   en: "Connect"
   ru: "Подключить"
+  uk: "Підключити"
 dev.wifi:
   en: "Wi-Fi:"
   ru: "Wi-Fi:"
+  uk: "Wi-Fi:"
 dev.disconnect:
   en: "Disconnect"
   ru: "Отключить"
+  uk: "Відключити"
 dev.reading:
   en: "Reading device info..."
   ru: "Чтение данных устройства..."
+  uk: "Читання даних пристрою..."
 dev.state_online:
   en: "connected"
   ru: "подключено"
+  uk: "підключено"
 dev.state_offline:
   en: "offline"
   ru: "не в сети"
+  uk: "не в мережі"
 dev.state_unauthorized:
   en: "unauthorized"
   ru: "не авторизовано"
+  uk: "не авторизовано"
 dev.state_authorizing:
   en: "authorizing"
   ru: "авторизация"
+  uk: "авторизація"
 dev.state_connecting:
   en: "connecting"
   ru: "подключение"
+  uk: "підключення"
 dev.state_no_permissions:
   en: "no USB access"
   ru: "нет доступа к USB"
+  uk: "немає доступу до USB"
 dev.hint_unauthorized:
   en: "Put on the headset and allow USB debugging for this computer."
   ru: "Наденьте шлем и разрешите отладку по USB для этого компьютера."
+  uk: "Надягніть шолом і дозвольте налагодження через USB для цього комп'ютера."
 dev.hint_waiting:
   en: "Waiting for the device..."
   ru: "Ожидание устройства..."
+  uk: "Очікування пристрою..."
 dev.hint_offline:
   en: "The device is offline. Reconnect the cable or restart the headset."
   ru: "Устройство не в сети. Переподключите кабель или перезагрузите шлем."
+  uk: "Пристрій не в мережі. Перепідключіть кабель або перезавантажте шолом."
 dev.hint_no_permissions:
   en: "This user has no access to the USB device. Install udev rules for Android devices (for example the android-udev package) and replug the headset."
   ru: "У этого пользователя нет доступа к USB-устройству. Установите udev-правила для Android-устройств (например, пакет android-udev) и переподключите шлем."
+  uk: "У цього користувача немає доступу до USB-пристрою. Встановіть udev-правила для Android-пристроїв (наприклад, пакет android-udev) і перепідключіть шолом."
 dev.hint_other:
   en: "The device is in an unsupported state."
   ru: "Устройство в неподдерживаемом состоянии."
+  uk: "Пристрій у непідтримуваному стані."
 dev.battery:
   en: "Battery"
   ru: "Батарея"
+  uk: "Батарея"
 dev.charging:
   en: ", charging"
   ru: ", заряжается"
+  uk: ", заряджається"
 dev.unknown:
   en: "unknown"
   ru: "неизвестно"
+  uk: "невідомо"
 dev.storage:
   en: "Storage"
   ru: "Память"
+  uk: "Пам'ять"
 dev.set_up_adb:
   en: "Set up ADB..."
   ru: "Установить ADB..."
+  uk: "Встановити ADB..."
 console.on:
   en: "adb shell on %{name}"
   ru: "adb shell на %{name}"
+  uk: "adb shell на %{name}"
 console.no_headset:
   en: "Connect a headset to run commands on it."
   ru: "Подключите шлем, чтобы выполнять на нём команды."
+  uk: "Підключіть шолом, щоб виконувати на ньому команди."
 console.hint:
   en: "Shell command, for example pm list packages -3"
   ru: "Команда shell, например pm list packages -3"
+  uk: "Команда shell, наприклад pm list packages -3"
 console.run:
   en: "Run"
   ru: "Выполнить"
+  uk: "Виконати"
 console.stop:
   en: "Stop"
   ru: "Стоп"
+  uk: "Стоп"
 console.clear:
   en: "Clear"
   ru: "Очистить"
+  uk: "Очистити"
 console.copy:
   en: "Copy all"
   ru: "Копировать всё"
+  uk: "Копіювати все"
 console.empty:
   en: "Commands run on the headset as with adb shell. Up and Down go through earlier commands."
   ru: "Команды выполняются на шлеме, как через adb shell. Стрелки вверх и вниз листают прошлые команды."
+  uk: "Команди виконуються на шоломі, як через adb shell. Стрілки вгору й униз гортають попередні команди."
 console.exit_code:
   en: "exit code %{code}"
   ru: "код выхода %{code}"
+  uk: "код виходу %{code}"
 console.ended:
   en: "connection closed"
   ru: "соединение закрыто"
+  uk: "з'єднання закрито"
 console.only_shell:
   en: "Only shell commands run here; for other adb commands use the Devices and Headset tabs."
   ru: "Здесь выполняются только команды shell; для других команд adb есть вкладки Устройства и Шлем."
+  uk: "Тут виконуються лише команди shell; для інших команд adb є вкладки Пристрої та Шолом."
 ins.heading:
   en: "APK inspector"
   ru: "Инспектор APK"
+  uk: "Інспектор APK"
 ins.empty:
   en: "Open an APK or a release folder here, or use Details on the Downloads tab."
   ru: "Откройте APK или папку релиза здесь или нажмите \"Подробнее\" на вкладке Загрузки."
+  uk: "Відкрийте APK або теку релізу тут або натисніть \"Докладніше\" на вкладці Завантаження."
 ins.reading:
   en: "Reading the APK..."
   ru: "Чтение APK..."
+  uk: "Читання APK..."
 ins.app:
   en: "App"
   ru: "Приложение"
+  uk: "Застосунок"
 ins.label:
   en: "Name"
   ru: "Название"
+  uk: "Назва"
 ins.size:
   en: "Size"
   ru: "Размер"
+  uk: "Розмір"
 ins.sdk:
   en: "Android SDK"
   ru: "Android SDK"
+  uk: "Android SDK"
 ins.sdk_values:
   en: "min %{min}, target %{target}, compiled with %{compile}"
   ru: "минимум %{min}, целевой %{target}, собрано с %{compile}"
+  uk: "мінімум %{min}, цільовий %{target}, зібрано з %{compile}"
 ins.devices:
   en: "Headsets"
   ru: "Шлемы"
+  uk: "Шоломи"
 ins.loader:
   en: "Platform SDK loader"
   ru: "Загрузчик Platform SDK"
+  uk: "Завантажувач Platform SDK"
 ins.signature:
   en: "Signature"
   ru: "Подпись"
+  uk: "Підпис"
 ins.unsigned:
   en: "not signed"
   ru: "не подписан"
+  uk: "не підписаний"
 ins.schemes:
   en: "Schemes"
   ru: "Схемы"
+  uk: "Схеми"
 ins.v2_check:
   en: "v2 check"
   ru: "Проверка v2"
+  uk: "Перевірка v2"
 ins.valid:
   en: "valid"
   ru: "в порядке"
+  uk: "гаразд"
 ins.invalid:
   en: "fails: %{error}"
   ru: "не проходит: %{error}"
+  uk: "не проходить: %{error}"
 ins.certificate:
   en: "Certificate"
   ru: "Сертификат"
+  uk: "Сертифікат"
 ins.ours:
   en: "Signed with the key of the renamed copy %{package} made here."
   ru: "Подписан ключом копии %{package}, собранной в этой программе."
+  uk: "Підписаний ключем копії %{package}, зібраної в цій програмі."
 ins.contents:
   en: "Contents"
   ru: "Содержимое"
+  uk: "Вміст"
 ins.abis:
   en: "Architectures"
   ru: "Архитектуры"
+  uk: "Архітектури"
 ins.locales:
   en: "Languages"
   ru: "Языки"
+  uk: "Мови"
 ins.native:
   en: "Native libraries"
   ru: "Нативные библиотеки"
+  uk: "Нативні бібліотеки"
 ins.entries:
   en: "Files in the APK"
   ru: "Файлов в APK"
+  uk: "Файлів в APK"
 ins.components:
   en: "Components"
   ru: "Компоненты"
+  uk: "Компоненти"
 ins.permissions:
   en: "Permissions: %{n}"
   ru: "Разрешения: %{n}"
+  uk: "Дозволи: %{n}"
 ins.features:
   en: "Features: %{n}"
   ru: "Возможности (features): %{n}"
+  uk: "Можливості (features): %{n}"
 ins.optional:
   en: "optional"
   ru: "необязательно"
+  uk: "необов'язково"
 ins.hashes:
   en: "Hashes"
   ru: "Хэши"
+  uk: "Хеші"
 help.no_adb_title:
   en: "adb isn't set up"
   ru: "adb не установлен"
+  uk: "adb не встановлений"
 help.no_adb:
   en: "The app talks to the headset through adb from Google's Android tools. It can download it for you."
   ru: "Программа общается со шлемом через adb из инструментов Android от Google. Его можно скачать прямо отсюда."
+  uk: "Програма спілкується з шоломом через adb з інструментів Android від Google. Його можна завантажити прямо звідси."
 help.unauthorized_title:
   en: "The headset is waiting for your permission"
   ru: "Шлем ждёт вашего разрешения"
+  uk: "Шолом чекає вашого дозволу"
 help.unauthorized:
   en: "Put on the headset: there's a window asking to allow USB debugging. Tick \"Always allow from this computer\" and press Allow."
   ru: "Наденьте шлем: там открыто окно с запросом на отладку по USB. Отметьте \"Всегда разрешать с этого компьютера\" и нажмите \"Разрешить\"."
+  uk: "Надягніть шолом: там відкрите вікно із запитом на налагодження через USB. Позначте \"Завжди дозволяти з цього комп'ютера\" і натисніть \"Дозволити\"."
 help.waiting_title:
   en: "The headset isn't ready yet"
   ru: "Шлем ещё не готов"
+  uk: "Шолом ще не готовий"
 help.none_title:
   en: "Connect your headset"
   ru: "Подключите шлем"
+  uk: "Підключіть шолом"
 help.step_dev_mode:
   en: "Turn on developer mode in the Meta Horizon app on your phone: Menu, Devices, your headset, Headset settings, Developer mode."
   ru: "Включите режим разработчика в приложении Meta Horizon на телефоне: Меню, Устройства, ваш шлем, Настройки шлема, Режим разработчика."
+  uk: "Увімкніть режим розробника в застосунку Meta Horizon на телефоні: Меню, Пристрої, ваш шолом, Налаштування шолома, Режим розробника."
 help.step_cable:
   en: "Connect the headset to this computer with a USB cable that carries data (some cables only charge)."
   ru: "Подключите шлем к компьютеру USB-кабелем с передачей данных (некоторые кабели только заряжают)."
+  uk: "Підключіть шолом до комп'ютера USB-кабелем із передаванням даних (деякі кабелі лише заряджають)."
 help.step_allow:
   en: "Put on the headset and allow USB debugging when it asks."
   ru: "Наденьте шлем и разрешите отладку по USB, когда он спросит."
+  uk: "Надягніть шолом і дозвольте налагодження через USB, коли він запитає."
 help.windows_driver:
   en: "On Windows the headset also needs Meta's ADB driver:"
   ru: "На Windows шлему также нужен ADB-драйвер от Meta:"
+  uk: "На Windows шолому також потрібен ADB-драйвер від Meta:"
 help.or_wifi:
   en: "Already turned on wireless ADB? Connect by its address instead:"
   ru: "Уже включали беспроводной ADB? Можно подключиться по адресу:"
+  uk: "Уже вмикали бездротовий ADB? Можна підключитися за адресою:"
 ins.empty_title:
   en: "No APK open"
   ru: "APK не открыт"
+  uk: "APK не відкрито"
 common.yes:
   en: "Yes"
   ru: "Да"
+  uk: "Так"
 common.no:
   en: "No"
   ru: "Нет"
+  uk: "Ні"

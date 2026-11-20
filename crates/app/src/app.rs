@@ -781,7 +781,8 @@ pub(crate) fn apply_theme(ctx: &egui::Context, theme: Theme) {
 pub(crate) fn apply_language(language: Language) {
 	let russian = match language {
 		Language::Russian => true,
-		Language::English => false,
+		// The old UI has no Ukrainian strings.
+		Language::English | Language::Ukrainian => false,
 		Language::System => sys_locale::get_locale().is_some_and(|l| l.starts_with("ru")),
 	};
 	// Shared by the core crate too: rust-i18n keeps one global locale.

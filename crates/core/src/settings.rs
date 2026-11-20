@@ -65,11 +65,11 @@ pub enum Theme {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Language {
-	/// The system language when it is Russian, English otherwise.
 	#[default]
 	System,
 	English,
 	Russian,
+	Ukrainian,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

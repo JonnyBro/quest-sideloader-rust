@@ -83,11 +83,16 @@ pub fn base_title(portable: bool) -> &'static str {
 }
 
 fn apply_language(language: Language) {
-	let russian = match language {
-		Language::Russian => true,
-		Language::English => false,
-		Language::System => sys_locale::get_locale().is_some_and(|l| l.starts_with("ru")),
+	let locale = match language {
+		Language::English => "en",
+		Language::Russian => "ru",
+		Language::Ukrainian => "uk",
+		Language::System => match sys_locale::get_locale() {
+			Some(l) if l.starts_with("uk") => "uk",
+			Some(l) if l.starts_with("ru") => "ru",
+			_ => "en",
+		},
 	};
 	// One global locale for this crate, the core and gpui-component.
-	rust_i18n::set_locale(if russian { "ru" } else { "en" });
+	rust_i18n::set_locale(locale);
 }

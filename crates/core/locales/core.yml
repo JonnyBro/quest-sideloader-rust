@@ -2,648 +2,864 @@ _version: 2
 err.no_platform_dirs:
   en: "could not determine platform directories"
   ru: "не удалось определить системные папки"
+  uk: "не вдалося визначити системні теки"
 err.io:
   en: "I/O error at %{path}: %{source}"
   ru: "ошибка ввода-вывода (%{path}): %{source}"
+  uk: "помилка введення-виведення (%{path}): %{source}"
 task.queued:
   en: "Queued"
   ru: "В очереди"
+  uk: "У черзі"
 task.queued_pos:
   en: "Queued, #%{pos}"
   ru: "В очереди, #%{pos}"
+  uk: "У черзі, #%{pos}"
 task.cancelled:
   en: "Cancelled"
   ru: "Отменено"
+  uk: "Скасовано"
 task.starting:
   en: "Starting"
   ru: "Запуск"
+  uk: "Запуск"
 task.downloaded:
   en: "Downloaded"
   ru: "Скачано"
+  uk: "Завантажено"
 task.installed:
   en: "Installed"
   ru: "Установлено"
+  uk: "Встановлено"
 task.rate_left:
   en: "%{speed}, %{left} left"
   ru: "%{speed}, осталось %{left}"
+  uk: "%{speed}, залишилося %{left}"
 time.secs:
   en: "%{n} s"
   ru: "%{n} с"
+  uk: "%{n} с"
 time.mins:
   en: "%{n} min"
   ru: "%{n} мин"
+  uk: "%{n} хв"
 time.hours_mins:
   en: "%{h} h %{m} min"
   ru: "%{h} ч %{m} мин"
+  uk: "%{h} год %{m} хв"
 dl.no_space:
   en: "not enough free space in %{dir}: need about %{need}, have %{have}"
   ru: "не хватает места в %{dir}: нужно около %{need}, свободно %{have}"
+  uk: "не вистачає місця в %{dir}: потрібно близько %{need}, вільно %{have}"
 dl.remove_failed:
   en: "installed, but the downloaded files could not be removed: %{error}"
   ru: "установлено, но скачанные файлы не удалось удалить: %{error}"
+  uk: "встановлено, але завантажені файли не вдалося видалити: %{error}"
 dl.listing:
   en: "Listing files"
   ru: "Получение списка файлов"
+  uk: "Отримання списку файлів"
 dl.no_archive:
   en: "the mirror has no archive for %{release}"
   ru: "на зеркале нет архива для %{release}"
+  uk: "на дзеркалі немає архіву для %{release}"
 dl.downloading_n:
   en: "Downloading %{n} file(s)"
   ru: "Загрузка файлов: %{n}"
+  uk: "Завантаження файлів: %{n}"
 dl.downloading_file:
   en: "Downloading %{name}"
   ru: "Загрузка %{name}"
+  uk: "Завантаження %{name}"
 dl.retrying:
   en: "%{stage}: connection problem, retrying in %{delay} s"
   ru: "%{stage}: проблема со связью, повтор через %{delay} с"
+  uk: "%{stage}: проблема зі зв'язком, повтор через %{delay} с"
 dl.unpacking:
   en: "Unpacking"
   ru: "Распаковка"
+  uk: "Розпакування"
 dl.no_archive_local:
   en: "downloaded files contain no archive"
   ru: "среди скачанных файлов нет архива"
+  uk: "серед завантажених файлів немає архіву"
 dl.no_space_headset:
   en: "not enough space on the headset: need %{need}, have %{have}"
   ru: "не хватает места на шлеме: нужно %{need}, свободно %{have}"
+  uk: "не вистачає місця на шоломі: потрібно %{need}, вільно %{have}"
 up.done:
   en: "Uploaded, thank you"
   ru: "Отправлено, спасибо"
+  uk: "Надіслано, дякуємо"
 up.looking_up:
   en: "Looking up the app on the headset"
   ru: "Поиск приложения на шлеме"
+  uk: "Пошук застосунку на шоломі"
 up.no_space:
   en: "not enough free space to prepare the upload: need about %{need}, have %{have}"
   ru: "не хватает места для подготовки отправки: нужно около %{need}, свободно %{have}"
+  uk: "не вистачає місця для підготовки надсилання: потрібно близько %{need}, вільно %{have}"
 up.copying:
   en: "Copying from the headset (%{size})"
   ru: "Копирование со шлема (%{size})"
+  uk: "Копіювання з шолома (%{size})"
 up.wrong_apk:
   en: "the headset returned an APK for %{got}, not %{package}"
   ru: "шлем вернул APK для %{got}, а не для %{package}"
+  uk: "шолом повернув APK для %{got}, а не для %{package}"
 up.no_version:
   en: "the APK has no version code"
   ru: "в APK нет кода версии"
+  uk: "в APK немає коду версії"
 up.packing:
   en: "Packing"
   ru: "Упаковка"
+  uk: "Пакування"
 up.waiting:
   en: "Waiting for another upload to finish"
   ru: "Ожидание окончания другой отправки"
+  uk: "Очікування завершення іншого надсилання"
 up.uploading:
   en: "Uploading to the mirror"
   ru: "Отправка на зеркало"
+  uk: "Надсилання на дзеркало"
 hs.back_up_title:
   en: "Back up %{name}"
   ru: "Бэкап %{name}"
+  uk: "Резервна копія %{name}"
 hs.copying_from:
   en: "Copying saves from the headset"
   ru: "Копирование сохранений со шлема"
+  uk: "Копіювання збережень з шолома"
 hs.backed_up:
   en: "Backed up %{n} file(s)"
   ru: "Сохранено файлов: %{n}"
+  uk: "Збережено файлів: %{n}"
 hs.restore_title:
   en: "Restore %{name}"
   ru: "Восстановление %{name}"
+  uk: "Відновлення %{name}"
 hs.restore_into_title:
   en: "Restore %{name} into %{package}"
   ru: "Восстановление %{name} в %{package}"
+  uk: "Відновлення %{name} в %{package}"
 hs.copying_to:
   en: "Copying saves to the headset"
   ru: "Копирование сохранений на шлем"
+  uk: "Копіювання збережень на шолом"
 hs.restored:
   en: "Saves restored"
   ru: "Сохранения восстановлены"
+  uk: "Збереження відновлено"
 hs.backing_up:
   en: "Backing up saves"
   ru: "Бэкап сохранений"
+  uk: "Резервне копіювання збережень"
 hs.backup_failed:
   en: "couldn't back up the saves, so nothing was removed: %{error}"
   ru: "не удалось сделать бэкап сохранений, поэтому ничего не удалено: %{error}"
+  uk: "не вдалося зробити резервну копію збережень, тому нічого не видалено: %{error}"
 hs.uninstall_title:
   en: "Uninstall %{name}"
   ru: "Удаление %{name}"
+  uk: "Видалення %{name}"
 hs.uninstalling:
   en: "Uninstalling"
   ru: "Удаление"
+  uk: "Видалення"
 hs.removing_obb:
   en: "Removing OBB files"
   ru: "Удаление OBB-файлов"
+  uk: "Видалення OBB-файлів"
 hs.uninstalled_backed_up:
   en: "Uninstalled; saves backed up (%{n} file(s))"
   ru: "Удалено; сохранения в бэкапе (файлов: %{n})"
+  uk: "Видалено; збереження в резервній копії (файлів: %{n})"
 hs.uninstalled:
   en: "Uninstalled"
   ru: "Удалено"
+  uk: "Видалено"
 hs.reinstall_title:
   en: "Reinstall %{name}"
   ru: "Переустановка %{name}"
+  uk: "Перевстановлення %{name}"
 hs.uninstalling_old:
   en: "Uninstalling the old version"
   ru: "Удаление старой версии"
+  uk: "Видалення старої версії"
 hs.saves_kept:
   en: " Your saves are kept in %{dir}."
   ru: " Сохранения остались в %{dir}."
+  uk: " Збереження залишилися в %{dir}."
 hs.new_not_installed:
   en: "the new version didn't install: %{error}.%{kept}"
   ru: "новая версия не установилась: %{error}.%{kept}"
+  uk: "нова версія не встановилася: %{error}.%{kept}"
 hs.restoring:
   en: "Restoring saves"
   ru: "Восстановление сохранений"
+  uk: "Відновлення збережень"
 hs.restore_failed:
   en: "installed, but restoring saves failed: %{error}.%{kept}"
   ru: "установлено, но восстановить сохранения не удалось: %{error}.%{kept}"
+  uk: "встановлено, але відновити збереження не вдалося: %{error}.%{kept}"
 hs.reinstalled_saves:
   en: "Reinstalled with saves"
   ru: "Переустановлено с сохранениями"
+  uk: "Перевстановлено зі збереженнями"
 hs.reinstalled:
   en: "Reinstalled"
   ru: "Переустановлено"
+  uk: "Перевстановлено"
 inst.reading:
   en: "Reading files"
   ru: "Чтение файлов"
+  uk: "Читання файлів"
 inst.extracting:
   en: "Extracting"
   ru: "Распаковка"
+  uk: "Розпакування"
 inst.review:
   en: "Waiting for install.txt review"
   ru: "Ожидание проверки install.txt"
+  uk: "Очікування перевірки install.txt"
 inst.waiting:
   en: "Waiting for another installation on this headset"
   ru: "Ожидание другой установки на этот шлем"
+  uk: "Очікування іншого встановлення на цей шолом"
 inst.unpacking:
   en: "Unpacking %{name}"
   ru: "Распаковка %{name}"
+  uk: "Розпакування %{name}"
 inst.data_password:
   en: "it is password-protected; unpack it yourself and install the folder again"
   ru: "архив защищён паролем; распакуйте его сами и установите папку заново"
+  uk: "архів захищений паролем; розпакуйте його самі й встановіть теку заново"
 lib.cooldown:
-  en: "The library was synced moments ago; try again in %{wait} min"
-  ru: "Библиотека только что синхронизирована; попробуйте через %{wait} мин"
+  en: "The catalog was just synced; try again in %{wait} min"
+  ru: "Каталог только что синхронизирован; попробуйте через %{wait} мин"
+  uk: "Каталог щойно синхронізовано; спробуйте через %{wait} хв"
 lib.no_mirror:
   en: "No mirror configured. Add one in Settings."
   ru: "Зеркало не настроено. Добавьте его в Настройках."
+  uk: "Дзеркало не налаштоване. Додайте його в Налаштуваннях."
 lib.downloading_meta:
   en: "Downloading metadata (%{size})"
   ru: "Загрузка метаданных (%{size})"
+  uk: "Завантаження метаданих (%{size})"
 lib.unpacking_meta:
   en: "Unpacking metadata"
   ru: "Распаковка метаданных"
+  uk: "Розпакування метаданих"
 lib.connecting:
   en: "Connecting to %{name}"
   ru: "Подключение к %{name}"
+  uk: "Підключення до %{name}"
 lib.refused:
   en: "%{error}. The mirror refused access. Check its address; if it's right, the mirror may no longer accept this build's API key."
   ru: "%{error}. Зеркало отказало в доступе. Проверьте его адрес; если он верный, зеркало, возможно, больше не принимает API-ключ этой сборки."
+  uk: "%{error}. Дзеркало відмовило в доступі. Перевірте його адресу; якщо вона правильна, дзеркало, можливо, більше не приймає API-ключ цієї збірки."
 eng.queue_full:
   en: "The download queue is full (%{max}); wait for a download to finish"
   ru: "Очередь загрузок заполнена (%{max}); дождитесь окончания одной из загрузок"
+  uk: "Черга завантажень заповнена (%{max}); дочекайтеся завершення одного із завантажень"
 eng.already_queued:
   en: "%{name} is already in the queue"
   ru: "%{name} уже в очереди"
+  uk: "%{name} вже в черзі"
 eng.no_uploads:
   en: "This mirror doesn't accept uploads (its metadata has no upload config)"
   ru: "Это зеркало не принимает отправку (в его метаданных нет upload config)"
+  uk: "Це дзеркало не приймає надсилання (у його метаданих немає upload config)"
 eng.started:
   en: "Started %{package}"
   ru: "Запущено %{package}"
+  uk: "Запущено %{package}"
 eng.stopped:
   en: "Stopped %{package}"
   ru: "Остановлено %{package}"
+  uk: "Зупинено %{package}"
 eng.delete_failed:
   en: "Could not delete %{name}: %{error}"
   ru: "Не удалось удалить %{name}: %{error}"
+  uk: "Не вдалося видалити %{name}: %{error}"
 eng.restarting:
   en: "The headset is restarting"
   ru: "Шлем перезагружается"
+  uk: "Шолом перезавантажується"
 eng.no_wifi:
   en: "the headset isn't on Wi-Fi"
   ru: "шлем не подключён к Wi-Fi"
+  uk: "шолом не підключений до Wi-Fi"
 eng.wireless_failed:
   en: "wireless ADB: %{error}"
   ru: "беспроводной ADB: %{error}"
+  uk: "бездротовий ADB: %{error}"
 eng.screenshot_saved:
   en: "Screenshot saved to %{path}"
   ru: "Скриншот сохранён в %{path}"
+  uk: "Знімок екрана збережено в %{path}"
 eng.screenshot_failed:
   en: "screenshot: %{error}"
   ru: "скриншот: %{error}"
+  uk: "знімок екрана: %{error}"
 eng.shell_stopped:
   en: "Stopped"
   ru: "Остановлено"
+  uk: "Зупинено"
 eng.tweak_reset:
   en: "%{property} reset"
   ru: "%{property} сброшено"
+  uk: "%{property} скинуто"
 eng.tweak_set:
   en: "%{property} set to %{value}"
   ru: "%{property} теперь %{value}"
+  uk: "%{property} тепер %{value}"
 dev.connect_failed:
   en: "connect %{address}: %{error}"
   ru: "подключение к %{address}: %{error}"
+  uk: "підключення до %{address}: %{error}"
 dev.disconnect_failed:
   en: "disconnect %{address}: %{error}"
   ru: "отключение от %{address}: %{error}"
+  uk: "відключення від %{address}: %{error}"
 err.settings_parse:
   en: "invalid settings file %{path}: %{source}"
   ru: "файл настроек %{path} повреждён: %{source}"
+  uk: "файл налаштувань %{path} пошкоджений: %{source}"
 err.settings_serialize:
   en: "failed to serialize settings: %{error}"
   ru: "не удалось сохранить настройки: %{error}"
+  uk: "не вдалося зберегти налаштування: %{error}"
 err.runtime:
   en: "failed to start async runtime: %{error}"
   ru: "не удалось запустить асинхронную среду: %{error}"
+  uk: "не вдалося запустити асинхронне середовище: %{error}"
 err.sl_apk:
   en: "cannot read APK %{path}: %{message}"
   ru: "не удалось прочитать APK %{path}: %{message}"
+  uk: "не вдалося прочитати APK %{path}: %{message}"
 err.sl_zip:
   en: "cannot extract %{path}: %{message}"
   ru: "не удалось распаковать %{path}: %{message}"
+  uk: "не вдалося розпакувати %{path}: %{message}"
 err.sl_nothing:
   en: "nothing to install in %{path}: no APK, OBB folder or install.txt found"
   ru: "в %{path} нечего устанавливать: нет APK, папки OBB или install.txt"
+  uk: "у %{path} нічого встановлювати: немає APK, теки OBB або install.txt"
 err.sl_unsupported:
   en: "unsupported file %{path}: drop an .apk, a .zip or a folder"
   ru: "неподдерживаемый файл %{path}: перетащите .apk, .zip или папку"
+  uk: "непідтримуваний файл %{path}: перетягніть .apk, .zip або теку"
 err.sl_script:
   en: "install.txt line %{line}: %{message}"
   ru: "install.txt, строка %{line}: %{message}"
+  uk: "install.txt, рядок %{line}: %{message}"
 err.sl_cancelled:
   en: "installation was cancelled"
   ru: "установка отменена"
+  uk: "встановлення скасовано"
 err.cat_http:
   en: "network error: %{error}"
   ru: "ошибка сети: %{error}"
+  uk: "помилка мережі: %{error}"
 err.cat_status:
   en: "mirror answered %{status} for %{url}"
   ru: "зеркало ответило %{status} на %{url}"
+  uk: "дзеркало відповіло %{status} на %{url}"
 err.rclone_not_found:
   en: "rclone binary not found at %{path}"
   ru: "rclone не найден: %{path}"
+  uk: "rclone не знайдено: %{path}"
 err.no_game_list:
   en: "the mirror's metadata has no game list"
   ru: "в метаданных зеркала нет списка игр"
+  uk: "у метаданих дзеркала немає списку ігор"
 err.bad_header:
   en: "the game list has no header with Game Name, Release Name and Package Name columns"
   ru: "в списке игр нет заголовка со столбцами Game Name, Release Name и Package Name"
+  uk: "у списку ігор немає заголовка зі стовпцями Game Name, Release Name і Package Name"
 err.no_saves:
   en: "%{app} has no saves on the headset"
   ru: "у %{app} нет сохранений на шлеме"
+  uk: "у %{app} немає збережень на шоломі"
 err.not_installed:
   en: "install %{app} before restoring its saves"
   ru: "установите %{app}, прежде чем восстанавливать сохранения"
+  uk: "встановіть %{app}, перш ніж відновлювати збереження"
 err.private_restore:
   en: "the app didn't accept its private data back: %{error}"
   ru: "приложение не приняло обратно свои приватные данные: %{error}"
+  uk: "застосунок не прийняв назад свої приватні дані: %{error}"
 err.adb_not_found:
   en: "adb binary not found at %{path}"
   ru: "adb не найден: %{path}"
+  uk: "adb не знайдено: %{path}"
 err.adb_start:
   en: "could not start adb server: %{error}"
   ru: "не удалось запустить сервер adb: %{error}"
+  uk: "не вдалося запустити сервер adb: %{error}"
 err.adb_unreachable:
   en: "adb server is not reachable: %{error}"
   ru: "сервер adb недоступен: %{error}"
+  uk: "сервер adb недоступний: %{error}"
 err.adb_protocol:
   en: "adb protocol error: %{error}"
   ru: "ошибка протокола adb: %{error}"
+  uk: "помилка протоколу adb: %{error}"
 err.adb_io:
   en: "adb connection error: %{error}"
   ru: "ошибка соединения с adb: %{error}"
+  uk: "помилка з'єднання з adb: %{error}"
 err.adb_timeout:
   en: "adb request timed out"
   ru: "adb не ответил вовремя"
+  uk: "adb не відповів вчасно"
 err.adb_local_io:
   en: "cannot read %{path}: %{source}"
   ru: "не удалось прочитать %{path}: %{source}"
+  uk: "не вдалося прочитати %{path}: %{source}"
 err.adb_push:
   en: "push to %{remote} failed: %{message}"
   ru: "не удалось записать %{remote}: %{message}"
+  uk: "не вдалося записати %{remote}: %{message}"
 err.adb_pull:
   en: "pull of %{remote} failed: %{message}"
   ru: "не удалось скачать %{remote}: %{message}"
+  uk: "не вдалося завантажити %{remote}: %{message}"
 err.adb_install:
   en: "installation failed: %{error}"
   ru: "установка не удалась: %{error}"
+  uk: "встановлення не вдалося: %{error}"
 err.wrong_password:
   en: "wrong archive password"
   ru: "неверный пароль архива"
+  uk: "неправильний пароль архіву"
 err.corrupt:
   en: "archive is damaged or unsupported: %{error}"
   ru: "архив повреждён или не поддерживается: %{error}"
+  uk: "архів пошкоджений або не підтримується: %{error}"
 err.unsafe_path:
   en: "archive entry %{entry} points outside the destination folder"
   ru: "запись архива %{entry} указывает за пределы папки назначения"
+  uk: "запис архіву %{entry} вказує за межі теки призначення"
 err.extract_cancelled:
   en: "extraction was cancelled"
   ru: "распаковка отменена"
+  uk: "розпакування скасовано"
 err.cancelled:
   en: "cancelled"
   ru: "отменено"
+  uk: "скасовано"
 run.installing:
   en: "Installing %{name}"
   ru: "Установка %{name}"
+  uk: "Встановлення %{name}"
 run.copying_obb:
   en: "Copying OBB %{package}"
   ru: "Копирование OBB %{package}"
+  uk: "Копіювання OBB %{package}"
 run.missing:
   en: "%{path} does not exist"
   ru: "%{path} не существует"
+  uk: "%{path} не існує"
 run.step:
   en: "Step %{n}/%{total}"
   ru: "Шаг %{n}/%{total}"
+  uk: "Крок %{n}/%{total}"
 run.step_installing:
   en: "%{step}: installing %{name}"
   ru: "%{step}: установка %{name}"
+  uk: "%{step}: встановлення %{name}"
 run.step_copying:
   en: "%{step}: copying %{name}"
   ru: "%{step}: копирование %{name}"
+  uk: "%{step}: копіювання %{name}"
 run.step_uninstalling:
   en: "%{step}: uninstalling %{package}"
   ru: "%{step}: удаление %{package}"
+  uk: "%{step}: видалення %{package}"
 run.uninstall_failed:
   en: "line %{line}: uninstall failed: %{detail}"
   ru: "строка %{line}: удаление не удалось: %{detail}"
+  uk: "рядок %{line}: видалення не вдалося: %{detail}"
 run.command_failed:
   en: "line %{line}: `%{command}` failed: %{detail}"
   ru: "строка %{line}: `%{command}` завершилась с ошибкой: %{detail}"
+  uk: "рядок %{line}: `%{command}` завершилася з помилкою: %{detail}"
 scr.unbalanced:
   en: "cannot parse the line (unbalanced quotes)"
   ru: "не удалось разобрать строку (незакрытые кавычки)"
+  uk: "не вдалося розібрати рядок (незакриті лапки)"
 scr.not_adb:
   en: "not an adb command, skipped: %{program}"
   ru: "не команда adb, пропущено: %{program}"
+  uk: "не команда adb, пропущено: %{program}"
 scr.no_command:
   en: "adb without a command"
   ru: "adb без команды"
+  uk: "adb без команди"
 scr.unsupported:
   en: "`adb %{command}` is not supported in install scripts"
   ru: "`adb %{command}` не поддерживается в скриптах установки"
+  uk: "`adb %{command}` не підтримується у скриптах встановлення"
 scr.install_one:
   en: "install expects exactly one APK"
   ru: "install ожидает ровно один APK"
+  uk: "install очікує рівно один APK"
 scr.install_flag:
   en: "unknown install flag %{flag}"
   ru: "неизвестный флаг install: %{flag}"
+  uk: "невідомий прапорець install: %{flag}"
 scr.push_args:
   en: "push expects a local path and a device path"
   ru: "push ожидает локальный путь и путь на устройстве"
+  uk: "push очікує локальний шлях і шлях на пристрої"
 scr.dotdot:
   en: "device path %{path} contains `..`"
   ru: "путь на устройстве %{path} содержит `..`"
+  uk: "шлях на пристрої %{path} містить `..`"
 scr.no_package_target:
   en: "the game's package name is unknown, so the target can't be checked"
   ru: "имя пакета игры неизвестно, поэтому путь назначения не проверить"
+  uk: "назва пакета гри невідома, тому шлях призначення не перевірити"
 scr.writes_outside:
   en: "writes to %{path}, outside this game's folders"
   ru: "пишет в %{path}, за пределами папок этой игры"
+  uk: "пише в %{path}, за межами тек цієї гри"
 scr.uninstall_one:
   en: "uninstall expects exactly one package"
   ru: "uninstall ожидает ровно один пакет"
+  uk: "uninstall очікує рівно один пакет"
 scr.removes_saves:
   en: "removes the installed game together with its saves"
   ru: "удаляет установленную игру вместе с сохранениями"
+  uk: "видаляє встановлену гру разом зі збереженнями"
 scr.removes_other:
   en: "removes another app: %{package}"
   ru: "удаляет другое приложение: %{package}"
+  uk: "видаляє інший застосунок: %{package}"
 scr.interactive:
   en: "interactive shell is not supported"
   ru: "интерактивный shell не поддерживается"
+  uk: "інтерактивний shell не підтримується"
 scr.multiline:
   en: "multi-line shell command"
   ru: "многострочная команда shell"
+  uk: "багаторядкова команда shell"
 scr.chains:
   en: "chains several commands or redirects output"
   ru: "объединяет несколько команд или перенаправляет вывод"
+  uk: "об'єднує кілька команд або перенаправляє виведення"
 scr.unparsable_shell:
   en: "cannot parse the shell command"
   ru: "не удалось разобрать команду shell"
+  uk: "не вдалося розібрати команду shell"
 scr.empty_shell:
   en: "empty shell command"
   ru: "пустая команда shell"
+  uk: "порожня команда shell"
 scr.unknown_shell:
   en: "unrecognized shell command `%{program}`"
   ru: "неизвестная команда shell `%{program}`"
+  uk: "невідома команда shell `%{program}`"
 scr.permissions_other:
   en: "changes permissions of another app: %{package}"
   ru: "меняет разрешения другого приложения: %{package}"
+  uk: "змінює дозволи іншого застосунку: %{package}"
 scr.pm:
   en: "package manager command"
   ru: "команда менеджера пакетов"
+  uk: "команда менеджера пакетів"
 scr.no_package_paths:
   en: "the game's package name is unknown, so paths can't be checked"
   ru: "имя пакета игры неизвестно, поэтому пути не проверить"
+  uk: "назва пакета гри невідома, тому шляхи не перевірити"
 scr.deletes_outside:
   en: "deletes %{path}, outside this game's folders"
   ru: "удаляет %{path}, за пределами папок этой игры"
+  uk: "видаляє %{path}, за межами тек цієї гри"
 scr.touches_outside:
   en: "touches %{path}, outside this game's folders"
   ru: "изменяет %{path}, за пределами папок этой игры"
+  uk: "змінює %{path}, за межами тек цієї гри"
 scr.reads_outside:
   en: "reads %{path}, outside the release folder"
   ru: "читает %{path}, за пределами папки релиза"
+  uk: "читає %{path}, за межами теки релізу"
 cat.ended_early:
   en: "download ended early (%{done} of %{total} bytes)"
   ru: "загрузка оборвалась (%{done} из %{total} байт)"
+  uk: "завантаження обірвалося (%{done} з %{total} байт)"
 cat.rclone_exit:
   en: "rclone exited with %{status}"
   ru: "rclone завершился с кодом %{status}"
+  uk: "rclone завершився з кодом %{status}"
 cat.sync_first:
   en: "this mirror has to be synced before files can be fetched from it"
   ru: "это зеркало нужно синхронизировать, прежде чем скачивать с него файлы"
+  uk: "це дзеркало потрібно синхронізувати, перш ніж завантажувати з нього файли"
 cat.bad_mirror_url:
   en: "invalid mirror URL: %{error}"
   ru: "неверный адрес зеркала: %{error}"
+  uk: "неправильна адреса дзеркала: %{error}"
 mir.bad_base64:
   en: "the password is not valid base64"
   ru: "пароль не в формате base64"
+  uk: "пароль не у форматі base64"
 mir.not_text:
   en: "the decoded password is not text"
   ru: "пароль после декодирования не является текстом"
+  uk: "пароль після декодування не є текстом"
 mir.bad_server_config:
   en: "invalid server config: %{error}"
   ru: "неверный конфиг сервера: %{error}"
+  uk: "неправильний конфіг сервера: %{error}"
 mir.needs_name:
   en: "the mirror needs a name"
   ru: "у зеркала должно быть имя"
+  uk: "дзеркало повинно мати назву"
 mir.bad_base_uri:
   en: "invalid base URI: %{error}"
   ru: "неверный base URI: %{error}"
+  uk: "неправильний base URI: %{error}"
 mir.base_uri_scheme:
   en: "base URI must start with http:// or https://"
   ru: "base URI должен начинаться с http:// или https://"
+  uk: "base URI має починатися з http:// або https://"
 mir.choose_remote:
   en: "choose an rclone remote"
   ru: "выберите rclone remote"
+  uk: "виберіть rclone remote"
 adb.not_launchable:
   en: "%{package} has no launchable activity"
   ru: "у %{package} нет запускаемой activity"
+  uk: "у %{package} немає activity, яку можна запустити"
 adb.uninstall_failed:
   en: "uninstall of %{package} failed: %{detail}"
   ru: "удаление %{package} не удалось: %{detail}"
+  uk: "видалення %{package} не вдалося: %{detail}"
 adb.no_screenshot:
   en: "screencap didn't return an image: %{detail}"
   ru: "screencap не вернул изображение: %{detail}"
+  uk: "screencap не повернув зображення: %{detail}"
 adb.not_installed:
   en: "%{package} is not installed"
   ru: "%{package} не установлен"
+  uk: "%{package} не встановлено"
 arc.first_volume:
   en: "first volume %{name} is missing"
   ru: "нет первого тома %{name}"
+  uk: "немає першого тому %{name}"
 inst.signature:
   en: "%{package} is installed with a different signature. Reinstalling removes the installed app first; its saves can be backed up and restored."
   ru: "%{package} установлен с другой подписью. Переустановка сначала удалит установленное приложение; перед этим можно сделать бэкап сохранений, а потом восстановить их."
+  uk: "%{package} встановлено з іншим підписом. Перевстановлення спершу видалить встановлений застосунок; перед цим можна зробити резервну копію збережень, а потім відновити їх."
 adb.command_failed:
   en: "`%{command}` failed: %{detail}"
   ru: "`%{command}` завершилась с ошибкой: %{detail}"
+  uk: "`%{command}` завершилася з помилкою: %{detail}"
 dld.not_release:
   en: "not a release folder: %{name}"
   ru: "это не папка релиза: %{name}"
+  uk: "це не тека релізу: %{name}"
 pt.unsupported:
   en: "Google doesn't publish adb for this system; install it yourself"
   ru: "Google не выпускает adb для этой системы; установите его сами"
+  uk: "Google не випускає adb для цієї системи; встановіть його самі"
 pt.no_adb:
   en: "the downloaded package has no adb in it"
   ru: "в скачанном пакете нет adb"
+  uk: "у завантаженому пакеті немає adb"
 pt.title:
   en: "ADB (Android SDK Platform-Tools)"
   ru: "ADB (Android SDK Platform-Tools)"
+  uk: "ADB (Android SDK Platform-Tools)"
 pt.downloading:
   en: "Downloading from Google"
   ru: "Загрузка с сайта Google"
+  uk: "Завантаження із сайту Google"
 pt.done:
   en: "Installed; the app now uses this adb"
   ru: "Установлено, приложение теперь использует этот adb"
+  uk: "Встановлено, застосунок тепер використовує цей adb"
 rc.unsupported:
   en: "rclone.org has no build for this system; install rclone yourself"
   ru: "на rclone.org нет сборки для этой системы; установите rclone сами"
+  uk: "на rclone.org немає збірки для цієї системи; встановіть rclone самі"
 rc.bad_version:
   en: "couldn't read the current rclone version from rclone.org"
   ru: "не удалось узнать текущую версию rclone на rclone.org"
+  uk: "не вдалося дізнатися поточну версію rclone на rclone.org"
 rc.no_sum:
   en: "rclone.org lists no checksum for %{file}"
   ru: "на rclone.org нет контрольной суммы для %{file}"
+  uk: "на rclone.org немає контрольної суми для %{file}"
 rc.bad_sum:
   en: "%{file} doesn't match its checksum on rclone.org, so the app deleted it"
   ru: "%{file} не совпадает с контрольной суммой на rclone.org, поэтому приложение его удалило"
+  uk: "%{file} не збігається з контрольною сумою на rclone.org, тому застосунок його видалив"
 rc.title:
   en: "rclone"
   ru: "rclone"
+  uk: "rclone"
 rc.downloading:
   en: "Downloading from rclone.org"
   ru: "Загрузка с rclone.org"
+  uk: "Завантаження з rclone.org"
 rc.done:
   en: "Installed; the app now uses this rclone"
   ru: "Установлено, приложение теперь использует этот rclone"
+  uk: "Встановлено, застосунок тепер використовує цей rclone"
 rcfg.local_remote:
   en: "the mirror's rclone config makes \"%{name}\" a local folder"
   ru: "rclone-конфиг зеркала делает \"%{name}\" локальной папкой"
+  uk: "rclone-конфіг дзеркала робить \"%{name}\" локальною текою"
 rcfg.runs_program:
   en: "the mirror's rclone config sets \"%{key}\", which would run a program"
   ru: "rclone-конфиг зеркала задаёт \"%{key}\", что запустило бы программу"
+  uk: "rclone-конфіг дзеркала задає \"%{key}\", що запустило б програму"
 rcfg.bad_wrapper:
   en: "the mirror's rclone remote \"%{name}\" (%{kind}) wraps \"%{target}\", which isn't another remote of the mirror"
   ru: "remote \"%{name}\" (%{kind}) зеркала оборачивает \"%{target}\", а это не другой remote зеркала"
+  uk: "remote \"%{name}\" (%{kind}) дзеркала обгортає \"%{target}\", а це не інший remote дзеркала"
 rc.zip_unreadable:
   en: "the rclone zip is unreadable: %{error}"
   ru: "zip с rclone не читается: %{error}"
+  uk: "zip з rclone не читається: %{error}"
 rc.zip_no_rclone:
   en: "the rclone zip has no rclone program in it"
   ru: "в zip нет программы rclone"
+  uk: "у zip немає програми rclone"
 lib.refused_no_key:
   en: "%{error}. The mirror refused access. This build has no API key, and mirrors that require one only work with official builds."
   ru: "%{error}. Зеркало отказало в доступе. В этой сборке нет API-ключа, а зеркала, которым он нужен, работают только с официальными сборками."
+  uk: "%{error}. Дзеркало відмовило в доступі. У цій збірці немає API-ключа, а дзеркала, яким він потрібен, працюють лише з офіційними збірками."
 ren.no_manifest:
   en: "the APK has no AndroidManifest.xml"
   ru: "в APK нет AndroidManifest.xml"
+  uk: "в APK немає AndroidManifest.xml"
 ren.bad_package:
   en: "not a valid package name: use two or more parts separated by dots, each starting with a letter"
   ru: "недопустимое имя пакета: нужно не меньше двух частей через точку, и каждая должна начинаться с буквы"
+  uk: "неприпустима назва пакета: потрібно щонайменше дві частини через крапку, і кожна має починатися з літери"
 ren.same_package:
   en: "the copy needs a package different from the original"
   ru: "у копии должен быть пакет, отличный от оригинала"
+  uk: "копія повинна мати пакет, відмінний від оригіналу"
 err.key_bad:
   en: "signing key: %{error}"
   ru: "ключ подписи: %{error}"
+  uk: "ключ підпису: %{error}"
 err.key_exists:
   en: "%{package} already has a different signing key; replacing it would make the installed copy impossible to update"
   ru: "у %{package} уже есть другой ключ подписи; если его заменить, установленную копию нельзя будет обновить"
+  uk: "у %{package} вже є інший ключ підпису; якщо його замінити, встановлену копію не можна буде оновити"
 ren.exists:
   en: "%{path} already exists; delete it on the Downloads tab to build the copy again"
   ru: "%{path} уже существует; удалите эту папку на вкладке Загрузки, чтобы собрать копию заново"
+  uk: "%{path} вже існує; видаліть цю теку на вкладці Завантаження, щоб зібрати копію заново"
 ren.no_loader:
   en: "the APK has no Platform SDK loader to replace"
   ru: "в APK нет загрузчика Platform SDK, который можно заменить"
+  uk: "в APK немає завантажувача Platform SDK, який можна замінити"
 ren.bad_signature:
   en: "the built copy failed its signature check: %{error}"
   ru: "собранная копия не прошла проверку подписи: %{error}"
+  uk: "зібрана копія не пройшла перевірку підпису: %{error}"
 ren.stage_reading:
   en: "Reading the APK"
   ru: "Чтение APK"
+  uk: "Читання APK"
 ren.stage_key:
   en: "Preparing the signing key"
   ru: "Подготовка ключа подписи"
+  uk: "Підготовка ключа підпису"
 ren.stage_signing:
   en: "Writing and signing the APK"
   ru: "Запись и подпись APK"
+  uk: "Запис і підпис APK"
 ren.stage_checking:
   en: "Checking the signature"
   ru: "Проверка подписи"
+  uk: "Перевірка підпису"
 ren.stage_files:
   en: "Copying OBB and other files"
   ru: "Копирование OBB и остальных файлов"
+  uk: "Копіювання OBB та інших файлів"
 ren.task_title:
   en: "Copy of %{name} as %{package}"
   ru: "Копия %{name} как %{package}"
+  uk: "Копія %{name} як %{package}"
 ren.built:
   en: "Copy built: %{path}"
   ru: "Копия собрана: %{path}"
+  uk: "Копію зібрано: %{path}"
 err.key_not_ours:
   en: "not a key file exported by Quest Sideloader"
   ru: "это не файл ключа, экспортированный Quest Sideloader"
+  uk: "це не файл ключа, експортований Quest Sideloader"
 eng.copy_not_shared:
   en: "%{package} is a renamed copy made here, so it isn't uploaded to the mirror"
   ru: "%{package} собран в этой программе как копия, поэтому на зеркало не загружается"
+  uk: "%{package} зібраний у цій програмі як копія, тому на дзеркало не надсилається"
 hs.skipped_unreadable:
   en: "%{n} files the headset doesn't let adb read were left out, for example %{first}"
   ru: "Пропущено файлов, которые шлем не даёт прочитать через adb: %{n}, например %{first}"
+  uk: "Пропущено файлів, які шолом не дає прочитати через adb: %{n}, наприклад %{first}"
 hs.save_unreadable:
   en: "The game's saves are not in this backup: %{file} can only be read by the game itself, and it doesn't allow run-as. The other files were saved."
   ru: "Сохранений игры в этом бэкапе нет: %{file} может читать только сама игра, а run-as она не разрешает. Остальные файлы сохранены."
+  uk: "Збережень гри в цій резервній копії немає: %{file} може читати лише сама гра, а run-as вона не дозволяє. Решту файлів збережено."
 eng.mtp_on:
   en: "File transfer (MTP) is on; the headset shows up in the computer's file manager"
   ru: "Передача файлов (MTP) включена; шлем появится в файловом менеджере компьютера"
+  uk: "Передавання файлів (MTP) увімкнено; шолом з'явиться у файловому менеджері комп'ютера"
 eng.mtp_off:
   en: "File transfer (MTP) is off; USB is back to charging only"
   ru: "Передача файлов (MTP) выключена; USB снова только заряжает"
+  uk: "Передавання файлів (MTP) вимкнено; USB знову лише заряджає"
 err.adb_install_explained:
   en: "installation failed: %{reason} (%{error})"
   ru: "установка не удалась: %{reason} (%{error})"
+  uk: "встановлення не вдалося: %{reason} (%{error})"
 err.inst_storage:
   en: "the headset is out of space; delete something on it and try again"
   ru: "на шлеме не хватает места; удалите что-нибудь и попробуйте снова"
+  uk: "на шоломі не вистачає місця; видаліть щось і спробуйте знову"
 err.inst_signature:
   en: "the installed version is signed with another key; uninstall it first, or reinstall keeping the saves"
   ru: "установленная версия подписана другим ключом; сначала удалите её или переустановите с сохранениями"
+  uk: "встановлена версія підписана іншим ключем; спершу видаліть її або перевстановіть зі збереженнями"
 err.inst_downgrade:
   en: "a newer version is already installed"
   ru: "на шлеме уже стоит более новая версия"
+  uk: "на шоломі вже стоїть новіша версія"
 err.inst_older_sdk:
   en: "the game needs newer headset firmware"
   ru: "игре нужна более новая прошивка шлема"
+  uk: "грі потрібна новіша прошивка шолома"
 err.inst_abi:
   en: "the APK isn't built for this headset's processor"
   ru: "APK собран не под процессор этого шлема"
+  uk: "APK зібраний не під процесор цього шолома"
 err.inst_permission:
   en: "another installed app already declares the same permission, usually the original game or its copy"
   ru: "другое установленное приложение уже объявило то же разрешение, обычно это оригинал игры или её копия"
+  uk: "інший встановлений застосунок уже оголосив той самий дозвіл, зазвичай це оригінал гри або її копія"
 err.inst_provider:
   en: "another installed app already uses the same content provider, usually the original game or its copy"
   ru: "другое установленное приложение уже использует тот же провайдер, обычно это оригинал игры или её копия"
+  uk: "інший встановлений застосунок уже використовує той самий провайдер, зазвичай це оригінал гри або її копія"
 err.inst_restricted:
   en: "the headset doesn't allow installing apps over USB right now"
   ru: "шлем сейчас не разрешает устанавливать приложения по USB"
+  uk: "шолом зараз не дозволяє встановлювати застосунки через USB"
 err.inst_broken:
   en: "the APK is damaged or not signed; download it again"
   ru: "APK повреждён или не подписан; скачайте его заново"
+  uk: "APK пошкоджений або не підписаний; завантажте його заново"
 dev.connected:
   en: "Connected to %{address} over Wi-Fi"
   ru: "Подключено к %{address} по Wi-Fi"
+  uk: "Підключено до %{address} через Wi-Fi"

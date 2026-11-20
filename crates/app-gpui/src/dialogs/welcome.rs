@@ -148,14 +148,19 @@ impl Welcome {
 						// Language names stay in their own language.
 						(Language::English, "English".to_owned()),
 						(Language::Russian, "Русский".to_owned()),
+						(Language::Ukrainian, "Українська".to_owned()),
 					]
 					.into_iter()
 					.enumerate()
 					.map(|(ix, (value, label))| {
-						choice(["lang-0", "lang-1", "lang-2"][ix], label, language == value)
-							.on_click(cx.listener(move |this, _, window, cx| {
-								this.set_language(value, window, cx)
-							}))
+						choice(
+							["lang-0", "lang-1", "lang-2", "lang-3"][ix],
+							label,
+							language == value,
+						)
+						.on_click(cx.listener(
+							move |this, _, window, cx| this.set_language(value, window, cx),
+						))
 					}),
 				),
 				cx,

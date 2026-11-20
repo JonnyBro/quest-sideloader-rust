@@ -343,6 +343,7 @@ impl SettingsView {
 						// Language names stay in their own language.
 						("lang-en", Language::English, "English".to_owned()),
 						("lang-ru", Language::Russian, "Русский".to_owned()),
+						("lang-uk", Language::Ukrainian, "Українська".to_owned()),
 					]
 					.into_iter()
 					.map(|(id, value, label)| {
