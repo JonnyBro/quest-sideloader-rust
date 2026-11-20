@@ -57,6 +57,21 @@ jobs:
           rustup default stable
           rustup target add ${{ matrix.targets }}
 
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang pkg-config libfontconfig-dev libfreetype-dev \
+            libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev \
+            libxcb1-dev libvulkan-dev
+
+      - uses: rui314/setup-mold@v1
+        if: runner.os == 'Linux'
+
+      - name: Install Metal toolchain
+        if: runner.os == 'macOS'
+        run: xcrun metal --version || xcodebuild -downloadComponent MetalToolchain
+
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.name }}
@@ -83,6 +98,8 @@ jobs:
               ;;
             linux-*)
               cp target/x86_64-unknown-linux-gnu/release/quest-sideloader "dist/$name/"
+              cp crates/app/assets/app-icon/quest-sideloader.desktop \
+                crates/app/assets/app-icon/quest-sideloader.png "dist/$name/"
               tar -C dist -czf "dist/$name.tar.gz" "$name"
               ;;
             macos-*)

@@ -23,7 +23,7 @@ its connection (USB or Wi-Fi); click it to switch headsets, connect one over
 Wi-Fi or open the device list.
 
 The status bar along the bottom shows the headset, its connection, battery
-and temperature, free space and the adb version. The running task appears on
+and temperature, the controllers' charge, free space and the adb version. The running task appears on
 its right with its progress, and the Logs button opens the log panel above
 the status bar.
 
@@ -35,8 +35,8 @@ installed on the selected headset.
 
 ## Headset tab
 
-The top of the tab names the headset with its Android version, build and
-serial. When there is no headset, the tab shows how to connect one.
+The top of the tab names the headset with its Android and Horizon OS versions
+and its serial. When there is no headset, the tab shows how to connect one.
 
 Apps lists the installed apps with their cover, package, version, size and a
 badge saying whether the catalog has this version or a newer one. Renamed
@@ -46,8 +46,13 @@ System switch is on. Click a column header to sort by it, click again to
 reverse. Each app's "..." menu starts, stops, backs up or uninstalls it;
 uninstalling can back up the saves first and remove the app's OBB files.
 
-Device shows the headset's model, battery, storage, memory, uptime, Wi-Fi
-address, USB mode and wireless ADB state. It can turn on wireless ADB, switch
+Device shows what the headset reports about itself: model, Horizon OS
+version, build and security patch, memory, storage and uptime; battery,
+charger and temperatures; the Wi-Fi network with its signal and link speed;
+USB mode and wireless ADB state. It also shows each paired controller's
+charge and firmware. The headset only updates the charge while a controller
+is on, so a controller left in a drawer shows its last reading. The tools at
+the top can turn on wireless ADB, switch
 USB to file transfer (MTP) so the headset opens in the computer's file
 manager, take screenshots (saved to your Pictures folder), restart or power
 off the headset, and set the refresh rate and CPU and GPU levels until the
@@ -232,6 +237,9 @@ You need:
 - A C compiler for the TLS library: GCC or Clang on Linux, the Xcode command
   line tools on macOS (`xcode-select --install`), and the MSVC build tools on
   Windows (rustup installs them together with Rust).
+- On macOS, full Xcode: gpui compiles its Metal shaders with Xcode's `metal`
+  compiler. Xcode 26 downloads it separately, with
+  `xcodebuild -downloadComponent MetalToolchain`.
 - On Linux, `clang` and the [mold](https://github.com/rui314/mold) linker:
   `.cargo/config.toml` links with them, because the app links much faster
   that way. Remove that section to use the default linker. gpui also needs
@@ -276,18 +284,13 @@ C runtime statically, so the exe runs without the Visual C++ Redistributable.
 The same file hides linker warning LNK4099 (missing `.pdb` files for prebuilt
 libraries), which only affects debugging symbols.
 
-From Linux, build with [cargo-xwin](https://github.com/rust-cross/cargo-xwin),
-which downloads the MSVC CRT and Windows SDK on first use (this means
-accepting Microsoft's license for them). It also needs `clang` and `lld`:
-
-```bash
-rustup target add x86_64-pc-windows-msvc
-cargo install --locked cargo-xwin
-cargo xwin build --release --target x86_64-pc-windows-msvc
-```
-
-The exe is `target/x86_64-pc-windows-msvc/release/quest-sideloader.exe`. The
-API key is picked up the same way as in a native build.
+A release build has to run on Windows. gpui compiles its DirectX shaders with
+`fxc.exe` from the Windows SDK, and its build script only does that when the
+build itself runs on Windows. With cargo-xwin from Linux the shaders are never
+compiled and the release build fails. Debug builds get past it by compiling
+the shaders at startup, but they read the shader source from the cargo
+registry on the build machine, so the exe only runs where it was built.
+Official Windows builds come from a Windows runner in CI.
 
 ### Running
 
@@ -301,6 +304,12 @@ To run the app you need:
 - Linux: a desktop with Wayland or X11, a Vulkan or OpenGL driver, and
   `xdg-desktop-portal` for file dialogs. The headset needs udev rules for USB
   access (for example the `android-udev` package).
+
+On Linux, the window shows its icon once the desktop finds
+`quest-sideloader.desktop`. The release archive has it next to the binary;
+copy it to `~/.local/share/applications`, put `quest-sideloader.png` in
+`~/.local/share/icons/hicolor/256x256/apps`, and change `Exec=` to the full
+path of the binary if it isn't on `PATH`.
 - `rclone`, for any mirror. If a sync fails because
   rclone is missing, the app offers to download the official build from
   rclone.org and checks it against the published SHA-256 sums before using it.
@@ -340,6 +349,8 @@ The fonts are [Inter](https://rsms.me/inter/) and
 License; the licenses are in `crates/app/assets/fonts`.
 
 The color schemes follow the published palettes of their projects.
+
+The app icon is the letters QSR set in Inter Bold, turned into outlines.
 
 ## License
 

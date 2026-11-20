@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Quest Sideloader
+Comment=Install and manage apps on Meta Quest headsets
+Exec=quest-sideloader
+Icon=quest-sideloader
+Terminal=false
+Categories=Utility;
+StartupWMClass=quest-sideloader

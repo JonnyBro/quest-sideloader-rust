@@ -1031,17 +1031,33 @@ impl HeadsetView {
 			}),
 		);
 
-		div()
-			.id("device-section")
+		v_flex()
 			.size_full()
-			.overflow_y_scroll()
 			.child(
-				v_flex()
-					.gap_4()
-					.p_5()
-					.child(info_cards)
-					.child(card(t!("hs.tools").into(), tools, &theme))
-					.child(card(t!("hs.performance").into(), tweaks, &theme)),
+				div().px_5().pt_5().pb_4().child(
+					h_flex()
+						.gap_4()
+						.flex_wrap()
+						.items_stretch()
+						.child(
+							card(t!("hs.tools").into(), tools, &theme)
+								.flex_1()
+								.min_w(px(380.)),
+						)
+						.child(
+							card(t!("hs.performance").into(), tweaks, &theme)
+								.flex_1()
+								.min_w(px(380.)),
+						),
+				),
+			)
+			.child(
+				div()
+					.id("device-section")
+					.flex_1()
+					.min_h_0()
+					.overflow_y_scroll()
+					.child(v_flex().gap_4().px_5().pb_5().child(info_cards)),
 			)
 			.into_any_element()
 	}

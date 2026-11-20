@@ -24,6 +24,21 @@ jobs:
           rustup toolchain install stable --profile minimal --component clippy,rustfmt
           rustup default stable
 
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang pkg-config libfontconfig-dev libfreetype-dev \
+            libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev \
+            libxcb1-dev libvulkan-dev
+
+      - uses: rui314/setup-mold@v1
+        if: runner.os == 'Linux'
+
+      - name: Install Metal toolchain
+        if: runner.os == 'macOS'
+        run: xcrun metal --version || xcodebuild -downloadComponent MetalToolchain
+
       - uses: Swatinem/rust-cache@v2
 
       - name: Install rclone

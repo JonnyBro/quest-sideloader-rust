@@ -23,3 +23,6 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter", "chrono"] }
 
 [lints]
 workspace = true
+
+[build-dependencies]
+winresource = "0.1.34"
