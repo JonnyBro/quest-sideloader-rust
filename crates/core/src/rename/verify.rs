@@ -10,9 +10,19 @@ use sha2::Sha256;
 use super::chunk::Reader;
 use super::sign::{BLOCK_MAGIC, ContentDigest, RSA_PKCS1_SHA256, V2_BLOCK_ID};
 
-/// Returns the signer's certificate if the v2 signature is valid.
-pub fn verify_v2(path: &Path) -> Result<Vec<u8>, String> {
-	let mut file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+struct SigningBlock {
+	start: u64,
+	central_offset: u64,
+	end_offset: u64,
+	/// The zip end record.
+	end: Vec<u8>,
+	/// `(id, value)` of each entry: v2, v3 and so on.
+	pairs: Vec<(u32, Vec<u8>)>,
+}
+
+/// Finds the APK signing block before the central directory. `Ok(None)`
+/// when the APK has none (signed with v1 only, or not at all).
+fn read_signing_block(file: &mut std::fs::File) -> Result<Option<SigningBlock>, String> {
 	let len = file.metadata().map_err(|e| e.to_string())?.len();
 
 	// The end record is the last 22 bytes when there is no comment, which is
@@ -30,46 +40,76 @@ pub fn verify_v2(path: &Path) -> Result<Vec<u8>, String> {
 					== tail.len() - i - 22
 		})
 		.ok_or("no zip end record")?;
-	let mut end = tail[end_at..].to_vec();
+	let end = tail[end_at..].to_vec();
 	let end_offset = len - tail_len + end_at as u64;
 	let central_offset = u64::from(u32::from_le_bytes([end[16], end[17], end[18], end[19]]));
 
+	let Some(footer_at) = central_offset.checked_sub(24) else {
+		return Ok(None);
+	};
 	let mut footer = [0u8; 24];
-	file.seek(SeekFrom::Start(
-		central_offset.checked_sub(24).ok_or("no signing block")?,
-	))
-	.map_err(|e| e.to_string())?;
+	file.seek(SeekFrom::Start(footer_at))
+		.map_err(|e| e.to_string())?;
 	file.read_exact(&mut footer).map_err(|e| e.to_string())?;
 	if &footer[8..] != BLOCK_MAGIC {
-		return Err("no APK signing block".into());
+		return Ok(None);
 	}
 	let size = u64::from_le_bytes(footer[..8].try_into().unwrap_or_default());
-	let block_start = central_offset
+	let start = central_offset
 		.checked_sub(size + 8)
 		.ok_or("bad signing block size")?;
 	let mut block = vec![0u8; (size + 8) as usize];
-	file.seek(SeekFrom::Start(block_start))
+	file.seek(SeekFrom::Start(start))
 		.map_err(|e| e.to_string())?;
 	file.read_exact(&mut block).map_err(|e| e.to_string())?;
 	if u64::from_le_bytes(block[..8].try_into().unwrap_or_default()) != size {
 		return Err("signing block sizes differ".into());
 	}
 
-	let pairs = &block[8..block.len() - 24];
+	let raw = &block[8..block.len() - 24];
+	let mut pairs = Vec::new();
 	let mut at = 0;
-	let mut v2 = None;
-	while at + 12 <= pairs.len() {
-		let pair_len =
-			u64::from_le_bytes(pairs[at..at + 8].try_into().unwrap_or_default()) as usize;
-		let body = pairs
+	while at + 12 <= raw.len() {
+		let pair_len = u64::from_le_bytes(raw[at..at + 8].try_into().unwrap_or_default()) as usize;
+		let body = raw
 			.get(at + 8..at + 8 + pair_len)
 			.ok_or("bad pair length")?;
-		if u32::from_le_bytes(body[..4].try_into().unwrap_or_default()) == V2_BLOCK_ID {
-			v2 = Some(&body[4..]);
-		}
+		let id = u32::from_le_bytes(body[..4].try_into().unwrap_or_default());
+		pairs.push((id, body[4..].to_vec()));
 		at += 8 + pair_len;
 	}
-	let v2 = v2.ok_or("no v2 signature")?;
+	Ok(Some(SigningBlock {
+		start,
+		central_offset,
+		end_offset,
+		end,
+		pairs,
+	}))
+}
+
+/// Ids of the entries in the APK's signing block, empty without one.
+pub fn signing_block_ids(path: &Path) -> Result<Vec<u32>, String> {
+	let mut file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+	Ok(read_signing_block(&mut file)?
+		.map(|b| b.pairs.iter().map(|(id, _)| *id).collect())
+		.unwrap_or_default())
+}
+
+/// Returns the signer's certificate if the v2 signature is valid.
+pub fn verify_v2(path: &Path) -> Result<Vec<u8>, String> {
+	let mut file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+	let SigningBlock {
+		start: block_start,
+		central_offset,
+		end_offset,
+		mut end,
+		pairs,
+	} = read_signing_block(&mut file)?.ok_or("no APK signing block")?;
+	let v2 = pairs
+		.iter()
+		.find(|(id, _)| *id == V2_BLOCK_ID)
+		.map(|(_, v)| v.as_slice())
+		.ok_or("no v2 signature")?;
 
 	let signers = items(prefixed_at(v2, 0)?)?;
 	let signer = signers.first().ok_or("no signer")?;

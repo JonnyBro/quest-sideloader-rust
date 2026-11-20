@@ -105,6 +105,21 @@ impl StringPool {
 		(self.entries.len() - 1) as u32
 	}
 
+	/// Adds `text` as a new string even if it's there already, for a name
+	/// that needs an index of its own.
+	pub fn append(&mut self, text: &str) -> u32 {
+		let raw = if self.flags & UTF8_FLAG != 0 {
+			encode_utf8(text)
+		} else {
+			encode_utf16(text)
+		};
+		self.entries.push(Entry {
+			text: text.to_owned(),
+			raw,
+		});
+		(self.entries.len() - 1) as u32
+	}
+
 	/// Replaces the string in place, so every reference to it changes too.
 	pub fn set(&mut self, index: u32, text: &str) {
 		let utf8 = self.flags & UTF8_FLAG != 0;

@@ -5,6 +5,28 @@ use super::strpool::{self, StringPool};
 
 const TABLE_TYPE: u16 = 0x0002;
 const PACKAGE_TYPE: u16 = 0x0200;
+const TYPE_TYPE: u16 = 0x0201;
+
+/// Two letters, or three packed into the two bytes (high bit set).
+fn unpack_locale(a: u8, b: u8) -> Option<String> {
+	if a == 0 {
+		return None;
+	}
+	if a & 0x80 == 0 {
+		return Some(String::from_utf8_lossy(&[a, b]).into_owned());
+	}
+	let letter = |n: u8| char::from(b'a' + n);
+	Some(
+		[
+			b & 0x1f,
+			((b & 0xe0) >> 5) | ((a & 0x03) << 3),
+			(a & 0x7c) >> 2,
+		]
+		.map(letter)
+		.iter()
+		.collect(),
+	)
+}
 
 #[derive(Debug, Clone)]
 pub struct ResourceTable {
@@ -22,6 +44,8 @@ pub struct ResourceTable {
 pub struct Package {
 	/// Resource entry names, such as `app_name` or `google_app_id`.
 	pub keys: StringPool,
+	/// Languages the resources have versions for, like `ru` or `pt-BR`.
+	pub locales: Vec<String>,
 }
 
 impl ResourceTable {
@@ -92,8 +116,35 @@ impl Package {
 		let r = Reader::new(chunk);
 		// After the header, id, name, typeStrings and lastPublicType.
 		let key_strings = r.u32(12 + 256 + 8)? as usize;
+		let mut locales = Vec::new();
+		let mut at = r.u16(2)? as usize;
+		while at + 8 <= chunk.len() {
+			let size = r.u32(at + 4)? as usize;
+			if size < 8 {
+				break;
+			}
+			// ResTable_type: the config's language and country follow its
+			// size and the mcc/mnc pair.
+			if r.u16(at)? == TYPE_TYPE {
+				let config = at + 20;
+				let language = unpack_locale(r.u8(config + 8)?, r.u8(config + 9)?);
+				let country = unpack_locale(r.u8(config + 10)?, r.u8(config + 11)?);
+				if let Some(language) = language {
+					let locale = match country {
+						Some(country) => format!("{language}-{}", country.to_ascii_uppercase()),
+						None => language,
+					};
+					if !locales.contains(&locale) {
+						locales.push(locale);
+					}
+				}
+			}
+			at += size;
+		}
+		locales.sort();
 		Ok(Self {
 			keys: StringPool::parse(r.slice(key_strings, chunk.len() - key_strings)?)?,
+			locales,
 		})
 	}
 }

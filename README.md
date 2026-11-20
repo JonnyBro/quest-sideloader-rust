@@ -78,10 +78,22 @@ so it installs over the older copy.
 Copies are never offered for upload on the Library tab, and the app refuses
 to upload a package it has a key for.
 
+A copy can also be made debuggable. Then `run-as` works for it, and save
+backups get its private data and the files only the game may read. Some games
+behave differently or don't start when debuggable, so this is off by default.
+
 If the game has the Platform SDK loader (`libovrplatformloader.so`), it can be
 replaced with a patched one, so the game starts on older headset firmware. The
 app doesn't download that file; you choose one you got yourself, and the
 report lists the SHA-256 of both.
+
+## Inspector tab
+
+The Inspector tab shows what an APK or release folder contains: name,
+package, version, Android SDK levels, the headsets it supports, permissions
+and features, architectures, languages, the signature schemes and
+certificate (and whether a renamed copy made here signed it), and the APK's
+SHA-256 and MD5. Details on the Downloads tab opens a release there.
 
 ## Console tab
 

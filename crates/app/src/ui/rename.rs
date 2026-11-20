@@ -18,6 +18,7 @@ struct Item {
 	state: State,
 	new_package: String,
 	use_loader: bool,
+	debuggable: bool,
 	/// A build was started; its progress is on the Tasks tab.
 	started: bool,
 }
@@ -85,6 +86,7 @@ impl RenameView {
 			state: State::Analyzing,
 			new_package: String::new(),
 			use_loader: false,
+			debuggable: false,
 			started: false,
 		});
 		self.selected = Some(id);
@@ -171,6 +173,7 @@ impl RenameView {
 						source: item.path.clone(),
 						new_package,
 						loader: self.loader.clone().filter(|_| item.use_loader),
+						debuggable: item.debuggable,
 						title,
 					});
 				}
@@ -390,6 +393,13 @@ fn details(
 		});
 		ui.add_space(6.0);
 	}
+	if analysis.debuggable {
+		ui.weak(t!("rn.already_debuggable"));
+	} else {
+		ui.checkbox(&mut item.debuggable, t!("rn.debuggable"))
+			.on_hover_text(t!("rn.debuggable_hint"));
+	}
+	ui.add_space(6.0);
 	let out = output_dir(&item.path, downloads_dir, new);
 	ui.weak(t!("rn.output", path = out.display()));
 	let loader_missing = item.use_loader && loader.is_none();

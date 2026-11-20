@@ -9,6 +9,7 @@ mod build;
 mod chunk;
 mod der;
 mod dex;
+mod inspect;
 mod keys;
 mod sign;
 mod strpool;
@@ -21,5 +22,6 @@ pub use analyze::{
 	suggest_package,
 };
 pub use build::{BuildError, BuildRequest, build, output_dir};
+pub use inspect::{Certificate, Feature, Inspection, Signature, inspect};
 pub use keys::{KeyError, KeyStore, SigningKey};
 pub use token::rename_value;

@@ -70,8 +70,15 @@ fn init_logging(
 		"info,wgpu_hal=warn,wgpu_core=warn,egui_wgpu=warn"
 	};
 	let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default));
-	let stderr = fmt::layer().with_writer(std::io::stderr);
-	let in_app = fmt::layer().with_ansi(false).with_writer(buffer);
+	// tracing writes UTC unless told otherwise; people read these in their own time.
+	let timer = fmt::time::ChronoLocal::rfc_3339();
+	let stderr = fmt::layer()
+		.with_timer(timer.clone())
+		.with_writer(std::io::stderr);
+	let in_app = fmt::layer()
+		.with_timer(timer.clone())
+		.with_ansi(false)
+		.with_writer(buffer);
 
 	match tracing_appender::rolling::Builder::new()
 		.rotation(tracing_appender::rolling::Rotation::DAILY)
@@ -82,7 +89,10 @@ fn init_logging(
 	{
 		Ok(appender) => {
 			let (writer, guard) = tracing_appender::non_blocking(appender);
-			let file = fmt::layer().with_ansi(false).with_writer(writer);
+			let file = fmt::layer()
+				.with_timer(timer)
+				.with_ansi(false)
+				.with_writer(writer);
 			tracing_subscriber::registry()
 				.with(filter)
 				.with(stderr)

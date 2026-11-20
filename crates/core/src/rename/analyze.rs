@@ -31,6 +31,8 @@ pub struct Analysis {
 	/// Native libraries with JNI functions named after the package.
 	pub jni_libraries: Vec<String>,
 	pub firebase: bool,
+	/// The app already allows `run-as`.
+	pub debuggable: bool,
 	pub platform_loader: Option<String>,
 	pub obb_files: Vec<String>,
 	pub script_lines: Vec<String>,
@@ -88,6 +90,7 @@ const PARENT_ACTIVITY: [&str; 2] = [
 	"androidx.core.PARENT_ACTIVITY",
 ];
 const ATTR_NAME: u32 = 0x0101_0003;
+pub const DEBUGGABLE: u32 = 0x0101_000f;
 const ATTR_VALUE: u32 = 0x0101_0024;
 
 pub fn manifest_changes(xml: &Axml, package: &str) -> Result<Vec<ManifestChange>, String> {
@@ -189,6 +192,13 @@ pub fn analyze(path: &Path) -> Result<Analysis, SideloadError> {
 		read("AndroidManifest.xml")?.ok_or_else(|| apk_err(t!("ren.no_manifest").into_owned()))?;
 	let xml = Axml::parse(&manifest_data).map_err(|e| apk_err(e.to_string()))?;
 	let manifest = manifest_changes(&xml, &package).map_err(apk_err)?;
+	let debuggable = xml
+		.elements()
+		.map_err(|e| apk_err(e.to_string()))?
+		.iter()
+		.filter(|e| e.name == "application")
+		.flat_map(|e| &e.attributes)
+		.any(|a| a.is_android("debuggable", DEBUGGABLE) && a.as_bool() == Some(true));
 
 	let mut resources = Vec::new();
 	let mut firebase = false;
@@ -271,6 +281,7 @@ pub fn analyze(path: &Path) -> Result<Analysis, SideloadError> {
 		dex_count,
 		jni_libraries,
 		firebase,
+		debuggable,
 		platform_loader,
 		obb_files,
 		script_lines,

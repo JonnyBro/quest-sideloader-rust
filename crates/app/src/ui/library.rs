@@ -994,7 +994,10 @@ fn details(
 						game.version_code.map(|v| v.to_string()).unwrap_or_default(),
 					),
 					(t!("lib.col_size"), size_text(game)),
-					(t!("lib.col_updated"), game.last_updated.clone()),
+					(
+						t!("lib.col_updated"),
+						super::mirror_time(&game.last_updated),
+					),
 					(t!("lib.col_popularity"), rank_text(rank)),
 				] {
 					ui.label(label);
@@ -1055,9 +1058,10 @@ fn size_text(game: &Game) -> String {
 		.unwrap_or_default()
 }
 
-/// `2024-11-02 10:15 UTC` -> `2024-11-02`.
-fn short_date(value: &str) -> &str {
-	value.split_whitespace().next().unwrap_or(value)
+/// `2024-11-02 10:15 UTC` -> `2024-11-02`, in the computer's time zone.
+fn short_date(value: &str) -> String {
+	let local = super::mirror_time(value);
+	local.split_whitespace().next().unwrap_or(&local).to_owned()
 }
 
 fn ago(time: SystemTime) -> String {
@@ -1243,7 +1247,10 @@ mod tests {
 
 	#[test]
 	fn dates() {
-		assert_eq!(short_date("2024-11-02 10:15 UTC"), "2024-11-02");
+		// The day depends on the time zone the test runs in.
+		let date = short_date("2024-11-02 10:15 UTC");
+		assert!(["2024-11-01", "2024-11-02", "2024-11-03"].contains(&date.as_str()));
 		assert_eq!(short_date(""), "");
+		assert_eq!(short_date("someday"), "someday");
 	}
 }

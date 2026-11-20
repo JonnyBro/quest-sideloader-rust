@@ -3,6 +3,7 @@ pub mod contribute;
 pub mod devices;
 pub mod downloads;
 pub mod headset;
+pub mod inspector;
 pub mod keys;
 pub mod library;
 pub mod logs;
@@ -29,23 +30,24 @@ pub fn open_folder(path: &std::path::Path) {
 	}
 }
 
-/// Unix seconds as `YYYY-MM-DD HH:MM` (UTC).
+/// Unix seconds as `YYYY-MM-DD HH:MM` in the computer's time zone.
 pub fn format_unix_time(secs: u64) -> String {
-	let days = (secs / 86_400) as i64;
-	let rem = secs % 86_400;
-	// Howard Hinnant's days-to-civil algorithm.
-	let z = days + 719_468;
-	let era = z.div_euclid(146_097);
-	let doe = z.rem_euclid(146_097);
-	let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-	let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-	let mp = (5 * doy + 2) / 153;
-	let day = doy - (153 * mp + 2) / 5 + 1;
-	let month = if mp < 10 { mp + 3 } else { mp - 9 };
-	let year = yoe + era * 400 + i64::from(month <= 2);
-	format!(
-		"{year:04}-{month:02}-{day:02} {:02}:{:02}",
-		rem / 3600,
-		(rem % 3600) / 60
-	)
+	chrono::DateTime::from_timestamp(secs as i64, 0)
+		.map(|t| local(t.with_timezone(&chrono::Utc)))
+		.unwrap_or_default()
+}
+
+fn local(time: chrono::DateTime<chrono::Utc>) -> String {
+	time.with_timezone(&chrono::Local)
+		.format("%Y-%m-%d %H:%M")
+		.to_string()
+}
+
+/// A mirror's `2024-11-02 10:15 UTC` in the computer's time zone, or the
+/// text as it is when it doesn't parse.
+pub fn mirror_time(value: &str) -> String {
+	let trimmed = value.trim().trim_end_matches("UTC").trim();
+	chrono::NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M")
+		.map(|t| local(t.and_utc()))
+		.unwrap_or_else(|_| value.to_owned())
 }

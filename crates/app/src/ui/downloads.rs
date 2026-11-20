@@ -6,6 +6,11 @@ use quest_sideloader_core::downloaded::DownloadedRelease;
 
 use super::format_bytes;
 
+pub enum Action {
+	Rename(std::path::PathBuf),
+	Inspect(std::path::PathBuf),
+}
+
 pub struct DownloadsView {
 	releases: Option<Vec<DownloadedRelease>>,
 	/// Ask the engine for the list next time the tab is shown.
@@ -33,15 +38,15 @@ impl DownloadsView {
 	}
 
 	/// `install_target` is `(serial, name)` of the headset to install on.
-	/// Returns a release the user wants to make a renamed copy of.
+	/// Returns what the user wants done with a release on another tab.
 	pub fn show(
 		&mut self,
 		ui: &mut egui::Ui,
 		folder: &Path,
 		install_target: Option<(&str, &str)>,
 		commands: &mut Vec<Command>,
-	) -> Option<std::path::PathBuf> {
-		let mut rename = None;
+	) -> Option<Action> {
+		let mut action = None;
 		if self.stale {
 			self.stale = false;
 			commands.push(Command::ListDownloads);
@@ -149,7 +154,10 @@ impl DownloadsView {
 								.on_hover_text(t!("dl.copy_hint"))
 								.clicked()
 							{
-								rename = Some(release.path.clone());
+								action = Some(Action::Rename(release.path.clone()));
+							}
+							if ui.small_button(t!("dl.details")).clicked() {
+								action = Some(Action::Inspect(release.path.clone()));
 							}
 							if ui.small_button(t!("common.open")).clicked() {
 								super::open_folder(&release.path);
@@ -163,7 +171,7 @@ impl DownloadsView {
 			});
 
 		self.delete_dialog(ui.ctx(), commands);
-		rename
+		action
 	}
 
 	fn delete_dialog(&mut self, ctx: &egui::Context, commands: &mut Vec<Command>) {

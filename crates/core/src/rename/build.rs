@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
-use super::analyze::{PLATFORM_LOADER, check_package, obb_name, planned_changes};
+use super::analyze::{DEBUGGABLE, PLATFORM_LOADER, check_package, obb_name, planned_changes};
 use super::arsc::ResourceTable;
 use super::axml::Axml;
 use super::keys::{KeyError, KeyStore};
@@ -26,6 +26,9 @@ pub struct BuildRequest {
 	pub new_package: String,
 	/// A replacement for the Platform SDK loader, chosen by the user.
 	pub loader: Option<PathBuf>,
+	/// Mark the copy debuggable, so `run-as` works and backups get all of
+	/// its files.
+	pub debuggable: bool,
 	pub dest_dir: PathBuf,
 }
 
@@ -158,6 +161,11 @@ fn build_into(
 			change.element, change.attribute, change.value
 		));
 		xml.set_string(&attribute, &value);
+	}
+	if request.debuggable {
+		xml.set_android_bool("application", "debuggable", DEBUGGABLE, true)
+			.map_err(|e| apk_err(e.to_string()))?;
+		lines.push("  <application> debuggable -> true".into());
 	}
 	replace.insert("AndroidManifest.xml".to_owned(), xml.write());
 
@@ -377,6 +385,7 @@ mod tests {
 			source: root.clone(),
 			new_package: "com.copy".into(),
 			loader: Some(loader),
+			debuggable: true,
 			dest_dir: dir.path().to_path_buf(),
 		};
 		let out = build(&request, &keys, &|_| {}).unwrap();
@@ -421,6 +430,12 @@ mod tests {
 			.flat_map(|e| e.attributes.iter().filter_map(|a| a.value.clone()))
 			.collect();
 		assert_eq!(values, ["com.copy", "com.game.App", "com.copy.files"]);
+		let debuggable = xml.elements().unwrap()[1]
+			.attributes
+			.iter()
+			.find(|a| a.name == "debuggable")
+			.and_then(|a| a.as_bool());
+		assert_eq!(debuggable, Some(true));
 		let table = ResourceTable::parse(&read("resources.arsc")).unwrap();
 		assert_eq!(table.strings.get(0), Some("com.copy.files"));
 		assert_eq!(read(PLATFORM_LOADER), b"patched loader");

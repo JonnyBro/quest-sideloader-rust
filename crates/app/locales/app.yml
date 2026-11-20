@@ -14,6 +14,9 @@ tab.downloads:
 tab.rename:
   en: "Rename"
   ru: "Переименование"
+tab.inspector:
+  en: "Inspector"
+  ru: "Инспектор"
 tab.tasks:
   en: "Tasks"
   ru: "Задачи"
@@ -1145,3 +1148,102 @@ hs.mtp_off:
 hs.mtp_hint:
   en: "Switches USB to MTP, so the headset's storage opens in the computer's file manager over the cable. adb keeps working; the USB connection resets for a moment."
   ru: "Переключает USB в режим MTP, чтобы память шлема открылась в файловом менеджере компьютера по кабелю. adb продолжает работать; USB-соединение на секунду переподключится."
+rn.debuggable:
+  en: "Make the copy debuggable, so backups get all its saves"
+  ru: "Сделать копию debuggable, чтобы бэкап брал все её сохранения"
+rn.debuggable_hint:
+  en: "Sets android:debuggable, so run-as works for the copy: backups then include its private data and files only the game may read. Some games behave differently or refuse to start when debuggable."
+  ru: "Ставит android:debuggable, и для копии начинает работать run-as: в бэкап попадают её приватные данные и файлы, которые может читать только сама игра. Некоторые игры ведут себя иначе или не запускаются, если они debuggable."
+rn.already_debuggable:
+  en: "The game is already debuggable: backups get all its saves."
+  ru: "Игра уже debuggable: бэкап берёт все её сохранения."
+common.no:
+  en: "No"
+  ru: "Нет"
+dl.details:
+  en: "Details"
+  ru: "Подробнее"
+ins.heading:
+  en: "APK inspector"
+  ru: "Инспектор APK"
+ins.empty:
+  en: "Open an APK or a release folder here, or use Details on the Downloads tab."
+  ru: "Откройте APK или папку релиза здесь или нажмите \"Подробнее\" на вкладке Загрузки."
+ins.reading:
+  en: "Reading the APK..."
+  ru: "Чтение APK..."
+ins.app:
+  en: "App"
+  ru: "Приложение"
+ins.label:
+  en: "Name"
+  ru: "Название"
+ins.size:
+  en: "Size"
+  ru: "Размер"
+ins.sdk:
+  en: "Android SDK"
+  ru: "Android SDK"
+ins.sdk_values:
+  en: "min %{min}, target %{target}, compiled with %{compile}"
+  ru: "минимум %{min}, целевой %{target}, собрано с %{compile}"
+ins.devices:
+  en: "Headsets"
+  ru: "Шлемы"
+ins.loader:
+  en: "Platform SDK loader"
+  ru: "Загрузчик Platform SDK"
+ins.signature:
+  en: "Signature"
+  ru: "Подпись"
+ins.unsigned:
+  en: "not signed"
+  ru: "не подписан"
+ins.schemes:
+  en: "Schemes"
+  ru: "Схемы"
+ins.v2_check:
+  en: "v2 check"
+  ru: "Проверка v2"
+ins.valid:
+  en: "valid"
+  ru: "в порядке"
+ins.invalid:
+  en: "fails: %{error}"
+  ru: "не проходит: %{error}"
+ins.certificate:
+  en: "Certificate"
+  ru: "Сертификат"
+ins.ours:
+  en: "Signed with the key of the renamed copy %{package} made here."
+  ru: "Подписан ключом копии %{package}, собранной в этой программе."
+ins.contents:
+  en: "Contents"
+  ru: "Содержимое"
+ins.abis:
+  en: "Architectures"
+  ru: "Архитектуры"
+ins.locales:
+  en: "Languages"
+  ru: "Языки"
+ins.native:
+  en: "Native libraries"
+  ru: "Нативные библиотеки"
+ins.entries:
+  en: "Files in the APK"
+  ru: "Файлов в APK"
+ins.components:
+  en: "Components"
+  ru: "Компоненты"
+ins.permissions:
+  en: "Permissions: %{n}"
+  ru: "Разрешения: %{n}"
+ins.features:
+  en: "Features: %{n}"
+  ru: "Возможности (features): %{n}"
+ins.optional:
+  en: "optional"
+  ru: "необязательно"
+ins.hashes:
+  en: "Hashes"
+  ru: "Хэши"

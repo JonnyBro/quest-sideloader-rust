@@ -13,18 +13,20 @@ pub enum Tab {
 	Library,
 	Downloads,
 	Rename,
+	Inspector,
 	Tasks,
 	Console,
 	Settings,
 }
 
 impl Tab {
-	const ALL: [Tab; 8] = [
+	const ALL: [Tab; 9] = [
 		Tab::Devices,
 		Tab::Headset,
 		Tab::Library,
 		Tab::Downloads,
 		Tab::Rename,
+		Tab::Inspector,
 		Tab::Tasks,
 		Tab::Console,
 		Tab::Settings,
@@ -37,6 +39,7 @@ impl Tab {
 			Tab::Library => t!("tab.library"),
 			Tab::Downloads => t!("tab.downloads"),
 			Tab::Rename => t!("tab.rename"),
+			Tab::Inspector => t!("tab.inspector"),
 			Tab::Tasks => t!("tab.tasks"),
 			Tab::Console => t!("tab.console"),
 			Tab::Settings => t!("tab.settings"),
@@ -58,6 +61,7 @@ pub struct SideloaderApp {
 	tasks_view: ui::tasks::TasksView,
 	console_view: ui::console::ConsoleView,
 	rename_view: ui::rename::RenameView,
+	inspector_view: ui::inspector::InspectorView,
 	keys_view: ui::keys::KeysView,
 	/// Packages of renamed copies made here, never offered for upload.
 	copies: std::collections::HashSet<String>,
@@ -132,6 +136,7 @@ impl SideloaderApp {
 			tasks_view: ui::tasks::TasksView::new(),
 			console_view: ui::console::ConsoleView::new(),
 			rename_view,
+			inspector_view: ui::inspector::InspectorView::new(),
 			copies: keys_view.packages().into_iter().collect(),
 			keys_view,
 			downloads_view: ui::downloads::DownloadsView::new(),
@@ -215,6 +220,7 @@ impl SideloaderApp {
 			} => self.review_dialog.push(task, title, analysis),
 			Event::Shell { id, output } => self.console_view.on_output(id, output),
 			Event::RenameAnalysis { id, result } => self.rename_view.on_analysis(id, result),
+			Event::Inspection { id, result } => self.inspector_view.on_result(id, result),
 			Event::Notice(message) => {
 				tracing::info!("{message}");
 				self.status = Some(Status::Info(message));
@@ -384,18 +390,30 @@ impl eframe::App for SideloaderApp {
 					.install_target()
 					.map(|d| (d.serial.clone(), d.display_name()));
 				let target = target.as_ref().map(|(s, n)| (s.as_str(), n.as_str()));
-				if let Some(path) = self.downloads_view.show(
+				if let Some(action) = self.downloads_view.show(
 					ui,
 					self.settings_view.downloads_dir(),
 					target,
 					&mut commands,
 				) {
-					self.rename_view.add(path, &mut commands);
-					self.tab = Tab::Rename;
+					match action {
+						ui::downloads::Action::Rename(path) => {
+							self.rename_view.add(path, &mut commands);
+							self.tab = Tab::Rename;
+						}
+						ui::downloads::Action::Inspect(path) => {
+							self.inspector_view.open(path, &mut commands);
+							self.tab = Tab::Inspector;
+						}
+					}
 				}
 			}
 			Tab::Rename => {
 				self.rename_view
+					.show(ui, self.settings_view.downloads_dir(), &mut commands);
+			}
+			Tab::Inspector => {
+				self.inspector_view
 					.show(ui, self.settings_view.downloads_dir(), &mut commands);
 			}
 			Tab::Tasks => {

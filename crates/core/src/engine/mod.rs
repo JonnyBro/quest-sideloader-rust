@@ -151,12 +151,19 @@ pub enum Command {
 		id: u64,
 		path: PathBuf,
 	},
+	/// Read everything the Inspector tab shows about an APK or a release
+	/// folder; answered with [`Event::Inspection`] carrying the same `id`.
+	Inspect {
+		id: u64,
+		path: PathBuf,
+	},
 	/// Build a renamed copy of a release into the downloads folder.
 	BuildCopy {
 		source: PathBuf,
 		new_package: String,
 		/// The user's replacement for the Platform SDK loader.
 		loader: Option<PathBuf>,
+		debuggable: bool,
 		title: String,
 	},
 }
@@ -236,6 +243,10 @@ pub enum Event {
 	RenameAnalysis {
 		id: u64,
 		result: std::result::Result<crate::rename::Analysis, String>,
+	},
+	Inspection {
+		id: u64,
+		result: std::result::Result<Box<crate::rename::Inspection>, String>,
 	},
 	Notice(String),
 	Error(String),
@@ -700,6 +711,16 @@ async fn run(
 				let shell = console::spawn(id, device, command, state.sink.clone());
 				state.shells.insert(id, shell);
 			}
+			Command::Inspect { id, path } => {
+				let sink = state.sink.clone();
+				let keys = crate::rename::KeyStore::new(state.paths.signing_dir());
+				tokio::task::spawn_blocking(move || {
+					let result = crate::rename::inspect(&path, &keys)
+						.map(Box::new)
+						.map_err(|e| e.to_string());
+					sink.emit(Event::Inspection { id, result });
+				});
+			}
 			Command::AnalyzeRename { id, path } => {
 				let sink = state.sink.clone();
 				tokio::task::spawn_blocking(move || {
@@ -711,6 +732,7 @@ async fn run(
 				source,
 				new_package,
 				loader,
+				debuggable,
 				title,
 			} => {
 				let id = state.new_task_id();
@@ -718,6 +740,7 @@ async fn run(
 					source,
 					new_package: new_package.clone(),
 					loader,
+					debuggable,
 					dest_dir: state.settings.downloads_dir.clone(),
 				};
 				let keys = crate::rename::KeyStore::new(state.paths.signing_dir());
