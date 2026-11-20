@@ -40,7 +40,7 @@ fn main() {
 	apply_language(settings.language);
 
 	gpui_kit::application()
-		.with_assets(gpui_kit::assets::Assets)
+		.with_assets(icons::AppAssets)
 		.run(move |cx: &mut App| {
 			gpui_kit::init(cx);
 			theme::install(cx);

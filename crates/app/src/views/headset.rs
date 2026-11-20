@@ -928,11 +928,13 @@ impl HeadsetView {
 			.gap_4()
 			.flex_wrap()
 			.items_start()
-			.child(
-				card(t!("hs.sec_system").into(), fact_rows(system), &theme)
-					.flex_1()
-					.min_w(px(380.)),
-			)
+			// Both columns are paddingless wrappers: flex grows from a zero basis plus
+			// padding, so a padded card here would come out wider than the other column.
+			.child(v_flex().flex_1().min_w(px(380.)).child(card(
+				t!("hs.sec_system").into(),
+				fact_rows(system),
+				&theme,
+			)))
 			.child(
 				v_flex()
 					.gap_4()
