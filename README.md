@@ -96,7 +96,7 @@ the catalog, downloads and installs. `crates/app` is the gpui application.
 
 ## Credits
 
-- [Inter](https://rsms.me/inter/)
+- [Inter](https://rsms.me/inter).
 - [Fira Code](https://github.com/tonsky/FiraCode).
 
 The licenses are in `crates/app/assets/fonts`.
