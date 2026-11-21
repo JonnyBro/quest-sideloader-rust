@@ -470,30 +470,6 @@ impl SettingsView {
 			.gap_4()
 			.child(hint(t!("set.instant_hint").into(), cx))
 			.child(field(
-				t!("set.theme").into(),
-				h_flex().gap_1().children(
-					[("theme-system", Theme::System, t!("set.theme_system"))]
-						.into_iter()
-						.map(|(id, value, label)| {
-							choice(id, label.into_owned(), theme == value).on_click(cx.listener(
-								move |this, _, window, cx| this.set_theme(value, window, cx),
-							))
-						}),
-				),
-				cx,
-			))
-			.child(field(
-				t!("set.dark_scheme").into(),
-				self.scheme_picker(true, cx),
-				cx,
-			))
-			.child(field(
-				t!("set.light_scheme").into(),
-				self.scheme_picker(false, cx),
-				cx,
-			))
-			.child(field(t!("set.scale").into(), self.scale_control(cx), cx))
-			.child(field(
 				t!("set.language").into(),
 				h_flex().gap_1().children(
 					[
@@ -514,6 +490,30 @@ impl SettingsView {
 						))
 					}),
 				),
+				cx,
+			))
+			.child(field(t!("set.scale").into(), self.scale_control(cx), cx))
+			.child(field(
+				t!("set.theme").into(),
+				h_flex().gap_1().children(
+					[("theme-system", Theme::System, t!("set.theme_system"))]
+						.into_iter()
+						.map(|(id, value, label)| {
+							choice(id, label.into_owned(), theme == value).on_click(cx.listener(
+								move |this, _, window, cx| this.set_theme(value, window, cx),
+							))
+						}),
+				),
+				cx,
+			))
+			.child(field(
+				t!("set.dark_scheme").into(),
+				self.scheme_picker(true, cx),
+				cx,
+			))
+			.child(field(
+				t!("set.light_scheme").into(),
+				self.scheme_picker(false, cx),
 				cx,
 			))
 	}

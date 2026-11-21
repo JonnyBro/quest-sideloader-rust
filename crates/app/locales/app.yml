@@ -177,8 +177,8 @@ hs.battery:
   uk: "Батарея"
 hs.storage:
   en: "Storage"
-  ru: "Память"
-  uk: "Пам'ять"
+  ru: "Хранилище"
+  uk: "Сховище"
 hs.tools:
   en: "Tools"
   ru: "Инструменты"
@@ -365,8 +365,8 @@ hs.mtp_off:
   uk: "Вимкнути передавання файлів"
 hs.mtp_hint:
   en: "Switches USB to MTP, so the headset's storage opens in the computer's file manager over the cable. adb keeps working; the USB connection resets for a moment."
-  ru: "Переключает USB в режим MTP, чтобы память шлема открылась в файловом менеджере компьютера по кабелю. adb продолжает работать; USB-соединение на секунду переподключится."
-  uk: "Перемикає USB у режим MTP, щоб пам'ять шолома відкрилася у файловому менеджері комп'ютера через кабель. adb продовжує працювати; USB-з'єднання на секунду перепідключиться."
+  ru: "Переключает USB в режим MTP, чтобы хранилище шлема открылось в файловом менеджере компьютера по кабелю. adb продолжает работать; USB-соединение на секунду переподключится."
+  uk: "Перемикає USB у режим MTP, щоб сховище шолома відкрилося у файловому менеджері комп'ютера через кабель. adb продовжує працювати; USB-з'єднання на секунду перепідключиться."
 rev.heading:
   en: "Review install.txt: %{title}"
   ru: "Проверка install.txt: %{title}"
@@ -1561,8 +1561,8 @@ dev.unknown:
   uk: "невідомо"
 dev.storage:
   en: "Storage"
-  ru: "Память"
-  uk: "Пам'ять"
+  ru: "Хранилище"
+  uk: "Сховище"
 dev.set_up_adb:
   en: "Set up ADB..."
   ru: "Установить ADB..."
