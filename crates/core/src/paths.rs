@@ -4,6 +4,26 @@ use directories::ProjectDirs;
 
 use crate::error::{Error, IoContext, Result};
 
+/// The program to run for a tool the settings leave unset. Apps started from
+/// Finder get a PATH without Homebrew's folders, so on macOS those are tried
+/// when PATH has no such program.
+pub fn default_tool(name: &str) -> PathBuf {
+	#[cfg(target_os = "macos")]
+	{
+		let on_path = std::env::var_os("PATH")
+			.is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(name).is_file()));
+		if !on_path
+			&& let Some(found) = ["/opt/homebrew/bin", "/usr/local/bin"]
+				.iter()
+				.map(|dir| Path::new(dir).join(name))
+				.find(|candidate| candidate.is_file())
+		{
+			return found;
+		}
+	}
+	PathBuf::from(name)
+}
+
 /// A file with this name next to the executable turns on portable mode.
 pub const PORTABLE_MARKER: &str = "portable.txt";
 /// Where portable mode keeps everything, next to the executable.

@@ -29,7 +29,7 @@ impl AdbServer {
 	pub fn with_port(adb_path: Option<PathBuf>, port: u16) -> Self {
 		Self {
 			addr: SocketAddr::from((Ipv4Addr::LOCALHOST, port)),
-			adb_path: adb_path.unwrap_or_else(|| PathBuf::from("adb")),
+			adb_path: adb_path.unwrap_or_else(|| crate::paths::default_tool("adb")),
 		}
 	}
 

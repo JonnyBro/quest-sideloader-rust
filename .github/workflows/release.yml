@@ -103,10 +103,17 @@ jobs:
               tar -C dist -czf "dist/$name.tar.gz" "$name"
               ;;
             macos-*)
-              lipo -create -output "dist/$name/quest-sideloader" \
+              app="dist/$name/Quest Sideloader.app/Contents"
+              mkdir -p "$app/MacOS" "$app/Resources"
+              lipo -create -output "$app/MacOS/quest-sideloader" \
                 target/aarch64-apple-darwin/release/quest-sideloader \
                 target/x86_64-apple-darwin/release/quest-sideloader
-              tar -C dist -czf "dist/$name.tar.gz" "$name"
+              cp crates/app/assets/app-icon/quest-sideloader.icns "$app/Resources/"
+              sed "s/@VERSION@/${GITHUB_REF_NAME#v}/g" crates/app/macos/Info.plist > "$app/Info.plist"
+              # Ad-hoc signature: there is no Developer ID, but Apple Silicon
+              # refuses to run a bundle whose signature doesn't match its contents.
+              codesign --force --sign - "dist/$name/Quest Sideloader.app"
+              (cd dist && ditto -c -k --keepParent "$name" "$name.zip")
               ;;
           esac
 

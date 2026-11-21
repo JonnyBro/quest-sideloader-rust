@@ -58,6 +58,13 @@ your own builds go without it and mirrors that require one refuse them.
 - `rclone` for mirrors. If it's missing, the app offers to download the
   official build and checks its SHA-256.
 - Windows: Meta's Quest ADB driver.
+- macOS: the release is a universal `Quest Sideloader.app` for Apple Silicon
+  and Intel, macOS 10.15 or newer. It has no Developer ID signature, so the
+  first launch is blocked: open it from System Settings, Privacy & Security,
+  Open Anyway, or run
+  `xattr -dr com.apple.quarantine "/Applications/Quest Sideloader.app"`.
+  adb and rclone from Homebrew are found even though apps started from
+  Finder don't see Homebrew on `PATH`.
 - Linux: Wayland or X11, Vulkan or OpenGL, `xdg-desktop-portal` and udev rules
   for the headset (for example `android-udev`). For the window icon, copy
   `quest-sideloader.desktop` from the release archive to

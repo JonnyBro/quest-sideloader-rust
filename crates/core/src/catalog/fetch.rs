@@ -76,7 +76,7 @@ fn location(mirror: &Mirror) -> Location<'_> {
 impl Fetcher {
 	pub fn new(rclone_path: Option<PathBuf>) -> Result<Self, CatalogError> {
 		Ok(Self {
-			rclone: rclone_path.unwrap_or_else(|| PathBuf::from("rclone")),
+			rclone: rclone_path.unwrap_or_else(|| crate::paths::default_tool("rclone")),
 			limit: Arc::new(AtomicU64::new(0)),
 			parallel: Arc::new(AtomicU8::new(1)),
 			api_key: crate::api_key::embedded(),
