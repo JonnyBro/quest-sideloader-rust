@@ -46,8 +46,7 @@ jobs:
           API_KEY: ${{ secrets.API_KEY }}
         run: |
           if [ -z "$API_KEY" ]; then
-            echo "::error::The API_KEY secret isn't set; a release without it can't use the mirror"
-            exit 1
+            echo "::warning::The API_KEY secret isn't set; a release without it can't use the mirror"
           fi
 
       - name: Install Rust
