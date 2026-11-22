@@ -142,7 +142,10 @@ pub enum Command {
 		dir: String,
 	},
 	/// Show the headset's screen in a scrcpy window.
-	MirrorScreen(String),
+	MirrorScreen {
+		serial: String,
+		eye: crate::scrcpy::Eye,
+	},
 	/// USB file transfer (MTP) on or off, so the headset shows up in the
 	/// computer's file manager.
 	SetMtp {
@@ -161,6 +164,8 @@ pub enum Command {
 	RefreshDevice(String),
 	/// `host` or `host:port`.
 	ConnectWireless(String),
+	/// Answered with [`Event::MdnsServices`].
+	DiscoverWireless,
 	/// Like [`Command::ConnectWireless`], for the headset of the last run: the
 	/// headset may be off or have another address, so failing isn't an error.
 	Reconnect(String),
@@ -300,6 +305,8 @@ pub enum Event {
 		serial: String,
 		result: std::result::Result<Vec<crate::adb::Leftover>, String>,
 	},
+	/// Headsets announci0ng wireless adb on the network.
+	MdnsServices(std::result::Result<Vec<crate::adb::MdnsService>, String>),
 	DirListing {
 		serial: String,
 		path: String,
@@ -844,6 +851,13 @@ async fn run(
 			Command::RefreshDevice(serial) => {
 				devices::spawn_fetch_info(state.adb.device(serial), state.sink.clone());
 			}
+			Command::DiscoverWireless => {
+				let (adb, sink) = (state.adb.clone(), state.sink.clone());
+				tokio::spawn(async move {
+					let result = adb.mdns_services().await.map_err(|e| e.to_string());
+					sink.emit(Event::MdnsServices(result));
+				});
+			}
 			Command::ConnectWireless(address) => {
 				devices::spawn_connect(state.adb.clone(), address, false, state.sink.clone());
 			}
@@ -1144,11 +1158,11 @@ async fn run(
 					}
 				});
 			}
-			Command::MirrorScreen(serial) => {
+			Command::MirrorScreen { serial, eye } => {
 				let (adb, sink) = (state.adb.clone(), state.sink.clone());
 				tokio::spawn(async move {
 					let title = format!("Quest Sideloader: {serial}");
-					if let Err(e) = crate::scrcpy::run(&adb, &serial, &title).await {
+					if let Err(e) = crate::scrcpy::run(&adb, &serial, &title, eye).await {
 						sink.emit(Event::Error(
 							t!("eng.scrcpy_failed", error = e).into_owned(),
 						));

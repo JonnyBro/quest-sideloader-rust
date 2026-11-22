@@ -143,9 +143,54 @@ impl AdbServer {
 		self.host_query(&format!("host:disconnect:{address}")).await
 	}
 
+	/// Headsets announcing wireless adb on the local network. The server
+	/// keeps listening in the background, so a fresh headset can take a few
+	/// seconds to show up.
+	pub async fn mdns_services(&self) -> Result<Vec<MdnsService>, AdbError> {
+		Ok(parse_mdns(&self.host_query("host:mdns:services").await?))
+	}
+
 	pub fn device(&self, serial: impl Into<String>) -> Device {
 		Device::new(self.clone(), serial.into())
 	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MdnsService {
+	/// Instance name, e.g. `adb-1WMHH000000000`.
+	pub name: String,
+	/// `ip:port` to connect to.
+	pub address: String,
+	/// Announced by Android's Wireless debugging, which needs pairing first;
+	/// the rest come from `adb tcpip`.
+	pub tls: bool,
+}
+
+/// `name<TAB>type<TAB>ip:port` lines. Pairing services aren't something to
+/// connect to, so they're left out.
+fn parse_mdns(text: &str) -> Vec<MdnsService> {
+	let mut found: Vec<MdnsService> = Vec::new();
+	for line in text.lines() {
+		let mut parts = line.split('\t').map(str::trim);
+		let (Some(name), Some(kind), Some(address)) = (parts.next(), parts.next(), parts.next())
+		else {
+			continue;
+		};
+		let tls = match kind.trim_end_matches('.') {
+			"_adb._tcp" => false,
+			"_adb-tls-connect._tcp" => true,
+			_ => continue,
+		};
+		if address.is_empty() || found.iter().any(|f| f.address == address) {
+			continue;
+		}
+		found.push(MdnsService {
+			name: name.to_owned(),
+			address: address.to_owned(),
+			tls,
+		});
+	}
+	found
 }
 
 pub struct DeviceTracker {

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Editor, EditorState, Input, InputState};
+use gpui_kit::component::input::{Editor, EditorState};
 use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 use gpui_kit::component::notification::Notification;
 use gpui_kit::component::sidebar::{
@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::dialogs::checkup::{self, Check, Level};
 use crate::dialogs::review::PendingReview;
+use crate::dialogs::wifi::WifiDialog;
 use crate::dialogs::{review, tools, welcome};
 use crate::icons::AppIcon;
 use crate::logbuf::highlight::{LevelColors, LogHighlighter, SharedColors};
@@ -111,6 +112,9 @@ pub struct Shell {
 	tab: Tab,
 	adb: Option<AdbStatus>,
 	devices: Vec<DeviceEntry>,
+	/// The open "Connect over Wi-Fi" dialog, which shows headsets found on
+	/// the network.
+	wifi: Option<WeakEntity<WifiDialog>>,
 	infos: HashMap<String, DeviceInfo>,
 	details: HashMap<String, DeviceDetails>,
 	selected: Option<String>,
@@ -283,6 +287,7 @@ impl Shell {
 			window,
 			|this, _, event: &SettingsEvent, window, cx| match event {
 				SettingsEvent::Checkup => checkup::open(this.checks(cx), window, cx),
+				SettingsEvent::KeysChanged => this.reload_copies(cx),
 			},
 		);
 		let headset = cx.new(|cx| {
@@ -348,6 +353,7 @@ impl Shell {
 			tab: ui.tab.unwrap_or(Tab::Headset),
 			adb: None,
 			devices: Vec::new(),
+			wifi: None,
 			infos: HashMap::new(),
 			details: HashMap::new(),
 			selected: None,
@@ -478,6 +484,14 @@ impl Shell {
 				}
 				Err(e) => self.notify(Notification::error(e), window, cx),
 			},
+			Event::MdnsServices(result) => {
+				let connected = self.device_serials();
+				if let Some(dialog) = self.wifi.as_ref().and_then(WeakEntity::upgrade) {
+					dialog.update(cx, |d, cx| d.set_found(result, connected, cx));
+				} else {
+					self.wifi = None;
+				}
+			}
 			Event::DirListing {
 				serial,
 				path,
@@ -564,14 +578,7 @@ impl Shell {
 				self.engine.send(Command::RefreshHeadset(serial.clone()));
 			}
 			if task.kind == TaskKind::Rename {
-				self.copies = KeyStore::new(self.paths.signing_dir())
-					.packages()
-					.into_iter()
-					.collect();
-				let copies = self.copies.clone();
-				self.headset
-					.update(cx, |h, cx| h.set_copies_and_notify(copies, cx));
-				self.sync_catalog_settings(cx);
+				self.reload_copies(cx);
 				self.settings_view.update(cx, |s, cx| s.keys_changed(cx));
 			}
 		}
@@ -583,6 +590,18 @@ impl Shell {
 	}
 
 	/// A system notification when a task ends while the window is in the background.
+	/// Copies are the packages with a key, so this follows the key folder.
+	fn reload_copies(&mut self, cx: &mut Context<Self>) {
+		self.copies = KeyStore::new(self.paths.signing_dir())
+			.packages()
+			.into_iter()
+			.collect();
+		let copies = self.copies.clone();
+		self.headset
+			.update(cx, |h, cx| h.set_copies_and_notify(copies, cx));
+		self.sync_catalog_settings(cx);
+	}
+
 	fn notify_finished(&self, task: &TaskSnapshot, window: &Window) {
 		if !self.settings.notifications || window.is_window_active() {
 			return;
@@ -958,53 +977,13 @@ impl Shell {
 		self.devices.iter().find(|d| &d.serial == serial)
 	}
 
-	fn open_wifi_dialog(engine: Rc<Engine>, window: &mut Window, cx: &mut App) {
-		let input = cx.new(|cx| InputState::new(window, cx).placeholder("192.168.1.50:5555"));
-		window.open_dialog(cx, move |dialog, _, cx| {
-			let connect = {
-				let input = input.clone();
-				let engine = engine.clone();
-				move |_: &ClickEvent, window: &mut Window, cx: &mut App| {
-					let address = input.read(cx).value().trim().to_owned();
-					if !address.is_empty() {
-						engine.send(Command::ConnectWireless(address));
-						window.close_dialog(cx);
-					}
-				}
-			};
-			dialog
-				.title(t!("wifi.title").into_owned())
-				.w(px(440.))
-				.child(
-					v_flex()
-						.gap_3()
-						.child(
-							div()
-								.text_sm()
-								.text_color(cx.theme().muted_foreground)
-								.child(t!("wifi.hint").into_owned()),
-						)
-						.child(Input::new(&input)),
-				)
-				.footer(
-					h_flex()
-						.w_full()
-						.justify_end()
-						.gap_2()
-						.child(
-							Button::new("wifi-cancel")
-								.label(t!("common.cancel"))
-								.outline()
-								.on_click(|_, window, cx| window.close_dialog(cx)),
-						)
-						.child(
-							Button::new("wifi-connect")
-								.label(t!("wifi.connect"))
-								.primary()
-								.on_click(connect),
-						),
-				)
-		});
+	fn open_wifi_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+		let dialog = WifiDialog::open(self.engine.clone(), self.device_serials(), window, cx);
+		self.wifi = Some(dialog.downgrade());
+	}
+
+	fn device_serials(&self) -> HashSet<String> {
+		self.devices.iter().map(|d| d.serial.clone()).collect()
 	}
 
 	fn device_switcher(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1031,7 +1010,6 @@ impl Shell {
 
 		let devices = self.devices.clone();
 		let current = self.selected.clone();
-		let engine = self.engine.clone();
 		let shell = cx.entity().downgrade();
 		let header = SidebarHeader::new()
 			.w_full()
@@ -1082,13 +1060,13 @@ impl Shell {
 				if !devices.is_empty() {
 					menu = menu.separator();
 				}
-				let engine = engine.clone();
+				let wifi = shell.clone();
 				let manage = shell.clone();
 				menu.item(
 					PopupMenuItem::new(t!("wifi.menu"))
 						.icon(Icon::new(IconName::Globe))
 						.on_click(move |_, window, cx| {
-							Self::open_wifi_dialog(engine.clone(), window, cx);
+							let _ = wifi.update(cx, |s, cx| s.open_wifi_dialog(window, cx));
 						}),
 				)
 				.item(

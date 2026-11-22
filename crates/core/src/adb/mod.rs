@@ -20,5 +20,5 @@ pub use browse::RemoteEntry;
 pub use device::{Device, OutputStream, ShellOutput};
 pub use error::AdbError;
 pub use parse::{Battery, DeviceEntry, DeviceInfo, DeviceState, Package, Storage};
-pub use server::{AdbServer, DEFAULT_PORT, DeviceTracker};
+pub use server::{AdbServer, DEFAULT_PORT, DeviceTracker, MdnsService};
 pub use sync::{LocalFile, Progress, list_files};

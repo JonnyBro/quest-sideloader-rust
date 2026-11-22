@@ -144,9 +144,33 @@ wifi.title:
   ru: "Подключение по Wi-Fi"
   uk: "Підключення через Wi-Fi"
 wifi.hint:
-  en: "The headset's address with port. Wireless ADB has to be on: turn it on in the Device tab while the headset is on USB."
-  ru: "Адрес шлема с портом. Беспроводной ADB должен быть включён: включите его на вкладке Устройство, пока шлем подключён по USB."
-  uk: "Адреса шолома з портом. Бездротовий ADB має бути увімкнений: увімкніть його на вкладці Пристрій, поки шолом підключений через USB."
+  en: "Not in the list? Enter the headset's address with port."
+  ru: "Шлема нет в списке? Введите его адрес с портом."
+  uk: "Шолома немає в списку? Введіть його адресу з портом."
+wifi.found_title:
+  en: "Headsets on this network. Wireless ADB has to be on: turn it on in the Device tab while the headset is on USB."
+  ru: "Шлемы в этой сети. Беспроводной ADB должен быть включён: включите его на вкладке Устройство, пока шлем подключён по USB."
+  uk: "Шоломи в цій мережі. Бездротовий ADB має бути увімкнений: увімкніть його на вкладці Пристрій, поки шолом підключений через USB."
+wifi.searching:
+  en: "Searching..."
+  ru: "Ищу..."
+  uk: "Шукаю..."
+wifi.none_found:
+  en: "Nothing found yet. The search keeps going while this window is open."
+  ru: "Пока ничего не найдено. Поиск идёт, пока это окно открыто."
+  uk: "Поки нічого не знайдено. Пошук триває, доки це вікно відкрите."
+wifi.search_failed:
+  en: "Search doesn't work with this adb: %{error}"
+  ru: "Поиск не работает с этим adb: %{error}"
+  uk: "Пошук не працює з цим adb: %{error}"
+wifi.connected:
+  en: "Connected"
+  ru: "Подключён"
+  uk: "Підключено"
+wifi.tls_hint:
+  en: "Announced by Wireless debugging, which needs pairing first. Connecting may fail until the headset is paired."
+  ru: "Объявлен через беспроводную отладку, она требует сопряжения. Пока шлем не сопряжён, подключение может не сработать."
+  uk: "Оголошений через бездротове налагодження, воно потребує спарювання. Поки шолом не спарений, підключення може не спрацювати."
 wifi.connect:
   en: "Connect"
   ru: "Подключить"
@@ -371,6 +395,18 @@ hs.mirror_hint:
   en: "Opens the headset's screen in a scrcpy window"
   ru: "Открывает экран шлема в окне scrcpy"
   uk: "Відкриває екран шолома у вікні scrcpy"
+hs.mirror_both:
+  en: "Both eyes"
+  ru: "Оба глаза"
+  uk: "Обидва ока"
+hs.mirror_left:
+  en: "Left eye"
+  ru: "Левый глаз"
+  uk: "Ліве око"
+hs.mirror_right:
+  en: "Right eye"
+  ru: "Правый глаз"
+  uk: "Праве око"
 hs.app_safety:
   en: "App Safety"
   ru: "App Safety"
@@ -1195,6 +1231,22 @@ keys.exported:
   en: "Key saved to %{path}"
   ru: "Ключ сохранён в %{path}"
   uk: "Ключ збережено в %{path}"
+keys.delete:
+  en: "Delete key"
+  ru: "Удалить ключ"
+  uk: "Видалити ключ"
+keys.delete_title:
+  en: "Delete the key for %{package}?"
+  ru: "Удалить ключ для %{package}?"
+  uk: "Видалити ключ для %{package}?"
+keys.delete_text:
+  en: "The key file is deleted for good. Without it, an update can't be installed over the copy already on the headset: it will have to be uninstalled and installed again. Export the key first if you may need it."
+  ru: "Файл ключа удалится насовсем. Без него обновление поверх копии, которая уже стоит на шлеме, не поставить: её придётся удалить и установить заново. Если ключ может понадобиться, сначала сделайте экспорт."
+  uk: "Файл ключа буде видалено назавжди. Без нього оновлення поверх копії, яка вже стоїть на шоломі, не поставити: її доведеться видалити й установити заново. Якщо ключ може знадобитися, спершу зробіть експорт."
+keys.deleted:
+  en: "Key for %{package} deleted"
+  ru: "Ключ для %{package} удалён"
+  uk: "Ключ для %{package} видалено"
 chk.button:
   en: "Check all"
   ru: "Проверить всё"

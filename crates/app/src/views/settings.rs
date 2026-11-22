@@ -2,11 +2,11 @@ use rust_i18n::t;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::button::{Button, ButtonVariant, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{
-	ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, h_flex, v_flex,
+	ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, WindowExt, h_flex, v_flex,
 };
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -61,6 +61,8 @@ impl Category {
 pub enum SettingsEvent {
 	/// "Check everything" was clicked; the shell knows the state to check.
 	Checkup,
+	/// A key was imported or deleted, so the set of known copies changed.
+	KeysChanged,
 }
 
 struct KeyRow {
@@ -843,13 +845,24 @@ impl SettingsView {
 						.child(row.package.clone()),
 				)
 				.child(fingerprint)
-				.child(
+				.child({
+					let package = package.clone();
 					Button::new(("export", ix))
 						.label(t!("keys.export"))
 						.xsmall()
 						.outline()
 						.on_click(cx.listener(move |this, _, window, cx| {
 							this.export_key(package.clone(), window, cx)
+						}))
+				})
+				.child(
+					Button::new(("delete-key", ix))
+						.icon(Icon::new(IconName::Delete))
+						.xsmall()
+						.ghost()
+						.tooltip(t!("keys.delete"))
+						.on_click(cx.listener(move |this, _, window, cx| {
+							this.delete_key(package.clone(), window, cx)
 						})),
 				)
 		});
@@ -892,6 +905,7 @@ impl SettingsView {
 				this.key_message = Some(match this.keys.import(&file) {
 					Ok(package) => {
 						this.key_rows = None;
+						cx.emit(SettingsEvent::KeysChanged);
 						Ok(t!("keys.imported", package = package).into_owned())
 					}
 					Err(e) => Err(e.to_string()),
@@ -900,6 +914,33 @@ impl SettingsView {
 			});
 		})
 		.detach();
+	}
+
+	fn delete_key(&mut self, package: String, window: &mut Window, cx: &mut Context<Self>) {
+		let this = cx.entity().downgrade();
+		window.open_alert_dialog(cx, move |alert, _, _| {
+			let this = this.clone();
+			let package = package.clone();
+			alert
+				.title(t!("keys.delete_title", package = package).into_owned())
+				.description(t!("keys.delete_text").into_owned())
+				.confirm()
+				.ok_text(t!("common.delete").into_owned())
+				.cancel_text(t!("common.cancel").into_owned())
+				.ok_variant(ButtonVariant::Danger)
+				.on_ok(move |_, _, cx| {
+					let _ = this.update(cx, |this, cx| {
+						this.key_message = Some(match this.keys.remove(&package) {
+							Ok(()) => Ok(t!("keys.deleted", package = package).into_owned()),
+							Err(e) => Err(e.to_string()),
+						});
+						this.key_rows = None;
+						cx.emit(SettingsEvent::KeysChanged);
+						cx.notify();
+					});
+					true
+				})
+		});
 	}
 
 	fn export_key(&mut self, package: String, window: &mut Window, cx: &mut Context<Self>) {

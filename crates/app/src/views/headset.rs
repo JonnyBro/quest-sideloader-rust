@@ -25,6 +25,7 @@ use quest_sideloader_core::adb::{
 };
 use quest_sideloader_core::catalog::Catalog;
 use quest_sideloader_core::saves::Backup;
+use quest_sideloader_core::scrcpy::Eye;
 use quest_sideloader_core::{AppInfo, Command, Engine, format_bytes};
 
 use serde::{Deserialize, Serialize};
@@ -1224,14 +1225,11 @@ impl HeadsetView {
 					.tooltip(t!("hs.screenshot_hint"))
 					.on_click(cx.listener(|this, _, _, _| this.send(Command::Screenshot))),
 			)
-			.children(quest_sideloader_core::scrcpy::path().is_some().then(|| {
-				Button::new("mirror")
-					.label(t!("hs.mirror"))
-					.outline()
-					.small()
-					.tooltip(t!("hs.mirror_hint"))
-					.on_click(cx.listener(|this, _, _, _| this.send(Command::MirrorScreen)))
-			}))
+			.children(
+				quest_sideloader_core::scrcpy::path()
+					.is_some()
+					.then(|| self.mirror_menu()),
+			)
 			.child(self.app_safety_menu())
 			.child(self.reboot_menu());
 
@@ -1298,6 +1296,34 @@ impl HeadsetView {
 					),
 			)
 			.into_any_element()
+	}
+
+	fn mirror_menu(&self) -> impl IntoElement {
+		let engine = self.engine.clone();
+		let serial = self.serial.clone().unwrap_or_default();
+		Button::new("mirror")
+			.label(t!("hs.mirror"))
+			.outline()
+			.small()
+			.dropdown_caret(true)
+			.tooltip(t!("hs.mirror_hint"))
+			.dropdown_menu(move |mut menu: PopupMenu, _, _| {
+				for (eye, label) in [
+					(Eye::Both, t!("hs.mirror_both")),
+					(Eye::Left, t!("hs.mirror_left")),
+					(Eye::Right, t!("hs.mirror_right")),
+				] {
+					menu = menu.item(send_item(
+						&engine,
+						label.into_owned(),
+						Command::MirrorScreen {
+							serial: serial.clone(),
+							eye,
+						},
+					));
+				}
+				menu
+			})
 	}
 
 	fn app_safety_menu(&self) -> impl IntoElement {

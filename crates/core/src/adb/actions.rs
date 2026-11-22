@@ -563,6 +563,17 @@ impl Device {
 		})
 	}
 
+	/// Width and height of the display, as `wm size` reports it.
+	pub async fn display_size(&self) -> Result<(u32, u32), AdbError> {
+		let out = self.shell_ok("wm size").await?;
+		parse_wm_size(&out)
+			.and_then(|size| {
+				let (w, h) = size.split_once('x')?;
+				Some((w.trim().parse().ok()?, h.trim().parse().ok()?))
+			})
+			.ok_or_else(|| AdbError::Protocol(format!("unexpected wm size output: {}", out.trim())))
+	}
+
 	/// Switches USB between file transfer (MTP) and charging only. adb keeps
 	/// working; the USB connection resets while the mode changes.
 	pub async fn set_mtp(&self, enabled: bool) -> Result<(), AdbError> {
