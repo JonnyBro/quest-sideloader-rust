@@ -193,12 +193,12 @@ files.pull_hint:
   uk: "Копіює вибрані файли й теки в теку на комп'ютері"
 files.push_folder:
   en: "Upload folder"
-  ru: "Закинуть папку"
-  uk: "Надіслати теку"
+  ru: "Загрузить папку"
+  uk: "Завантажити теку"
 files.push_files:
   en: "Upload files"
-  ru: "Закинуть файлы"
-  uk: "Надіслати файли"
+  ru: "Загрузить файлы"
+  uk: "Завантажити файли"
 files.push_hint:
   en: "Copies files into the open folder. You can also drag them onto this list."
   ru: "Копирует файлы в открытую папку. Их можно и просто перетащить на этот список."
