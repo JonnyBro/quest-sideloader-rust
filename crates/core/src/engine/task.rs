@@ -29,6 +29,10 @@ pub enum TaskKind {
 	RcloneSetup,
 	/// Building a copy of a release under another package name.
 	Rename,
+	/// Copying files from the headset in the file manager.
+	PullFiles,
+	/// Copying files to the headset in the file manager.
+	PushFiles,
 }
 
 /// The headset has the app signed with another key, so it must be

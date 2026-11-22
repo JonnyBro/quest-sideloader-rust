@@ -171,6 +171,62 @@ hs.tab_backups:
   en: "Backups"
   ru: "Бэкапы"
   uk: "Резервні копії"
+hs.tab_files:
+  en: "Files"
+  ru: "Файлы"
+  uk: "Файли"
+files.up:
+  en: "Up one folder"
+  ru: "На папку выше"
+  uk: "На теку вище"
+files.reload:
+  en: "Reload the folder"
+  ru: "Обновить папку"
+  uk: "Оновити теку"
+files.pull:
+  en: "Download"
+  ru: "Скачать"
+  uk: "Завантажити"
+files.pull_hint:
+  en: "Copies the selected files and folders to a folder on the computer"
+  ru: "Копирует выбранные файлы и папки в папку на компьютере"
+  uk: "Копіює вибрані файли й теки в теку на комп'ютері"
+files.push_folder:
+  en: "Upload folder"
+  ru: "Закинуть папку"
+  uk: "Надіслати теку"
+files.push_files:
+  en: "Upload files"
+  ru: "Закинуть файлы"
+  uk: "Надіслати файли"
+files.push_hint:
+  en: "Copies files into the open folder. You can also drag them onto this list."
+  ru: "Копирует файлы в открытую папку. Их можно и просто перетащить на этот список."
+  uk: "Копіює файли у відкриту теку. Їх можна й просто перетягнути на цей список."
+files.col_modified:
+  en: "Modified"
+  ru: "Изменён"
+  uk: "Змінено"
+files.loading:
+  en: "Reading the folder..."
+  ru: "Читаю папку..."
+  uk: "Читаю теку..."
+files.empty:
+  en: "The folder is empty"
+  ru: "Папка пуста"
+  uk: "Тека порожня"
+files.delete_title:
+  en: "Delete from the headset?"
+  ru: "Удалить со шлема?"
+  uk: "Видалити з шолома?"
+files.delete_one:
+  en: "%{name} will be deleted for good, with everything inside it."
+  ru: "%{name} будет удалён насовсем, вместе со всем содержимым."
+  uk: "%{name} буде видалено назавжди, разом з усім вмістом."
+files.delete_many:
+  en: "Selected items: %{n}. They will be deleted for good, with everything inside them."
+  ru: "Выбрано: %{n}. Они будут удалены насовсем, вместе со всем содержимым."
+  uk: "Вибрано: %{n}. Їх буде видалено назавжди, разом з усім вмістом."
 hs.battery:
   en: "Battery"
   ru: "Батарея"
@@ -1359,6 +1415,14 @@ tasks.kind_rename:
   en: "renamed copy"
   ru: "копия с другим пакетом"
   uk: "копія з іншим пакетом"
+tasks.kind_pull_files:
+  en: "files from the headset"
+  ru: "файлы со шлема"
+  uk: "файли з шолома"
+tasks.kind_push_files:
+  en: "files to the headset"
+  ru: "файлы на шлем"
+  uk: "файли на шолом"
 dl.details:
   en: "Details"
   ru: "Подробнее"

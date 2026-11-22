@@ -135,6 +135,42 @@ hs.backed_up:
   en: "Backed up %{n} file(s)"
   ru: "Сохранено файлов: %{n}"
   uk: "Збережено файлів: %{n}"
+files.n_items:
+  en: "%{n} items"
+  ru: "%{n} шт."
+  uk: "%{n} шт."
+files.pull_title:
+  en: "Download %{name}"
+  ru: "Скачать %{name}"
+  uk: "Завантажити %{name}"
+files.push_title:
+  en: "Upload %{name}"
+  ru: "Закинуть %{name}"
+  uk: "Надіслати %{name}"
+files.listing:
+  en: "Listing files"
+  ru: "Составляю список файлов"
+  uk: "Складаю список файлів"
+files.copying_from:
+  en: "Copying from the headset"
+  ru: "Копирую со шлема"
+  uk: "Копіюю з шолома"
+files.copying_to:
+  en: "Copying to the headset"
+  ru: "Копирую на шлем"
+  uk: "Копіюю на шолом"
+files.pulled:
+  en: "Copied %{n} file(s)"
+  ru: "Скопировано файлов: %{n}"
+  uk: "Скопійовано файлів: %{n}"
+files.pushed:
+  en: "Uploaded %{n} item(s)"
+  ru: "Закинуто объектов: %{n}"
+  uk: "Надіслано об'єктів: %{n}"
+files.deleted:
+  en: "Deleted from the headset: %{n}"
+  ru: "Удалено со шлема: %{n}"
+  uk: "Видалено з шолома: %{n}"
 hs.restore_title:
   en: "Restore %{name}"
   ru: "Восстановление %{name}"

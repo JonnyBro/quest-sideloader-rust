@@ -10,11 +10,13 @@ icon_assets!(
 	ExtraIcons,
 	[
 		Download,
+		File,
 		FileSearch,
 		Gamepad2,
 		LibraryBig,
 		MonitorSmartphone,
-		RectangleGoggles
+		RectangleGoggles,
+		Upload
 	]
 );
 
@@ -51,6 +53,8 @@ pub enum AppIcon {
 	Refresh,
 	Dots,
 	Controller,
+	File,
+	Upload,
 }
 
 impl AppIcon {
@@ -68,6 +72,8 @@ impl AppIcon {
 			Self::Refresh => IconName::RefreshCw,
 			Self::Dots => IconName::Ellipsis,
 			Self::Controller => IconName::Gamepad2,
+			Self::File => IconName::File,
+			Self::Upload => IconName::Upload,
 		}
 	}
 }

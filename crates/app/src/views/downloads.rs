@@ -719,6 +719,8 @@ fn task_kind(task: &TaskSnapshot) -> String {
 		(TaskKind::AdbSetup, _) => t!("tasks.kind_adb"),
 		(TaskKind::RcloneSetup, _) => t!("tasks.kind_rclone"),
 		(TaskKind::Rename, _) => t!("tasks.kind_rename"),
+		(TaskKind::PullFiles, _) => t!("tasks.kind_pull_files"),
+		(TaskKind::PushFiles, _) => t!("tasks.kind_push_files"),
 	}
 	.into_owned()
 }

@@ -5260,7 +5260,7 @@ dependencies = [
 
 [[package]]
 name = "quest-sideloader"
-version = "2.0.0"
+version = "2.2.1"
 dependencies = [
  "chrono",
  "gpui-kit",
@@ -5280,7 +5280,7 @@ dependencies = [
 
 [[package]]
 name = "quest-sideloader-core"
-version = "2.0.0"
+version = "2.2.1"
 dependencies = [
  "apk-info",
  "base64 0.23.1",

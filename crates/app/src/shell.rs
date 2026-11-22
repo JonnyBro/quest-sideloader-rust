@@ -478,6 +478,14 @@ impl Shell {
 				}
 				Err(e) => self.notify(Notification::error(e), window, cx),
 			},
+			Event::DirListing {
+				serial,
+				path,
+				result,
+			} => {
+				self.headset
+					.update(cx, |h, cx| h.set_listing(&serial, &path, result, cx));
+			}
 			Event::Leftovers { serial, result } => {
 				// Removing folders frees space; the status bar and Device page show it.
 				self.engine.send(Command::RefreshDevice(serial.clone()));

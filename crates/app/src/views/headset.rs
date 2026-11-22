@@ -21,7 +21,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use quest_sideloader_core::adb::{
 	AppUsage, BatteryHealth, ControllerSide, DeviceDetails, DeviceInfo, Leftover, PowerSource,
-	RebootMode, Tweak,
+	RebootMode, RemoteEntry, Tweak,
 };
 use quest_sideloader_core::catalog::Catalog;
 use quest_sideloader_core::saves::Backup;
@@ -29,6 +29,7 @@ use quest_sideloader_core::{AppInfo, Command, Engine, format_bytes};
 
 use serde::{Deserialize, Serialize};
 
+use super::files::FilesView;
 use crate::icons::AppIcon;
 use crate::theme::Mono;
 use crate::ui_state::HeadsetPrefs;
@@ -72,6 +73,7 @@ enum Section {
 	Apps,
 	Device,
 	Backups,
+	Files,
 }
 
 struct Row {
@@ -115,6 +117,7 @@ pub struct HeadsetView {
 	/// Folders of uninstalled apps; `None` until searched.
 	leftovers: Option<Result<Vec<Leftover>, String>>,
 	searching_leftovers: bool,
+	files: Entity<FilesView>,
 	_filter_changes: Subscription,
 }
 
@@ -128,6 +131,7 @@ impl HeadsetView {
 				cx.notify();
 			}
 		});
+		let files = cx.new(|_| FilesView::new(engine.clone()));
 		Self {
 			engine,
 			serial: None,
@@ -148,6 +152,7 @@ impl HeadsetView {
 			backup_cols: [true; 3],
 			leftovers: None,
 			searching_leftovers: false,
+			files,
 			_filter_changes: subscription,
 		}
 	}
@@ -180,6 +185,7 @@ impl HeadsetView {
 		self.info = None;
 		self.details = None;
 		self.leftovers = None;
+		self.files.update(cx, |f, cx| f.set_serial(None, cx));
 		cx.notify();
 	}
 
@@ -188,9 +194,22 @@ impl HeadsetView {
 			self.serial = Some(serial.to_owned());
 			self.details = None;
 			self.leftovers = None;
+			self.files
+				.update(cx, |f, cx| f.set_serial(Some(serial.to_owned()), cx));
 		}
 		self.info = info;
 		cx.notify();
+	}
+
+	pub fn set_listing(
+		&mut self,
+		serial: &str,
+		path: &str,
+		result: Result<Vec<RemoteEntry>, String>,
+		cx: &mut Context<Self>,
+	) {
+		self.files
+			.update(cx, |f, cx| f.set_listing(serial, path, result, cx));
 	}
 
 	pub fn set_leftovers(
@@ -574,6 +593,7 @@ impl HeadsetView {
 						Section::Apps => 0,
 						Section::Device => 1,
 						Section::Backups => 2,
+						Section::Files => 3,
 					})
 					.child(Tab::new().label(format!("{} {apps}", t!("hs.tab_apps"))))
 					.child(Tab::new().label(t!("hs.tab_device").into_owned()))
@@ -582,11 +602,13 @@ impl HeadsetView {
 						t!("hs.tab_backups"),
 						self.backups.len()
 					)))
+					.child(Tab::new().label(t!("hs.tab_files").into_owned()))
 					.on_click(cx.listener(|this, ix: &usize, _, cx| {
 						this.section = match ix {
 							0 => Section::Apps,
 							1 => Section::Device,
-							_ => Section::Backups,
+							2 => Section::Backups,
+							_ => Section::Files,
 						};
 						cx.notify();
 					})),
@@ -1695,6 +1717,10 @@ impl Render for HeadsetView {
 				);
 				self.backup_cols = [fit[0], fit[1], fit[2]];
 				self.backups_section(cx)
+			}
+			Section::Files => {
+				self.files.update(cx, |f, _| f.ensure_loaded());
+				self.files.clone().into_any_element()
 			}
 		};
 		v_flex()

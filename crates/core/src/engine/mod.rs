@@ -5,6 +5,7 @@ mod console;
 mod contribute;
 mod devices;
 mod downloads;
+mod files;
 mod headset;
 mod install;
 mod library;
@@ -97,6 +98,29 @@ pub enum Command {
 	/// Turn on wireless ADB and connect to the headset over Wi-Fi.
 	EnableWireless(String),
 	Screenshot(String),
+	/// Answered with [`Event::DirListing`].
+	ListDir {
+		serial: String,
+		path: String,
+	},
+	/// Copy headset files or folders into the local folder `dest`.
+	PullFiles {
+		serial: String,
+		paths: Vec<String>,
+		dest: PathBuf,
+	},
+	/// Copy local files or folders into the headset folder `dir`.
+	PushFiles {
+		serial: String,
+		local: Vec<PathBuf>,
+		dir: String,
+	},
+	/// Delete headset files or folders, then list `dir` again.
+	DeleteFiles {
+		serial: String,
+		paths: Vec<String>,
+		dir: String,
+	},
 	/// Show the headset's screen in a scrcpy window.
 	MirrorScreen(String),
 	/// USB file transfer (MTP) on or off, so the headset shows up in the
@@ -255,6 +279,11 @@ pub enum Event {
 	Leftovers {
 		serial: String,
 		result: std::result::Result<Vec<crate::adb::Leftover>, String>,
+	},
+	DirListing {
+		serial: String,
+		path: String,
+		result: std::result::Result<Vec<crate::adb::RemoteEntry>, String>,
 	},
 	/// Something changed the stored backups; ask again with [`Command::ListBackups`].
 	BackupsChanged,
@@ -876,6 +905,33 @@ async fn run(
 					state.sink.clone(),
 				);
 				state.tasks.insert(id, entry);
+			}
+			Command::ListDir { serial, path } => {
+				files::spawn_list(state.adb.device(serial), path, state.sink.clone());
+			}
+			Command::PullFiles {
+				serial,
+				paths,
+				dest,
+			} => {
+				let id = state.new_task_id();
+				let entry = files::spawn_pull(
+					id,
+					state.adb.device(serial),
+					paths,
+					dest,
+					state.sink.clone(),
+				);
+				state.tasks.insert(id, entry);
+			}
+			Command::PushFiles { serial, local, dir } => {
+				let id = state.new_task_id();
+				let entry =
+					files::spawn_push(id, state.adb.device(serial), local, dir, state.sink.clone());
+				state.tasks.insert(id, entry);
+			}
+			Command::DeleteFiles { serial, paths, dir } => {
+				files::spawn_delete(state.adb.device(serial), paths, dir, state.sink.clone());
 			}
 			Command::BackUpSaves { serial, app } => {
 				let id = state.new_task_id();
