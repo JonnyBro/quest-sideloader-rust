@@ -128,6 +128,13 @@ pub enum Command {
 		from: String,
 		to: String,
 	},
+	/// Copy (or move) headset files or folders into the headset folder `dir`.
+	PasteFiles {
+		serial: String,
+		paths: Vec<String>,
+		dir: String,
+		copy: bool,
+	},
 	/// Delete headset files or folders, then list `dir` again.
 	DeleteFiles {
 		serial: String,
@@ -953,6 +960,23 @@ async fn run(
 				to,
 			} => {
 				files::spawn_rename(state.adb.device(serial), dir, from, to, state.sink.clone());
+			}
+			Command::PasteFiles {
+				serial,
+				paths,
+				dir,
+				copy,
+			} => {
+				let id = state.new_task_id();
+				let entry = files::spawn_paste(
+					id,
+					state.adb.device(serial),
+					paths,
+					dir,
+					copy,
+					state.sink.clone(),
+				);
+				state.tasks.insert(id, entry);
 			}
 			Command::DeleteFiles { serial, paths, dir } => {
 				files::spawn_delete(state.adb.device(serial), paths, dir, state.sink.clone());

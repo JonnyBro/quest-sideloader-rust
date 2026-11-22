@@ -33,6 +33,8 @@ pub enum TaskKind {
 	PullFiles,
 	/// Copying files to the headset in the file manager.
 	PushFiles,
+	/// Copying or moving files from one headset folder to another.
+	PasteFiles,
 }
 
 /// The headset has the app signed with another key, so it must be

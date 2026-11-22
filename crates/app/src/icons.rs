@@ -9,6 +9,7 @@ use gpui_kit::{AssetSource, Result, SharedString};
 icon_assets!(
 	ExtraIcons,
 	[
+		ClipboardPaste,
 		Download,
 		File,
 		FileSearch,
@@ -16,6 +17,7 @@ icon_assets!(
 		LibraryBig,
 		MonitorSmartphone,
 		RectangleGoggles,
+		Scissors,
 		Upload
 	]
 );
@@ -55,6 +57,8 @@ pub enum AppIcon {
 	Controller,
 	File,
 	Upload,
+	Cut,
+	Paste,
 }
 
 impl AppIcon {
@@ -74,6 +78,8 @@ impl AppIcon {
 			Self::Controller => IconName::Gamepad2,
 			Self::File => IconName::File,
 			Self::Upload => IconName::Upload,
+			Self::Cut => IconName::Scissors,
+			Self::Paste => IconName::ClipboardPaste,
 		}
 	}
 }

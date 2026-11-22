@@ -721,6 +721,7 @@ fn task_kind(task: &TaskSnapshot) -> String {
 		(TaskKind::Rename, _) => t!("tasks.kind_rename"),
 		(TaskKind::PullFiles, _) => t!("tasks.kind_pull_files"),
 		(TaskKind::PushFiles, _) => t!("tasks.kind_push_files"),
+		(TaskKind::PasteFiles, _) => t!("tasks.kind_paste_files"),
 	}
 	.into_owned()
 }

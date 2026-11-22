@@ -231,6 +231,30 @@ files.rename_title:
   en: "Rename %{name}"
   ru: "Переименовать %{name}"
   uk: "Перейменувати %{name}"
+files.copy_hint:
+  en: "Copy the selected items, then open another folder and paste them"
+  ru: "Скопировать выбранное, чтобы вставить в другой папке"
+  uk: "Скопіювати вибране, щоб вставити в іншій теці"
+files.cut_hint:
+  en: "Cut the selected items, then open another folder and paste them there"
+  ru: "Вырезать выбранное, чтобы перенести в другую папку"
+  uk: "Вирізати вибране, щоб перенести в іншу теку"
+files.paste:
+  en: "Paste"
+  ru: "Вставить"
+  uk: "Вставити"
+files.paste_copy_hint:
+  en: "Copies into the open folder. The originals stay where they are."
+  ru: "Копирует в открытую папку. Оригиналы остаются на месте."
+  uk: "Копіює у відкриту теку. Оригінали лишаються на місці."
+files.paste_move_hint:
+  en: "Moves into the open folder"
+  ru: "Переносит в открытую папку"
+  uk: "Переносить у відкриту теку"
+files.clear_clipboard:
+  en: "Forget the copied items"
+  ru: "Забыть скопированное"
+  uk: "Забути скопійоване"
 files.delete_title:
   en: "Delete from the headset?"
   ru: "Удалить со шлема?"
@@ -1439,6 +1463,10 @@ tasks.kind_push_files:
   en: "files to the headset"
   ru: "файлы на шлем"
   uk: "файли на шолом"
+tasks.kind_paste_files:
+  en: "files on the headset"
+  ru: "файлы на шлеме"
+  uk: "файли на шоломі"
 dl.details:
   en: "Details"
   ru: "Подробнее"

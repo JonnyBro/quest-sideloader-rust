@@ -205,3 +205,38 @@ pub(super) fn spawn_rename(device: Device, dir: String, from: String, to: String
 		spawn_list(device, dir, sink);
 	});
 }
+
+pub(super) fn spawn_paste(
+	id: u64,
+	device: Device,
+	paths: Vec<String>,
+	dir: String,
+	copy: bool,
+	sink: EventSink,
+) -> TaskEntry {
+	let name = title(&paths);
+	let title = if copy {
+		t!("files.copy_title", name = name)
+	} else {
+		t!("files.move_title", name = name)
+	};
+	let tracker = tracker(id, TaskKind::PasteFiles, &device, title.into_owned(), &sink);
+	let t = tracker.clone();
+	let handle = tokio::spawn(async move {
+		t.stage(if copy {
+			t!("files.copying")
+		} else {
+			t!("files.moving")
+		});
+		match device.paste_into(&paths, &dir, copy).await {
+			Ok(()) => t.finish(
+				TaskState::Done,
+				Some(t!("files.pasted", n = paths.len()).into_owned()),
+				None,
+			),
+			Err(e) => t.finish(TaskState::Failed(e.to_string()), None, None),
+		}
+		spawn_list(device, dir, sink);
+	});
+	entry(handle, tracker)
+}

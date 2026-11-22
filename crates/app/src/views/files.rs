@@ -31,6 +31,13 @@ pub struct FilesView {
 	entries: Option<Result<Vec<RemoteEntry>, String>>,
 	/// Names in the current folder.
 	selected: HashSet<String>,
+	/// Paths picked with Copy or Cut, waiting for Paste.
+	clipboard: Option<Clipboard>,
+}
+
+struct Clipboard {
+	paths: Vec<String>,
+	copy: bool,
 }
 
 impl FilesView {
@@ -41,6 +48,7 @@ impl FilesView {
 			path: STORAGE_ROOT.to_owned(),
 			entries: None,
 			selected: HashSet::new(),
+			clipboard: None,
 		}
 	}
 
@@ -53,6 +61,7 @@ impl FilesView {
 		self.path = STORAGE_ROOT.to_owned();
 		self.entries = None;
 		self.selected.clear();
+		self.clipboard = None;
 		cx.notify();
 	}
 
@@ -197,6 +206,35 @@ impl FilesView {
 		);
 	}
 
+	fn pick_up(&mut self, copy: bool, cx: &mut Context<Self>) {
+		let paths = self.selected_paths();
+		if !paths.is_empty() {
+			self.clipboard = Some(Clipboard { paths, copy });
+			self.selected.clear();
+			cx.notify();
+		}
+	}
+
+	fn paste(&mut self, cx: &mut Context<Self>) {
+		let Some(serial) = self.serial.clone() else {
+			return;
+		};
+		let Some(clipboard) = self.clipboard.take() else {
+			return;
+		};
+		self.engine.send(Command::PasteFiles {
+			serial,
+			paths: clipboard.paths.clone(),
+			dir: self.path.clone(),
+			copy: clipboard.copy,
+		});
+		// A copy can be pasted again elsewhere; moved files are gone from their place.
+		if clipboard.copy {
+			self.clipboard = Some(clipboard);
+		}
+		cx.notify();
+	}
+
 	fn new_folder(&self, window: &mut Window, cx: &mut App) {
 		let Some(serial) = self.serial.clone() else {
 			return;
@@ -322,6 +360,53 @@ impl FilesView {
 					})),
 			)
 			.child(self.breadcrumbs(cx))
+			.child(
+				Button::new("copy")
+					.icon(Icon::new(IconName::Copy))
+					.ghost()
+					.small()
+					.tooltip(t!("files.copy_hint"))
+					.disabled(!has_selection)
+					.on_click(cx.listener(|this, _, _, cx| this.pick_up(true, cx))),
+			)
+			.child(
+				Button::new("cut")
+					.icon(Icon::from(AppIcon::Cut))
+					.ghost()
+					.small()
+					.tooltip(t!("files.cut_hint"))
+					.disabled(!has_selection)
+					.on_click(cx.listener(|this, _, _, cx| this.pick_up(false, cx))),
+			)
+			.children(self.clipboard.as_ref().map(|clipboard| {
+				let label = format!("{} ({})", t!("files.paste"), clipboard.paths.len());
+				let tip = if clipboard.copy {
+					t!("files.paste_copy_hint")
+				} else {
+					t!("files.paste_move_hint")
+				};
+				h_flex()
+					.child(
+						Button::new("paste")
+							.icon(Icon::from(AppIcon::Paste))
+							.label(label)
+							.outline()
+							.small()
+							.tooltip(tip)
+							.on_click(cx.listener(|this, _, _, cx| this.paste(cx))),
+					)
+					.child(
+						Button::new("clear-clipboard")
+							.icon(Icon::new(IconName::Close))
+							.ghost()
+							.xsmall()
+							.tooltip(t!("files.clear_clipboard"))
+							.on_click(cx.listener(|this, _, _, cx| {
+								this.clipboard = None;
+								cx.notify();
+							})),
+					)
+			}))
 			.child(
 				Button::new("rename")
 					.label(t!("files.rename"))

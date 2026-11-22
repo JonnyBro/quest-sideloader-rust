@@ -1,10 +1,14 @@
 //! Browsing shared storage for the file manager.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use rust_i18n::t;
 
 use super::{AdbError, Device};
+
+/// Copying a big folder on the headset's own storage takes a while.
+const PASTE_TIMEOUT: Duration = Duration::from_secs(3600);
 
 /// Where the file manager starts; nothing outside it can be deleted.
 pub const STORAGE_ROOT: &str = "/sdcard";
@@ -145,6 +149,65 @@ impl Device {
 				t!(
 					"adb.command_failed",
 					command = "mv",
+					detail = out.stderr.trim()
+				)
+				.into_owned(),
+			)),
+		}
+	}
+
+	/// Copies (or moves) files and folders into `dir`. Nothing starts if a
+	/// name is already taken there or `dir` is inside one of `paths`.
+	pub async fn paste_into(
+		&self,
+		paths: &[String],
+		dir: &str,
+		copy: bool,
+	) -> Result<(), AdbError> {
+		let dir = dir.trim_end_matches('/');
+		let mut checks = Vec::new();
+		let mut commands = Vec::new();
+		for path in paths {
+			let path = path.trim_end_matches('/');
+			let (parent, name) = path.rsplit_once('/').unwrap_or(("", path));
+			if !in_storage(path) || path == STORAGE_ROOT || !in_storage(dir) {
+				return Err(AdbError::Protocol(format!("refusing to touch {path}")));
+			}
+			if dir == path || dir.starts_with(&format!("{path}/")) {
+				return Err(AdbError::Server(
+					t!("adb.paste_into_itself", name = name).into_owned(),
+				));
+			}
+			// Moving within the same folder changes nothing.
+			if !copy && parent == dir {
+				continue;
+			}
+			let target = shell_words::quote(&join(dir, name)).into_owned();
+			let quoted_name = shell_words::quote(name).into_owned();
+			checks.push(format!(
+				"[ -e {target} ] && {{ echo {quoted_name}; exit 3; }}"
+			));
+			let source = shell_words::quote(path);
+			commands.push(if copy {
+				format!("cp -R {source} {target}")
+			} else {
+				format!("mv {source} {target}")
+			});
+		}
+		if commands.is_empty() {
+			return Ok(());
+		}
+		let script = format!("{}; {}", checks.join("; "), commands.join(" && "));
+		let out = self.shell_with_timeout(&script, PASTE_TIMEOUT).await?;
+		match out.exit_code {
+			Some(0) => Ok(()),
+			Some(3) => Err(AdbError::Server(
+				t!("adb.name_taken", name = out.stdout.trim()).into_owned(),
+			)),
+			_ => Err(AdbError::Server(
+				t!(
+					"adb.command_failed",
+					command = if copy { "cp" } else { "mv" },
 					detail = out.stderr.trim()
 				)
 				.into_owned(),

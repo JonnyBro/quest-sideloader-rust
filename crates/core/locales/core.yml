@@ -159,6 +159,26 @@ files.copying_to:
   en: "Copying to the headset"
   ru: "Копирую на шлем"
   uk: "Копіюю на шолом"
+files.copy_title:
+  en: "Copy %{name}"
+  ru: "Копировать %{name}"
+  uk: "Копіювати %{name}"
+files.move_title:
+  en: "Move %{name}"
+  ru: "Перенести %{name}"
+  uk: "Перенести %{name}"
+files.copying:
+  en: "Copying on the headset"
+  ru: "Копирую на шлеме"
+  uk: "Копіюю на шоломі"
+files.moving:
+  en: "Moving on the headset"
+  ru: "Переношу на шлеме"
+  uk: "Переношу на шоломі"
+files.pasted:
+  en: "Done: %{n}"
+  ru: "Готово: %{n}"
+  uk: "Готово: %{n}"
 files.pulled:
   en: "Copied %{n} file(s)"
   ru: "Скопировано файлов: %{n}"
@@ -719,6 +739,10 @@ adb.name_taken:
   en: "%{name} already exists in this folder"
   ru: "%{name} уже есть в этой папке"
   uk: "%{name} вже є в цій теці"
+adb.paste_into_itself:
+  en: "%{name} can't go inside itself"
+  ru: "%{name} нельзя положить внутрь самого себя"
+  uk: "%{name} не можна покласти всередину самого себе"
 dld.not_release:
   en: "not a release folder: %{name}"
   ru: "это не папка релиза: %{name}"
