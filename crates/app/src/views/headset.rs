@@ -1202,6 +1202,15 @@ impl HeadsetView {
 					.tooltip(t!("hs.screenshot_hint"))
 					.on_click(cx.listener(|this, _, _, _| this.send(Command::Screenshot))),
 			)
+			.children(quest_sideloader_core::scrcpy::path().is_some().then(|| {
+				Button::new("mirror")
+					.label(t!("hs.mirror"))
+					.outline()
+					.small()
+					.tooltip(t!("hs.mirror_hint"))
+					.on_click(cx.listener(|this, _, _, _| this.send(Command::MirrorScreen)))
+			}))
+			.child(self.app_safety_menu())
 			.child(self.reboot_menu());
 
 		let current = |tweak: Tweak| -> Option<String> {
@@ -1267,6 +1276,58 @@ impl HeadsetView {
 					),
 			)
 			.into_any_element()
+	}
+
+	fn app_safety_menu(&self) -> impl IntoElement {
+		let engine = self.engine.clone();
+		let serial = self.serial.clone().unwrap_or_default();
+		Button::new("app-safety")
+			.label(t!("hs.app_safety"))
+			.outline()
+			.small()
+			.dropdown_caret(true)
+			.tooltip(t!("hs.app_safety_hint"))
+			.dropdown_menu(move |mut menu: PopupMenu, _, _| {
+				for (enabled, label, title, text) in [
+					(
+						false,
+						t!("hs.app_safety_off"),
+						t!("hs.app_safety_off_title"),
+						t!("hs.app_safety_off_text"),
+					),
+					(
+						true,
+						t!("hs.app_safety_on"),
+						t!("hs.app_safety_on_title"),
+						t!("hs.app_safety_on_text"),
+					),
+				] {
+					let engine = engine.clone();
+					let serial = serial.clone();
+					let (label, title, text) =
+						(label.into_owned(), title.into_owned(), text.into_owned());
+					menu = menu.item(PopupMenuItem::new(label.clone()).on_click(
+						move |_, window, cx| {
+							confirm(
+								&engine,
+								Confirm {
+									title: title.clone(),
+									text: text.clone(),
+									ok: label.clone(),
+									danger: !enabled,
+								},
+								Command::SetAppSafety {
+									serial: serial.clone(),
+									enabled,
+								},
+								window,
+								cx,
+							);
+						},
+					));
+				}
+				menu
+			})
 	}
 
 	fn reboot_menu(&self) -> impl IntoElement {

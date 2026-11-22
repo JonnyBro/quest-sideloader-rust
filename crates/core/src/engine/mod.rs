@@ -97,9 +97,15 @@ pub enum Command {
 	/// Turn on wireless ADB and connect to the headset over Wi-Fi.
 	EnableWireless(String),
 	Screenshot(String),
+	/// Show the headset's screen in a scrcpy window.
+	MirrorScreen(String),
 	/// USB file transfer (MTP) on or off, so the headset shows up in the
 	/// computer's file manager.
 	SetMtp {
+		serial: String,
+		enabled: bool,
+	},
+	SetAppSafety {
 		serial: String,
 		enabled: bool,
 	},
@@ -1003,6 +1009,46 @@ async fn run(
 				};
 				quick(&state.sink, done.into_owned(), async move {
 					device.set_mtp(enabled).await
+				});
+			}
+			Command::SetAppSafety { serial, enabled } => {
+				let (device, sink) = (state.adb.device(serial), state.sink.clone());
+				tokio::spawn(async move {
+					match device.set_app_safety(enabled).await {
+						Ok(checks) => {
+							let list = checks
+								.iter()
+								.map(|c| format!("{} = {}", c.name, c.value))
+								.collect::<Vec<_>>()
+								.join(", ");
+							if checks.iter().all(|c| c.applied) {
+								let done = if enabled {
+									t!("eng.app_safety_on", checks = list)
+								} else {
+									t!("eng.app_safety_off", checks = list)
+								};
+								sink.emit(Event::Notice(done.into_owned()));
+							} else {
+								sink.emit(Event::Error(
+									t!("eng.app_safety_partly", checks = list).into_owned(),
+								));
+							}
+						}
+						Err(e) => sink.emit(Event::Error(
+							t!("eng.app_safety_failed", error = e).into_owned(),
+						)),
+					}
+				});
+			}
+			Command::MirrorScreen(serial) => {
+				let (adb, sink) = (state.adb.clone(), state.sink.clone());
+				tokio::spawn(async move {
+					let title = format!("Quest Sideloader: {serial}");
+					if let Err(e) = crate::scrcpy::run(&adb, &serial, &title).await {
+						sink.emit(Event::Error(
+							t!("eng.scrcpy_failed", error = e).into_owned(),
+						));
+					}
 				});
 			}
 			Command::Screenshot(serial) => {

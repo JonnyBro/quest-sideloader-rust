@@ -15,6 +15,7 @@ pub mod platform_tools;
 pub mod rclone_tool;
 pub mod rename;
 pub mod saves;
+pub mod scrcpy;
 pub mod settings;
 pub mod sideload;
 

@@ -200,6 +200,26 @@ impl Tweak {
 	}
 }
 
+const APP_SAFETY_FLAGS: &[(&str, &str)] = &[
+	("oculus_shared_horizon", "oc_app_safety_binary_check"),
+	("oculus_shared_os_services", "oc_app_safety_binary_check"),
+	("hzos_system_sessionless", "qe_consumer_pha_detection"),
+	(
+		"oculus_shared_os_services_sessionless",
+		"gk_consumer_pha_service_aosp",
+	),
+];
+const APP_SAFETY_OPS: &[&str] = &["RUN_IN_BACKGROUND", "START_FOREGROUND"];
+
+/// What a check was left at after [`Device::set_app_safety`].
+#[derive(Debug, Clone)]
+pub struct SafetyCheck {
+	pub name: String,
+	pub value: String,
+	/// The value is the one that was asked for.
+	pub applied: bool,
+}
+
 fn quote(s: &str) -> String {
 	shell_words::quote(s).into_owned()
 }
@@ -401,6 +421,70 @@ impl Device {
 		self.shell_ok(&format!("setprop {} {value}", tweak.property()))
 			.await
 			.map(drop)
+	}
+
+	/// Turns App Safety (the binary and PHA checks that flag sideloaded apps)
+	/// on or off, then reads every setting back.
+	pub async fn set_app_safety(&self, enabled: bool) -> Result<Vec<SafetyCheck>, AdbError> {
+		let (flag, mode) = if enabled {
+			("true", "allow")
+		} else {
+			("false", "ignore")
+		};
+		let mut commands: Vec<String> = APP_SAFETY_FLAGS
+			.iter()
+			.map(|(ns, key)| format!("cmd device_config put {ns} {key} {flag}"))
+			.collect();
+		commands.extend(
+			APP_SAFETY_OPS
+				.iter()
+				.map(|op| format!("appops set com.oculus.appsafety {op} {mode}")),
+		);
+		commands.extend(
+			[
+				"pm clear com.oculus.ocms",
+				"am force-stop com.oculus.appsafety",
+				"am force-stop com.oculus.vrshell",
+			]
+			.map(str::to_owned),
+		);
+		for command in &commands {
+			self.shell_ok(command).await?;
+		}
+
+		let mut checks = Vec::new();
+		for (ns, key) in APP_SAFETY_FLAGS {
+			let value = self
+				.shell_ok(&format!("cmd device_config get {ns} {key}"))
+				.await?
+				.trim()
+				.to_owned();
+			checks.push(SafetyCheck {
+				name: format!("{ns}/{key}"),
+				applied: value == flag,
+				value,
+			});
+		}
+		for op in APP_SAFETY_OPS {
+			let out = self
+				.shell_ok(&format!("appops get com.oculus.appsafety {op}"))
+				.await?;
+			// "RUN_IN_BACKGROUND: ignore; time=..."
+			let value = out
+				.split_once(':')
+				.map_or(out.as_str(), |(_, rest)| rest)
+				.split(';')
+				.next()
+				.unwrap_or_default()
+				.trim()
+				.to_owned();
+			checks.push(SafetyCheck {
+				name: (*op).to_owned(),
+				applied: value == mode,
+				value,
+			});
+		}
+		Ok(checks)
 	}
 
 	/// Space each app's APK, OBB and `Android/data` folders take, by package.

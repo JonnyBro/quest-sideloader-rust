@@ -33,6 +33,14 @@ impl AdbServer {
 		}
 	}
 
+	pub fn adb_path(&self) -> &std::path::Path {
+		&self.adb_path
+	}
+
+	pub fn port(&self) -> u16 {
+		self.addr.port()
+	}
+
 	#[cfg(test)]
 	pub(crate) fn with_addr(addr: SocketAddr) -> Self {
 		Self {

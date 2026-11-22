@@ -267,6 +267,46 @@ hs.screenshot_hint:
   en: "Saved to your Pictures folder"
   ru: "Сохраняется в папку \"Изображения\""
   uk: "Зберігається в теку \"Зображення\""
+hs.mirror:
+  en: "Mirror screen"
+  ru: "Трансляция экрана"
+  uk: "Трансляція екрана"
+hs.mirror_hint:
+  en: "Opens the headset's screen in a scrcpy window"
+  ru: "Открывает экран шлема в окне scrcpy"
+  uk: "Відкриває екран шолома у вікні scrcpy"
+hs.app_safety:
+  en: "App Safety"
+  ru: "App Safety"
+  uk: "App Safety"
+hs.app_safety_hint:
+  en: "App Safety is the Horizon OS check that flags sideloaded apps as harmful and blocks them."
+  ru: "App Safety - проверка в Horizon OS, которая помечает установленные вручную приложения как вредоносные и блокирует их."
+  uk: "App Safety - перевірка в Horizon OS, яка позначає встановлені вручну застосунки як шкідливі та блокує їх."
+hs.app_safety_off:
+  en: "Turn off"
+  ru: "Отключить"
+  uk: "Вимкнути"
+hs.app_safety_on:
+  en: "Turn on"
+  ru: "Включить"
+  uk: "Увімкнути"
+hs.app_safety_off_title:
+  en: "Turn off App Safety?"
+  ru: "Отключить App Safety?"
+  uk: "Вимкнути App Safety?"
+hs.app_safety_on_title:
+  en: "Turn on App Safety?"
+  ru: "Включить App Safety?"
+  uk: "Увімкнути App Safety?"
+hs.app_safety_off_text:
+  en: "Turns off the App Safety checks, clears com.oculus.ocms data and restarts the headset's interface. A system update or a headset restart may turn the checks back on; if so, do this again."
+  ru: "Отключает проверки App Safety, очищает данные com.oculus.ocms и перезапускает интерфейс шлема. После обновления системы или перезагрузки шлема проверки могут включиться снова, тогда отключите их ещё раз."
+  uk: "Вимикає перевірки App Safety, очищає дані com.oculus.ocms і перезапускає інтерфейс шолома. Після оновлення системи або перезавантаження шолома перевірки можуть увімкнутися знову, тоді вимкніть їх ще раз."
+hs.app_safety_on_text:
+  en: "Turns the App Safety checks back on, clears com.oculus.ocms data and restarts the headset's interface. Sideloaded apps may be flagged or blocked again."
+  ru: "Возвращает проверки App Safety, очищает данные com.oculus.ocms и перезапускает интерфейс шлема. Установленные вручную приложения снова могут помечаться или блокироваться."
+  uk: "Повертає перевірки App Safety, очищає дані com.oculus.ocms і перезапускає інтерфейс шолома. Встановлені вручну застосунки знову можуть позначатися або блокуватися."
 hs.restart_menu:
   en: "Restart..."
   ru: "Перезагрузка..."

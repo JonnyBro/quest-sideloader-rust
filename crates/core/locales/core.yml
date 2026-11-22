@@ -295,6 +295,26 @@ eng.wireless_failed:
   en: "wireless ADB: %{error}"
   ru: "беспроводной ADB: %{error}"
   uk: "бездротовий ADB: %{error}"
+eng.app_safety_off:
+  en: "App Safety is off: %{checks}"
+  ru: "App Safety отключён: %{checks}"
+  uk: "App Safety вимкнено: %{checks}"
+eng.app_safety_on:
+  en: "App Safety is on: %{checks}"
+  ru: "App Safety включён: %{checks}"
+  uk: "App Safety увімкнено: %{checks}"
+eng.app_safety_partly:
+  en: "The commands ran, but some App Safety settings didn't change: %{checks}"
+  ru: "Команды выполнены, но часть настроек App Safety не изменилась: %{checks}"
+  uk: "Команди виконано, але частина налаштувань App Safety не змінилася: %{checks}"
+eng.app_safety_failed:
+  en: "App Safety: %{error}"
+  ru: "App Safety: %{error}"
+  uk: "App Safety: %{error}"
+eng.scrcpy_failed:
+  en: "scrcpy: %{error}"
+  ru: "scrcpy: %{error}"
+  uk: "scrcpy: %{error}"
 eng.screenshot_saved:
   en: "Screenshot saved to %{path}"
   ru: "Скриншот сохранён в %{path}"

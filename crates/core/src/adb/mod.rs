@@ -13,7 +13,7 @@ pub(crate) mod testing;
 
 pub use actions::{
 	AppUsage, BatteryHealth, Controller, ControllerSide, DeviceDetails, Leftover, Power,
-	PowerSource, RebootMode, Tweak, WifiLink,
+	PowerSource, RebootMode, SafetyCheck, Tweak, WifiLink,
 };
 pub use device::{Device, OutputStream, ShellOutput};
 pub use error::AdbError;
