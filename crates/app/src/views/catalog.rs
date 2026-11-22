@@ -173,6 +173,8 @@ pub struct CatalogView {
 	status: CatalogStatus,
 	mirror: Option<String>,
 	installed: Option<Installed>,
+	/// Installed packages the catalog has a newer version of.
+	updates: usize,
 	/// Free space where downloads go.
 	pc_free: Option<u64>,
 	search: Entity<InputState>,
@@ -222,6 +224,7 @@ impl CatalogView {
 			status: CatalogStatus::Idle,
 			mirror: None,
 			installed: None,
+			updates: 0,
 			pc_free: None,
 			search,
 			filter: Filter::All,
@@ -268,6 +271,7 @@ impl CatalogView {
 		self.selected = None;
 		self.rows_dirty = true;
 		self.refresh_candidates();
+		self.count_updates();
 		cx.notify();
 	}
 
@@ -286,6 +290,7 @@ impl CatalogView {
 			self.installed = installed;
 			self.rows_dirty = true;
 			self.refresh_candidates();
+			self.count_updates();
 			cx.notify();
 		}
 	}
@@ -305,6 +310,23 @@ impl CatalogView {
 			self.refresh_candidates();
 			cx.notify();
 		}
+	}
+
+	pub fn updates(&self) -> usize {
+		self.updates
+	}
+
+	fn count_updates(&mut self) {
+		self.updates = match (&self.catalog, &self.installed) {
+			(Some(catalog), Some(apps)) => catalog
+				.games
+				.iter()
+				.filter(|g| apps.status(g) == GameStatus::UpdateAvailable)
+				.map(|g| g.package.as_str())
+				.collect::<HashSet<_>>()
+				.len(),
+			_ => 0,
+		};
 	}
 
 	fn refresh_candidates(&mut self) {

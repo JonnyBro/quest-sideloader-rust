@@ -37,6 +37,13 @@ pub enum Command {
 	SaveSettings(Settings),
 	/// Read the details and per-app storage the headset tab shows.
 	RefreshHeadset(String),
+	/// Answered with [`Event::Leftovers`].
+	FindLeftovers(String),
+	/// Delete the OBB and data folders of uninstalled apps, then look again.
+	RemoveLeftovers {
+		serial: String,
+		packages: Vec<String>,
+	},
 	LaunchApp {
 		serial: String,
 		package: String,
@@ -64,6 +71,8 @@ pub enum Command {
 	},
 	DeleteBackup(crate::saves::Backup),
 	ListBackups,
+	/// Answered with [`Event::AppUpdate`] when GitHub has a newer release.
+	CheckAppUpdate,
 	/// Answered with [`Event::Downloads`].
 	ListDownloads,
 	/// Delete a release folder from the downloads folder by name, or what an
@@ -236,6 +245,11 @@ pub enum Event {
 		>,
 	},
 	Backups(Vec<crate::saves::Backup>),
+	AppUpdate(crate::app_update::AppRelease),
+	Leftovers {
+		serial: String,
+		result: std::result::Result<Vec<crate::adb::Leftover>, String>,
+	},
 	/// Something changed the stored backups; ask again with [`Command::ListBackups`].
 	BackupsChanged,
 	/// A sync failed because there is no rclone; it can be installed with
@@ -381,8 +395,15 @@ impl State {
 			locks: self.device_locks.clone(),
 			sink: self.sink.clone(),
 			title_from_files: true,
+			backups: self.update_backups(),
 		};
 		self.tasks.insert(id, install::spawn(ctx, path));
+	}
+
+	fn update_backups(&self) -> Option<PathBuf> {
+		self.settings
+			.backup_before_update
+			.then(|| self.paths.backups_dir())
 	}
 
 	fn download_deps(&self) -> downloads::Deps {
@@ -394,6 +415,7 @@ impl State {
 			work_dir: self.paths.cache_dir().join("sideload"),
 			downloads_dir: self.settings.downloads_dir.clone(),
 			keep_downloads: self.settings.keep_downloads,
+			backups: self.update_backups(),
 		}
 	}
 
@@ -781,6 +803,27 @@ async fn run(
 			Command::CancelTask(task) => state.cancel(task),
 			Command::Download { game, serial } => state.enqueue_download(game, serial),
 			Command::MoveDownload { task, delta } => state.queue.move_by(task, delta),
+			Command::FindLeftovers(serial) => {
+				let (device, sink) = (state.adb.device(serial.clone()), state.sink.clone());
+				tokio::spawn(async move {
+					let result = device.leftovers().await.map_err(|e| e.to_string());
+					sink.emit(Event::Leftovers { serial, result });
+				});
+			}
+			Command::RemoveLeftovers { serial, packages } => {
+				let (device, sink) = (state.adb.device(serial.clone()), state.sink.clone());
+				tokio::spawn(async move {
+					if let Err(e) = device.remove_leftovers(&packages).await {
+						sink.emit(Event::Error(e.to_string()));
+					} else {
+						sink.emit(Event::Notice(
+							t!("eng.leftovers_removed", n = packages.len()).into_owned(),
+						));
+					}
+					let result = device.leftovers().await.map_err(|e| e.to_string());
+					sink.emit(Event::Leftovers { serial, result });
+				});
+			}
 			Command::RefreshHeadset(serial) => {
 				let (device, sink) = (state.adb.device(serial.clone()), state.sink.clone());
 				tokio::spawn(async move {
@@ -861,6 +904,19 @@ async fn run(
 					Err(e) => sink.emit(Event::Error(e.to_string())),
 				});
 			}
+			Command::CheckAppUpdate => {
+				let sink = state.sink.clone();
+				tokio::spawn(async move {
+					match crate::app_update::check().await {
+						Ok(Some(release)) => {
+							tracing::info!("version {} is out: {}", release.version, release.url);
+							sink.emit(Event::AppUpdate(release));
+						}
+						Ok(None) => tracing::debug!("the app is up to date"),
+						Err(e) => tracing::warn!("couldn't check for a new version: {e}"),
+					}
+				});
+			}
 			Command::ListBackups => {
 				let (root, sink) = (state.paths.backups_dir(), state.sink.clone());
 				tokio::task::spawn_blocking(move || {
@@ -898,6 +954,7 @@ async fn run(
 					locks: state.device_locks.clone(),
 					sink: state.sink.clone(),
 					title_from_files: false,
+					backups: None,
 				};
 				let entry = headset::spawn_reinstall(
 					ctx,

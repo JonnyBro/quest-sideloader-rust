@@ -20,8 +20,8 @@ use gpui_kit::component::{
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use quest_sideloader_core::adb::{
-	AppUsage, BatteryHealth, ControllerSide, DeviceDetails, DeviceInfo, PowerSource, RebootMode,
-	Tweak,
+	AppUsage, BatteryHealth, ControllerSide, DeviceDetails, DeviceInfo, Leftover, PowerSource,
+	RebootMode, Tweak,
 };
 use quest_sideloader_core::catalog::Catalog;
 use quest_sideloader_core::saves::Backup;
@@ -85,6 +85,11 @@ struct Row {
 	installed: Option<u64>,
 }
 
+pub enum HeadsetEvent {
+	/// Show the log of an app in the Console.
+	AppLog { package: String, name: String },
+}
+
 pub struct HeadsetView {
 	engine: Rc<Engine>,
 	serial: Option<String>,
@@ -107,8 +112,13 @@ pub struct HeadsetView {
 	app_cols: [bool; 4],
 	/// Which backup columns fit: package, date, size.
 	backup_cols: [bool; 3],
+	/// Folders of uninstalled apps; `None` until searched.
+	leftovers: Option<Result<Vec<Leftover>, String>>,
+	searching_leftovers: bool,
 	_filter_changes: Subscription,
 }
+
+impl EventEmitter<HeadsetEvent> for HeadsetView {}
 
 impl HeadsetView {
 	pub fn new(engine: Rc<Engine>, window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -136,6 +146,8 @@ impl HeadsetView {
 			copies: HashSet::new(),
 			app_cols: [true; 4],
 			backup_cols: [true; 3],
+			leftovers: None,
+			searching_leftovers: false,
 			_filter_changes: subscription,
 		}
 	}
@@ -167,6 +179,7 @@ impl HeadsetView {
 		self.serial = None;
 		self.info = None;
 		self.details = None;
+		self.leftovers = None;
 		cx.notify();
 	}
 
@@ -174,9 +187,177 @@ impl HeadsetView {
 		if self.serial.as_deref() != Some(serial) {
 			self.serial = Some(serial.to_owned());
 			self.details = None;
+			self.leftovers = None;
 		}
 		self.info = info;
 		cx.notify();
+	}
+
+	pub fn set_leftovers(
+		&mut self,
+		serial: &str,
+		leftovers: Result<Vec<Leftover>, String>,
+		cx: &mut Context<Self>,
+	) {
+		if self.serial.as_deref() == Some(serial) {
+			self.leftovers = Some(leftovers);
+			self.searching_leftovers = false;
+			cx.notify();
+		}
+	}
+
+	fn find_leftovers(&mut self, cx: &mut Context<Self>) {
+		if let Some(serial) = self.serial.clone() {
+			self.searching_leftovers = true;
+			self.engine.send(Command::FindLeftovers(serial));
+			cx.notify();
+		}
+	}
+
+	fn leftovers_card(&self, cx: &mut Context<Self>) -> AnyElement {
+		let theme = cx.theme().clone();
+		let muted = |text: String| div().text_color(theme.muted_foreground).child(text);
+		let search = Button::new("find-leftovers")
+			.label(if self.leftovers.is_some() {
+				t!("hs.leftovers_again")
+			} else {
+				t!("hs.leftovers_find")
+			})
+			.outline()
+			.small()
+			.loading(self.searching_leftovers)
+			.on_click(cx.listener(|this, _, _, cx| this.find_leftovers(cx)));
+		let serial = self.serial.clone().unwrap_or_default();
+		let body = match &self.leftovers {
+			None => muted(t!("hs.leftovers_hint").into_owned()).into_any_element(),
+			Some(Err(e)) => div()
+				.text_color(theme.danger)
+				.child(e.clone())
+				.into_any_element(),
+			Some(Ok(list)) if list.is_empty() => {
+				muted(t!("hs.leftovers_none").into_owned()).into_any_element()
+			}
+			Some(Ok(list)) => {
+				let total: u64 = list.iter().map(Leftover::total).sum();
+				let rows = list.iter().enumerate().map(|(ix, leftover)| {
+					let mut parts = Vec::new();
+					if let Some(obb) = leftover.obb_bytes {
+						parts.push(format!("OBB {}", format_bytes(obb)));
+					}
+					if let Some(data) = leftover.data_bytes {
+						parts.push(t!("hs.leftovers_data", size = format_bytes(data)).into_owned());
+					}
+					let name = self.names.get(&leftover.package).cloned();
+					let engine = self.engine.clone();
+					let (package, serial) = (leftover.package.clone(), serial.clone());
+					let label = name.clone().unwrap_or_else(|| package.clone());
+					let size = format_bytes(leftover.total());
+					h_flex()
+						.gap_3()
+						.py_1()
+						.child(
+							v_flex()
+								.flex_1()
+								.min_w_0()
+								.child(div().truncate().child(label))
+								.when(name.is_some(), |d| {
+									d.child(
+										div()
+											.text_sm()
+											.text_color(theme.muted_foreground)
+											.mono(cx)
+											.truncate()
+											.child(package.clone()),
+									)
+								}),
+						)
+						.child(
+							div()
+								.flex_shrink_0()
+								.text_sm()
+								.mono(cx)
+								.child(parts.join(", ")),
+						)
+						.child(
+							Button::new(("remove-leftover", ix))
+								.icon(Icon::new(IconName::Delete))
+								.ghost()
+								.xsmall()
+								.tooltip(t!("common.delete"))
+								.on_click(move |_, window, cx| {
+									confirm(
+										&engine,
+										Confirm {
+											title: t!("hs.leftovers_remove_title").into_owned(),
+											text: t!(
+												"hs.leftovers_remove_one",
+												name = package,
+												size = size
+											)
+											.into_owned(),
+											ok: t!("common.delete").into_owned(),
+											danger: true,
+										},
+										Command::RemoveLeftovers {
+											serial: serial.clone(),
+											packages: vec![package.clone()],
+										},
+										window,
+										cx,
+									);
+								}),
+						)
+				});
+				let engine = self.engine.clone();
+				let packages: Vec<String> = list.iter().map(|l| l.package.clone()).collect();
+				let count = packages.len();
+				let serial = serial.clone();
+				v_flex()
+					.gap_1()
+					.children(rows)
+					.child(
+						h_flex().pt_2().child(
+							Button::new("remove-all-leftovers")
+								.label(t!(
+									"hs.leftovers_remove_all",
+									n = count,
+									size = format_bytes(total)
+								))
+								.danger()
+								.small()
+								.on_click(move |_, window, cx| {
+									confirm(
+										&engine,
+										Confirm {
+											title: t!("hs.leftovers_remove_title").into_owned(),
+											text: t!(
+												"hs.leftovers_remove_text",
+												n = count,
+												size = format_bytes(total)
+											)
+											.into_owned(),
+											ok: t!("common.delete").into_owned(),
+											danger: true,
+										},
+										Command::RemoveLeftovers {
+											serial: serial.clone(),
+											packages: packages.clone(),
+										},
+										window,
+										cx,
+									);
+								}),
+						),
+					)
+					.into_any_element()
+			}
+		};
+		card(
+			t!("hs.leftovers").into(),
+			v_flex().gap_3().child(body).child(h_flex().child(search)),
+			&theme,
+		)
+		.into_any_element()
 	}
 
 	pub fn set_details(&mut self, serial: &str, details: Details, cx: &mut Context<Self>) {
@@ -646,13 +827,13 @@ impl HeadsetView {
 								.children(tag),
 						)
 					})
-					.child(self.app_menu(ix, &row.app))
+					.child(self.app_menu(ix, &row.app, cx.entity().downgrade()))
 					.into_any_element()
 			})
 			.collect()
 	}
 
-	fn app_menu(&self, ix: usize, app: &AppInfo) -> impl IntoElement {
+	fn app_menu(&self, ix: usize, app: &AppInfo, this: WeakEntity<Self>) -> impl IntoElement {
 		let engine = self.engine.clone();
 		let serial = self.serial.clone().unwrap_or_default();
 		let app = app.clone();
@@ -676,8 +857,18 @@ impl HeadsetView {
 				};
 				let (uninstall_serial, uninstall_app) = (serial.clone(), app.clone());
 				let uninstall_engine = engine.clone();
+				let (log_view, log_app) = (this.clone(), app.clone());
 				menu.item(send_item(&engine, t!("hs.launch").into(), launch))
 					.item(send_item(&engine, t!("hs.stop").into(), stop))
+					.item(
+						PopupMenuItem::new(t!("hs.app_log")).on_click(move |_, _, cx| {
+							let event = HeadsetEvent::AppLog {
+								package: log_app.package.clone(),
+								name: log_app.name.clone(),
+							};
+							let _ = log_view.update(cx, |_, cx| cx.emit(event));
+						}),
+					)
 					.separator()
 					.item(send_item(&engine, t!("hs.back_up").into(), back_up))
 					.separator()
@@ -1066,7 +1257,14 @@ impl HeadsetView {
 					.flex_1()
 					.min_h_0()
 					.overflow_y_scroll()
-					.child(v_flex().gap_4().px_5().pb_5().child(info_cards)),
+					.child(
+						v_flex()
+							.gap_4()
+							.px_5()
+							.pb_5()
+							.child(info_cards)
+							.child(self.leftovers_card(cx)),
+					),
 			)
 			.into_any_element()
 	}

@@ -335,6 +335,53 @@ mod tests {
 	}
 
 	#[test]
+	fn backs_up_saves_before_installing_over_an_app() {
+		let rt = tokio::runtime::Runtime::new().unwrap();
+		let fake = rt.block_on(FakeAdb::start());
+		{
+			let mut rec = fake.recorded.lock().unwrap();
+			rec.installed.push(("com.example.game".into(), 3));
+			rec.device_files.push((
+				"/sdcard/Android/data/com.example.game/files/save.dat".into(),
+				b"progress".to_vec(),
+			));
+		}
+		let dir = tempfile::tempdir().unwrap();
+		let release = dir.path().join("Game");
+		std::fs::create_dir_all(&release).unwrap();
+		std::fs::write(release.join("game.pkg"), b"not really an apk").unwrap();
+		std::fs::write(
+			release.join("install.txt"),
+			"adb install game.pkg\nadb push com.example.game /sdcard/Android/obb/\n",
+		)
+		.unwrap();
+		std::fs::create_dir_all(release.join("com.example.game")).unwrap();
+		std::fs::write(release.join("com.example.game/main.obb"), b"obb").unwrap();
+
+		let paths = AppPaths::under(dir.path().join("app"));
+		let engine = Engine::start_with_adb_port(
+			paths.clone(),
+			Settings::defaults_for(&paths),
+			std::sync::Arc::new(|| {}),
+			fake.port,
+		)
+		.unwrap();
+		engine.send(Command::Install {
+			serial: "SER1".into(),
+			path: release,
+		});
+		let done = wait_finished(&engine, None);
+		assert_eq!(done.state, TaskState::Done, "{done:?}");
+		let backups = crate::saves::list(&paths.backups_dir());
+		assert_eq!(
+			backups.len(),
+			1,
+			"the installed version's saves are backed up"
+		);
+		assert_eq!(backups[0].meta.version_code, Some(3));
+	}
+
+	#[test]
 	fn signature_conflict_then_reinstall_keeping_saves() {
 		let rt = tokio::runtime::Runtime::new().unwrap();
 		let fake = rt.block_on(FakeAdb::start());

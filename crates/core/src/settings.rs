@@ -90,6 +90,10 @@ pub struct Settings {
 	pub keep_downloads: bool,
 	/// Desktop notifications when tasks end while the window isn't focused.
 	pub notifications: bool,
+	/// Look for a newer release of the app on GitHub at start.
+	pub check_app_updates: bool,
+	/// Back up an installed app's saves before installing over it.
+	pub backup_before_update: bool,
 	/// `None` means `adb` from `PATH`.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub adb_path: Option<PathBuf>,
@@ -219,6 +223,8 @@ impl Default for Settings {
 			language: Language::default(),
 			keep_downloads: false,
 			notifications: true,
+			check_app_updates: true,
+			backup_before_update: true,
 			adb_path: None,
 			rclone_path: None,
 			active_mirror: None,
@@ -346,6 +352,8 @@ mod tests {
 			language: Language::Russian,
 			keep_downloads: true,
 			notifications: false,
+			check_app_updates: true,
+			backup_before_update: true,
 			adb_path: Some("/opt/platform-tools/adb".into()),
 			rclone_path: None,
 			active_mirror: Some("m1".into()),

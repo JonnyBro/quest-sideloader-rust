@@ -23,6 +23,7 @@ use gpui_kit::*;
 use quest_sideloader_core::adb::{
 	Controller, ControllerSide, DeviceDetails, DeviceEntry, DeviceInfo, DeviceState,
 };
+use quest_sideloader_core::app_update::AppRelease;
 use quest_sideloader_core::{
 	AdbStatus, AppPaths, CatalogStatus, Command, Engine, Event, Settings, TaskId, TaskKind,
 	TaskSnapshot, TaskState, format_bytes,
@@ -41,7 +42,7 @@ use crate::views::catalog::{CatalogView, Installed};
 use crate::views::console::ConsoleView;
 use crate::views::devices::{DevicesEvent, DevicesView};
 use crate::views::downloads::{DownloadsEvent, DownloadsView};
-use crate::views::headset::HeadsetView;
+use crate::views::headset::{HeadsetEvent, HeadsetView};
 use crate::views::inspector::InspectorView;
 use crate::views::rename::RenameView;
 use crate::views::settings::{SettingsEvent, SettingsView};
@@ -104,6 +105,8 @@ pub struct Shell {
 	review_open: Option<TaskId>,
 	/// Renamed copies made here; they get a badge and lead the restore list.
 	copies: HashSet<String>,
+	/// A newer release of the app, found at start.
+	app_update: Option<AppRelease>,
 	title: String,
 	tab: Tab,
 	adb: Option<AdbStatus>,
@@ -139,6 +142,7 @@ pub struct Shell {
 	_appearance: Subscription,
 	_settings_events: Subscription,
 	_downloads_events: Subscription,
+	_headset_events: Subscription,
 	_devices_events: Subscription,
 }
 
@@ -287,6 +291,29 @@ impl Shell {
 			view.set_copies(copies.clone());
 			view
 		});
+		let headset_events = cx.subscribe_in(
+			&headset,
+			window,
+			|this, _, event: &HeadsetEvent, window, cx| match event {
+				HeadsetEvent::AppLog { package, name } => {
+					// Package names never need quoting; anything else isn't one.
+					if !package
+						.chars()
+						.all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_')
+					{
+						return;
+					}
+					// Waits for the app to start, so a crash right at launch is caught too.
+					let command = format!(
+						"until pid=$(pidof -s {package}); do sleep 1; done; logcat -v time --pid=$pid"
+					);
+					let note = t!("console.app_log", name = name).into_owned();
+					this.console
+						.update(cx, |c, cx| c.run_command(command, Some(note), cx));
+					this.set_tab(Tab::Console, window, cx);
+				}
+			},
+		);
 		let log_colors = SharedColors::default();
 		let log_view = cx.new(|cx| {
 			let mut editor = EditorState::new(window, cx)
@@ -302,6 +329,9 @@ impl Shell {
 			editor
 		});
 		engine.send(Command::ListBackups);
+		if settings.check_app_updates {
+			engine.send(Command::CheckAppUpdate);
+		}
 		Self {
 			engine,
 			ui_path: paths.ui_state_file(),
@@ -313,6 +343,7 @@ impl Shell {
 			reviews: VecDeque::new(),
 			review_open: None,
 			copies,
+			app_update: None,
 			title: String::new(),
 			tab: ui.tab.unwrap_or(Tab::Headset),
 			adb: None,
@@ -343,6 +374,7 @@ impl Shell {
 			_appearance: appearance,
 			_settings_events: settings_events,
 			_downloads_events: downloads_events,
+			_headset_events: headset_events,
 			_devices_events: devices_events,
 		}
 	}
@@ -446,6 +478,12 @@ impl Shell {
 				}
 				Err(e) => self.notify(Notification::error(e), window, cx),
 			},
+			Event::Leftovers { serial, result } => {
+				// Removing folders frees space; the status bar and Device page show it.
+				self.engine.send(Command::RefreshDevice(serial.clone()));
+				self.headset
+					.update(cx, |h, cx| h.set_leftovers(&serial, result, cx));
+			}
 			Event::HeadsetDetails { serial, details } => {
 				if let Ok((d, _)) = &details {
 					self.details.insert(serial.clone(), d.clone());
@@ -469,6 +507,10 @@ impl Shell {
 				self.headset.update(cx, |h, cx| h.set_backups(backups, cx));
 			}
 			Event::BackupsChanged => self.engine.send(Command::ListBackups),
+			Event::AppUpdate(release) => {
+				self.app_update = Some(release);
+				cx.notify();
+			}
 			Event::RenameAnalysis { id, result } => {
 				self.rename
 					.update(cx, |r, cx| r.on_analysis(id, result, window, cx));
@@ -1066,6 +1108,19 @@ impl Shell {
 		if tab == Tab::Downloads && active > 0 {
 			item = item.suffix(move |_, _| Tag::primary().small().child(active.to_string()));
 		}
+		let updates = self.catalog.read(cx).updates();
+		if tab == Tab::Catalog && updates > 0 {
+			let color = cx.theme().warning;
+			item = item.suffix(move |_, _| {
+				div()
+					.id("catalog-updates")
+					.child(crate::widgets::soft_tag(color, updates.to_string()))
+					.tooltip(move |window, cx| {
+						Tooltip::new(t!("lib.updates_badge", n = updates).into_owned())
+							.build(window, cx)
+					})
+			});
+		}
 		item
 	}
 
@@ -1262,6 +1317,16 @@ impl Shell {
 			.border_color(theme.status_bar_border)
 			.child(left.flex_1())
 			.children(task)
+			.children(self.app_update.as_ref().map(|release| {
+				let url = release.url.clone();
+				Button::new("app-update")
+					.label(t!("upd.available", version = release.version))
+					.ghost()
+					.xsmall()
+					.text_color(theme.success)
+					.tooltip(t!("upd.hint"))
+					.on_click(move |_, _, cx| cx.open_url(&url))
+			}))
 			.child(
 				Button::new("toggle-logs")
 					.icon(Icon::from(AppIcon::Logs))

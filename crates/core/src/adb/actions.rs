@@ -133,6 +133,48 @@ pub struct Controller {
 
 /// Performance overrides Quest headsets read from system properties. They
 /// last until the next reboot.
+/// OBB and data folders of an app that isn't installed any more.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Leftover {
+	pub package: String,
+	pub obb_bytes: Option<u64>,
+	pub data_bytes: Option<u64>,
+}
+
+impl Leftover {
+	pub fn total(&self) -> u64 {
+		self.obb_bytes.unwrap_or(0) + self.data_bytes.unwrap_or(0)
+	}
+}
+
+const OBB_ROOT: &str = "/sdcard/Android/obb";
+const DATA_ROOT: &str = "/sdcard/Android/data";
+/// Folders of system apps are never offered for removal, installed or not.
+const SYSTEM_PREFIXES: [&str; 5] = [
+	"com.oculus.",
+	"com.meta.",
+	"com.facebook.",
+	"com.android.",
+	"android.",
+];
+
+fn is_removable(name: &str) -> bool {
+	crate::sideload::is_package_name(name) && !SYSTEM_PREFIXES.iter().any(|p| name.starts_with(p))
+}
+
+/// `du -sk` lines: kilobytes, a tab and the path.
+fn parse_du_sizes(text: &str) -> HashMap<String, u64> {
+	text.lines()
+		.filter_map(|line| {
+			let (kb, path) = line.split_once(char::is_whitespace)?;
+			Some((
+				path.trim().to_owned(),
+				kb.trim().parse::<u64>().ok()? * 1024,
+			))
+		})
+		.collect()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tweak {
 	RefreshRate,
@@ -163,6 +205,99 @@ fn quote(s: &str) -> String {
 }
 
 impl Device {
+	/// Folders in `Android/obb` and `Android/data` whose app isn't installed,
+	/// largest first.
+	pub async fn leftovers(&self) -> Result<Vec<Leftover>, AdbError> {
+		let installed: std::collections::HashSet<String> =
+			super::parse::parse_packages(&self.shell_ok("pm list packages").await?)
+				.into_iter()
+				.map(|p| p.name)
+				.collect();
+		let mut found: Vec<Leftover> = Vec::new();
+		for root in [OBB_ROOT, DATA_ROOT] {
+			let Ok(out) = self.shell(&format!("ls -1 {root}")).await else {
+				continue;
+			};
+			for name in out.stdout.lines().map(str::trim) {
+				if !is_removable(name) || installed.contains(name) {
+					continue;
+				}
+				if !found.iter().any(|l| l.package == name) {
+					found.push(Leftover {
+						package: name.to_owned(),
+						obb_bytes: None,
+						data_bytes: None,
+					});
+				}
+				let leftover = found.iter_mut().find(|l| l.package == name);
+				if let Some(leftover) = leftover {
+					if root == OBB_ROOT {
+						leftover.obb_bytes = Some(0);
+					} else {
+						leftover.data_bytes = Some(0);
+					}
+				}
+			}
+		}
+		if found.is_empty() {
+			return Ok(found);
+		}
+		let paths: Vec<String> = found
+			.iter()
+			.flat_map(|l| {
+				let obb = l.obb_bytes.map(|_| format!("{OBB_ROOT}/{}", l.package));
+				let data = l.data_bytes.map(|_| format!("{DATA_ROOT}/{}", l.package));
+				obb.into_iter().chain(data)
+			})
+			.collect();
+		let quoted: Vec<String> = paths
+			.iter()
+			.map(|p| shell_words::quote(p).into_owned())
+			.collect();
+		let sizes = parse_du_sizes(
+			&self
+				.shell(&format!("du -sk {}", quoted.join(" ")))
+				.await?
+				.stdout,
+		);
+		for leftover in &mut found {
+			if leftover.obb_bytes.is_some() {
+				leftover.obb_bytes = sizes
+					.get(&format!("{OBB_ROOT}/{}", leftover.package))
+					.copied();
+			}
+			if leftover.data_bytes.is_some() {
+				leftover.data_bytes = sizes
+					.get(&format!("{DATA_ROOT}/{}", leftover.package))
+					.copied();
+			}
+		}
+		found.sort_by_key(|l| std::cmp::Reverse(l.total()));
+		Ok(found)
+	}
+
+	/// Deletes the OBB and data folders of `packages`, refusing any that are
+	/// installed or belong to the system.
+	pub async fn remove_leftovers(&self, packages: &[String]) -> Result<(), AdbError> {
+		let installed: std::collections::HashSet<String> =
+			super::parse::parse_packages(&self.shell_ok("pm list packages").await?)
+				.into_iter()
+				.map(|p| p.name)
+				.collect();
+		let paths: Vec<String> = packages
+			.iter()
+			.filter(|p| is_removable(p) && !installed.contains(*p))
+			.flat_map(|p| [format!("{OBB_ROOT}/{p}"), format!("{DATA_ROOT}/{p}")])
+			.map(|p| shell_words::quote(&p).into_owned())
+			.collect();
+		if paths.is_empty() {
+			return Ok(());
+		}
+		self.shell_ok(&format!("rm -rf {}", paths.join(" ")))
+			.await?;
+		Ok(())
+	}
+
 	pub async fn launch(&self, package: &str) -> Result<(), AdbError> {
 		let out = self
 			.shell(&format!(
@@ -725,6 +860,23 @@ mod tests {
 				},
 			]
 		);
+	}
+
+	#[test]
+	fn leftover_helpers() {
+		let sizes = parse_du_sizes(
+			"2595824\t/sdcard/Android/obb/com.rustltd.h3vr2\n12\t/sdcard/Android/data/com.x\n",
+		);
+		assert_eq!(
+			sizes.get("/sdcard/Android/obb/com.rustltd.h3vr2"),
+			Some(&(2595824 * 1024))
+		);
+		assert_eq!(sizes.get("/sdcard/Android/data/com.x"), Some(&(12 * 1024)));
+		assert!(is_removable("com.rustltd.h3vr2"));
+		assert!(!is_removable("com.oculus.browser"));
+		assert!(!is_removable("com.meta.curio.toybox"));
+		assert!(!is_removable(".nomedia"));
+		assert!(!is_removable("../etc"));
 	}
 
 	#[test]

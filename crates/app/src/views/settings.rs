@@ -568,12 +568,34 @@ impl SettingsView {
 				cx,
 			))
 			.child(field(
+				t!("set.before_updating").into(),
+				Checkbox::new("backup-before-update")
+					.label(t!("set.backup_before_update").into_owned())
+					.checked(self.draft.backup_before_update)
+					.on_click(cx.listener(|this, checked: &bool, _, cx| {
+						this.draft.backup_before_update = *checked;
+						cx.notify();
+					})),
+				cx,
+			))
+			.child(field(
 				t!("set.notifications").into(),
 				Checkbox::new("notifications")
 					.label(t!("set.notify").into_owned())
 					.checked(self.draft.notifications)
 					.on_click(cx.listener(|this, checked: &bool, _, cx| {
 						this.draft.notifications = *checked;
+						cx.notify();
+					})),
+				cx,
+			))
+			.child(field(
+				t!("set.app_updates").into(),
+				Checkbox::new("check-app-updates")
+					.label(t!("set.check_app_updates").into_owned())
+					.checked(self.draft.check_app_updates)
+					.on_click(cx.listener(|this, checked: &bool, _, cx| {
+						this.draft.check_app_updates = *checked;
 						cx.notify();
 					})),
 				cx,

@@ -12,8 +12,8 @@ mod sync;
 pub(crate) mod testing;
 
 pub use actions::{
-	AppUsage, BatteryHealth, Controller, ControllerSide, DeviceDetails, Power, PowerSource,
-	RebootMode, Tweak, WifiLink,
+	AppUsage, BatteryHealth, Controller, ControllerSide, DeviceDetails, Leftover, Power,
+	PowerSource, RebootMode, Tweak, WifiLink,
 };
 pub use device::{Device, OutputStream, ShellOutput};
 pub use error::AdbError;

@@ -2051,3 +2051,79 @@ hs.controllers_hint:
   en: "Controller charge as of the last time it was turned on"
   ru: "Заряд контроллеров на момент, когда они последний раз были включены"
   uk: "Заряд контролерів на момент, коли їх востаннє вмикали"
+upd.available:
+  en: "Version %{version} is out"
+  ru: "Вышла версия %{version}"
+  uk: "Вийшла версія %{version}"
+upd.hint:
+  en: "Open the release page on GitHub"
+  ru: "Открыть страницу релиза на GitHub"
+  uk: "Відкрити сторінку релізу на GitHub"
+set.app_updates:
+  en: "App updates"
+  ru: "Обновления приложения"
+  uk: "Оновлення застосунку"
+set.check_app_updates:
+  en: "Check GitHub for a new version at start"
+  ru: "Проверять новую версию на GitHub при запуске"
+  uk: "Перевіряти нову версію на GitHub під час запуску"
+lib.updates_badge:
+  en: "Updates available for installed games: %{n}"
+  ru: "Обновлений для установленных игр: %{n}"
+  uk: "Оновлень для встановлених ігор: %{n}"
+set.before_updating:
+  en: "Before updating"
+  ru: "Перед обновлением"
+  uk: "Перед оновленням"
+set.backup_before_update:
+  en: "Back up the saves of the installed version"
+  ru: "Делать резервную копию сохранений установленной версии"
+  uk: "Робити резервну копію збережень встановленої версії"
+hs.leftovers:
+  en: "Leftovers of uninstalled apps"
+  ru: "Остатки удалённых приложений"
+  uk: "Залишки видалених застосунків"
+hs.leftovers_hint:
+  en: "OBB and data folders stay on the headset after an app is uninstalled. System apps are never listed."
+  ru: "После удаления приложения его папки OBB и данных остаются на шлеме. Системные приложения здесь не показываются."
+  uk: "Після видалення застосунку його теки OBB і даних залишаються на шоломі. Системні застосунки тут не показуються."
+hs.leftovers_find:
+  en: "Find"
+  ru: "Найти"
+  uk: "Знайти"
+hs.leftovers_again:
+  en: "Search again"
+  ru: "Искать снова"
+  uk: "Шукати знову"
+hs.leftovers_none:
+  en: "Nothing left behind."
+  ru: "Остатков нет."
+  uk: "Залишків немає."
+hs.leftovers_data:
+  en: "data %{size}"
+  ru: "данные %{size}"
+  uk: "дані %{size}"
+hs.leftovers_remove_all:
+  en: "Delete all (%{n}, %{size})"
+  ru: "Удалить всё (%{n}, %{size})"
+  uk: "Видалити все (%{n}, %{size})"
+hs.leftovers_remove_title:
+  en: "Delete leftovers?"
+  ru: "Удалить остатки?"
+  uk: "Видалити залишки?"
+hs.leftovers_remove_one:
+  en: "The OBB and data folders of %{name} (%{size}) will be deleted from the headset. Saves in them are lost unless you have a backup."
+  ru: "Папки OBB и данных %{name} (%{size}) будут удалены со шлема. Сохранения в них пропадут, если нет резервной копии."
+  uk: "Теки OBB і даних %{name} (%{size}) буде видалено з шолома. Збереження в них зникнуть, якщо немає резервної копії."
+hs.leftovers_remove_text:
+  en: "The OBB and data folders of %{n} uninstalled app(s), %{size} in all, will be deleted from the headset. Saves in them are lost unless you have a backup."
+  ru: "Папки OBB и данных удалённых приложений (%{n}, всего %{size}) будут удалены со шлема. Сохранения в них пропадут, если нет резервной копии."
+  uk: "Теки OBB і даних видалених застосунків (%{n}, разом %{size}) буде видалено з шолома. Збереження в них зникнуть, якщо немає резервної копії."
+hs.app_log:
+  en: "Show log"
+  ru: "Показать журнал"
+  uk: "Показати журнал"
+console.app_log:
+  en: "Log of %{name}. If it isn't running, start it on the headset. Stop ends the log."
+  ru: "Журнал %{name}. Если приложение не запущено, запустите его на шлеме. «Стоп» завершает журнал."
+  uk: "Журнал %{name}. Якщо застосунок не запущено, запустіть його на шоломі. «Стоп» завершує журнал."

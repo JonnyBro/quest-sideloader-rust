@@ -73,6 +73,7 @@ pub(super) struct Deps {
 	pub work_dir: PathBuf,
 	pub downloads_dir: PathBuf,
 	pub keep_downloads: bool,
+	pub backups: Option<PathBuf>,
 }
 
 pub(super) struct Job {
@@ -369,6 +370,7 @@ async fn run(
 		locks: deps.locks.clone(),
 		sink: deps.sink.clone(),
 		title_from_files: false,
+		backups: deps.backups.clone(),
 	};
 	check_headset_space(&ctx, &files_dir).await?;
 	let installed = install::install_from(&ctx, &files_dir, tracker, review).await;

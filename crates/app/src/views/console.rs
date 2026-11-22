@@ -66,6 +66,9 @@ pub struct ConsoleView {
 	/// Lines changed since the editor last showed them.
 	dirty: bool,
 	running: Option<u64>,
+	/// A command started from elsewhere while another ran; it runs once
+	/// that one has stopped.
+	queued: Option<(String, Option<String>)>,
 	next_id: u64,
 	_subscriptions: Vec<Subscription>,
 	_sync: Task<()>,
@@ -127,6 +130,7 @@ impl ConsoleView {
 			open_line: false,
 			dirty: false,
 			running: None,
+			queued: None,
 			next_id: 0,
 			_subscriptions: vec![input_events],
 			_sync: sync,
@@ -152,11 +156,13 @@ impl ConsoleView {
 					None => t!("console.ended"),
 				};
 				self.push(Kind::Info, text.into_owned());
+				self.run_queued(cx);
 				cx.notify();
 			}
 			ShellEvent::Failed(error) => {
 				self.running = None;
 				self.push(Kind::Error, error);
+				self.run_queued(cx);
 				cx.notify();
 			}
 		}
@@ -225,6 +231,44 @@ impl ConsoleView {
 		if updated {
 			self.dirty = false;
 		}
+	}
+
+	/// Runs `command` as if typed, with `note` shown above its output; a
+	/// command already running is stopped first.
+	pub fn run_command(&mut self, command: String, note: Option<String>, cx: &mut Context<Self>) {
+		match self.running {
+			Some(id) => {
+				self.queued = Some((command, note));
+				self.engine.send(Command::StopShell(id));
+			}
+			None => self.start(command, note, cx),
+		}
+	}
+
+	fn run_queued(&mut self, cx: &mut Context<Self>) {
+		if let Some((command, note)) = self.queued.take() {
+			self.start(command, note, cx);
+		}
+	}
+
+	fn start(&mut self, command: String, note: Option<String>, cx: &mut Context<Self>) {
+		let Some((serial, _)) = self.target.clone() else {
+			self.push(Kind::Error, t!("console.no_headset").into_owned());
+			cx.notify();
+			return;
+		};
+		self.push(Kind::Command, format!("$ {command}"));
+		if let Some(note) = note {
+			self.push(Kind::Info, note);
+		}
+		self.next_id += 1;
+		self.running = Some(self.next_id);
+		self.engine.send(Command::Shell {
+			id: self.next_id,
+			serial,
+			command,
+		});
+		cx.notify();
 	}
 
 	fn run(&mut self, window: &mut Window, cx: &mut Context<Self>) {

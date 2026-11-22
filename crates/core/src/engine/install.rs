@@ -46,6 +46,9 @@ pub(super) struct InstallContext {
 	pub sink: EventSink,
 	/// Name the task after the APK's label; downloads keep the catalog name.
 	pub title_from_files: bool,
+	/// Where to back up the saves of an app this install replaces; `None`
+	/// skips that (turned off, or the caller backed them up already).
+	pub backups: Option<PathBuf>,
 }
 
 fn file_title(path: &Path) -> String {
@@ -203,6 +206,10 @@ pub(super) async fn install_from(
 		}
 	};
 
+	if let (Some(root), Some(package)) = (&ctx.backups, plan.package()) {
+		back_up_before_update(ctx, tracker, root, package, &plan.title).await;
+	}
+
 	let report = |u| tracker.report(u);
 	let result = match actions {
 		Some(actions) => run::run_script(&ctx.device, &actions, &report).await,
@@ -224,6 +231,42 @@ pub(super) async fn install_from(
 			)))
 		}
 		other => other,
+	}
+}
+
+/// Saves of the installed version, in case the new one breaks them. Not
+/// being able to back up doesn't stop the install; it leaves a warning.
+async fn back_up_before_update(
+	ctx: &InstallContext,
+	tracker: &Tracker,
+	root: &Path,
+	package: &str,
+	title: &str,
+) {
+	let installed = match ctx.device.third_party_packages().await {
+		Ok(packages) => packages.into_iter().find(|p| p.name == package),
+		Err(_) => None,
+	};
+	let Some(installed) = installed else {
+		return;
+	};
+	tracker.stage(t!("inst.backing_up"));
+	let progress = |n| tracker.bytes(n, None);
+	match crate::saves::back_up(
+		&ctx.device,
+		root,
+		package,
+		title,
+		installed.version_code,
+		&progress,
+	)
+	.await
+	{
+		Ok(_) => ctx.sink.emit(Event::BackupsChanged),
+		Err(crate::saves::SaveError::NothingToBackUp(_)) => {}
+		Err(e) => tracker.report(run::Update::Warning(
+			t!("inst.backup_failed", error = e).into_owned(),
+		)),
 	}
 }
 

@@ -863,3 +863,15 @@ dev.connected:
   en: "Connected to %{address} over Wi-Fi"
   ru: "Подключено к %{address} по Wi-Fi"
   uk: "Підключено до %{address} через Wi-Fi"
+inst.backing_up:
+  en: "Backing up the saves of the installed version"
+  ru: "Резервная копия сохранений установленной версии"
+  uk: "Резервна копія збережень встановленої версії"
+inst.backup_failed:
+  en: "Couldn't back up the saves before updating, installing anyway: %{error}"
+  ru: "Не удалось сделать резервную копию сохранений перед обновлением, установка продолжена: %{error}"
+  uk: "Не вдалося зробити резервну копію збережень перед оновленням, встановлення продовжено: %{error}"
+eng.leftovers_removed:
+  en: "Removed the leftovers of %{n} app(s)"
+  ru: "Удалены остатки приложений: %{n}"
+  uk: "Видалено залишки застосунків: %{n}"

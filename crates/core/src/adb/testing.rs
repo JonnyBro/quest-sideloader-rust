@@ -80,6 +80,8 @@ pub struct Recorded {
 	pub unreadable: Vec<String>,
 	/// The app isn't debuggable, so `run-as` refuses.
 	pub run_as_refused: bool,
+	/// Third-party packages and their version codes, for `pm list packages`.
+	pub installed: Vec<(String, u64)>,
 }
 
 /// A fake adb server with one online device `SER1`: answers version and
@@ -197,6 +199,20 @@ async fn try_serve(s: &mut TcpStream, rec: &Shared) -> std::io::Result<()> {
 						s.write_all(&packet(3, &[0])).await?;
 						return Ok(());
 					}
+				}
+				if command.starts_with("pm list packages") {
+					let listing: String = rec
+						.lock()
+						.unwrap()
+						.installed
+						.iter()
+						.map(|(p, v)| {
+							format!("package:/data/app/~~x/{p}-1/base.apk={p} versionCode:{v}\n")
+						})
+						.collect();
+					s.write_all(&packet(1, listing.as_bytes())).await?;
+					s.write_all(&packet(3, &[0])).await?;
+					return Ok(());
 				}
 				if command.starts_with("pm path ") {
 					s.write_all(&packet(1, b"package:/data/app/~~x/pkg-1/base.apk\n"))
