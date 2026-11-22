@@ -1332,6 +1332,13 @@ impl Shell {
 						cx.notify();
 					})),
 			)
+			.child(
+				div()
+					.text_xs()
+					.text_color(theme.muted_foreground)
+					.mono(cx)
+					.child(concat!("v", env!("CARGO_PKG_VERSION"))),
+			)
 	}
 
 	fn logs_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
