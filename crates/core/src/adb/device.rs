@@ -7,7 +7,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 use super::AdbError;
-use super::parse::{DeviceInfo, Package, parse_battery, parse_df, parse_packages};
+use super::parse::{
+	DeviceInfo, Package, parse_battery, parse_df, parse_packages, parse_stat_times,
+};
 use super::protocol::{read_shell_packet, send_request_checked, shell_v2};
 use super::server::{AdbServer, REQUEST_TIMEOUT};
 use super::sync::{IO_TIMEOUT, Progress, SyncSession, list_files, timed};
@@ -147,12 +149,30 @@ impl Device {
 			.to_owned())
 	}
 
+	/// Third-party apps with their version and, when `stat` can read the
+	/// APK, when they were installed or last updated.
 	pub async fn third_party_packages(&self) -> Result<Vec<Package>, AdbError> {
-		Ok(parse_packages(
+		let mut packages = parse_packages(
 			&self
-				.shell_ok("pm list packages -3 --show-versioncode")
+				.shell_ok("pm list packages -3 -f --show-versioncode")
 				.await?,
-		))
+		);
+		let paths: Vec<String> = packages
+			.iter()
+			.filter_map(|p| p.apk.as_deref())
+			.map(|p| shell_words::quote(p).into_owned())
+			.collect();
+		if !paths.is_empty()
+			&& let Ok(out) = self
+				.shell(&format!("stat -c '%Y %n' {}", paths.join(" ")))
+				.await
+		{
+			let times = parse_stat_times(&out.stdout);
+			for package in &mut packages {
+				package.installed = package.apk.as_ref().and_then(|apk| times.get(apk).copied());
+			}
+		}
+		Ok(packages)
 	}
 
 	/// Free bytes on the filesystem holding `path`.

@@ -11,20 +11,33 @@ pub struct DownloadedRelease {
 	pub size: u64,
 	/// Unix seconds of the folder's last change.
 	pub modified: Option<u64>,
+	/// A download that stopped part way; its files are under [`INCOMPLETE_DIR`].
+	pub incomplete: bool,
 }
 
-/// Release folders in `root`, newest first. Hidden entries (like the
-/// `.incomplete` staging folder) and loose files are left out.
+/// Downloads in progress live here; a release is moved into the downloads
+/// folder only once it's complete, so a folder there is always whole.
+pub const INCOMPLETE_DIR: &str = ".incomplete";
+
 /// Free bytes on the drive holding `path`, if it can be read.
 pub fn free_space(path: &Path) -> Option<u64> {
 	fs4::available_space(path).ok()
 }
 
+/// Release folders in `root` and downloads that stopped part way, newest
+/// first. Other hidden entries and loose files are left out.
 pub fn list(root: &Path) -> Vec<DownloadedRelease> {
+	let mut releases = folders(root, false);
+	releases.extend(folders(&root.join(INCOMPLETE_DIR), true));
+	releases.sort_by(|a, b| b.modified.cmp(&a.modified).then(a.name.cmp(&b.name)));
+	releases
+}
+
+fn folders(root: &Path, incomplete: bool) -> Vec<DownloadedRelease> {
 	let Ok(entries) = std::fs::read_dir(root) else {
 		return Vec::new();
 	};
-	let mut releases: Vec<DownloadedRelease> = entries
+	entries
 		.filter_map(|e| e.ok())
 		.filter_map(|entry| {
 			let name = entry.file_name().into_string().ok()?;
@@ -43,11 +56,10 @@ pub fn list(root: &Path) -> Vec<DownloadedRelease> {
 				name,
 				path,
 				modified,
+				incomplete,
 			})
 		})
-		.collect();
-	releases.sort_by(|a, b| b.modified.cmp(&a.modified).then(a.name.cmp(&b.name)));
-	releases
+		.collect()
 }
 
 fn dir_size(dir: &Path) -> u64 {
@@ -71,9 +83,9 @@ fn dir_size(dir: &Path) -> u64 {
 	total
 }
 
-/// Deletes the release folder `name` from `root`; refuses anything that is
-/// not a plain release folder name.
-pub fn delete(root: &Path, name: &str) -> std::io::Result<()> {
+/// Deletes the release folder `name` from `root`, or what an unfinished
+/// download of it left; refuses anything that is not a plain release folder name.
+pub fn delete(root: &Path, name: &str, incomplete: bool) -> std::io::Result<()> {
 	let plain = !name.is_empty()
 		&& !name.starts_with('.')
 		&& Path::new(name).components().count() == 1
@@ -84,7 +96,12 @@ pub fn delete(root: &Path, name: &str) -> std::io::Result<()> {
 			t!("dld.not_release", name = name),
 		));
 	}
-	std::fs::remove_dir_all(root.join(name))
+	let parent = if incomplete {
+		root.join(INCOMPLETE_DIR)
+	} else {
+		root.to_path_buf()
+	};
+	std::fs::remove_dir_all(parent.join(name))
 }
 
 #[cfg(test)]
@@ -98,18 +115,31 @@ mod tests {
 		std::fs::create_dir_all(root.join("Game v1 +1/com.game")).unwrap();
 		std::fs::write(root.join("Game v1 +1/game.apk"), [0u8; 100]).unwrap();
 		std::fs::write(root.join("Game v1 +1/com.game/main.obb"), [0u8; 50]).unwrap();
-		std::fs::create_dir_all(root.join(".incomplete/Other v2")).unwrap();
+		std::fs::create_dir_all(root.join(".incomplete/Other v2/archive")).unwrap();
+		std::fs::write(
+			root.join(".incomplete/Other v2/archive/a.7z.001.partial"),
+			[0u8; 30],
+		)
+		.unwrap();
+		std::fs::create_dir_all(root.join(".hidden")).unwrap();
 		std::fs::write(root.join("loose.apk"), [0u8; 10]).unwrap();
 
-		let releases = list(root);
-		assert_eq!(releases.len(), 1);
+		let mut releases = list(root);
+		releases.sort_by(|a, b| a.name.cmp(&b.name));
+		assert_eq!(releases.len(), 2);
 		assert_eq!(releases[0].name, "Game v1 +1");
 		assert_eq!(releases[0].size, 150);
+		assert!(!releases[0].incomplete);
+		assert_eq!(releases[1].name, "Other v2");
+		assert_eq!(releases[1].size, 30);
+		assert!(releases[1].incomplete);
 
-		assert!(delete(root, "..").is_err());
-		assert!(delete(root, ".incomplete").is_err());
-		assert!(delete(root, "Game v1 +1/com.game").is_err());
-		delete(root, "Game v1 +1").unwrap();
+		assert!(delete(root, "..", false).is_err());
+		assert!(delete(root, ".incomplete", false).is_err());
+		assert!(delete(root, "..", true).is_err());
+		assert!(delete(root, "Game v1 +1/com.game", false).is_err());
+		delete(root, "Game v1 +1", false).unwrap();
+		delete(root, "Other v2", true).unwrap();
 		assert!(list(root).is_empty());
 		assert!(root.join(".incomplete").exists());
 	}

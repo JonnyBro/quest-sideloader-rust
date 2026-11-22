@@ -12,7 +12,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use quest_sideloader_core::catalog::Catalog;
+use quest_sideloader_core::catalog::{Catalog, Game};
 use quest_sideloader_core::downloaded::DownloadedRelease;
 use quest_sideloader_core::{
 	AppInfo, Command, Engine, TaskId, TaskKind, TaskSnapshot, TaskState, format_bytes,
@@ -22,7 +22,7 @@ use crate::icons::AppIcon;
 use crate::theme::Mono;
 use crate::widgets::{
 	Confirm, column_header, confirm, content_width, fit_columns, format_date, open_folder,
-	table_row,
+	soft_tag, table_row,
 };
 
 const ROW_HEIGHT: f32 = 44.;
@@ -132,6 +132,24 @@ impl DownloadsView {
 		let catalog = self.catalog.as_ref()?;
 		let game = catalog.games.iter().find(|g| g.release_name == release)?;
 		catalog.thumbnail(&game.package)
+	}
+
+	fn catalog_game(&self, release: &str) -> Option<&Game> {
+		self.catalog
+			.as_ref()?
+			.games
+			.iter()
+			.find(|g| g.release_name == release)
+	}
+
+	/// An unfinished download that is running or queued shows in the queue,
+	/// so the list leaves it out.
+	fn downloading(&self, release: &str) -> bool {
+		self.catalog_game(release).is_some_and(|game| {
+			self.tasks.iter().any(|t| {
+				t.kind == TaskKind::Download && !t.state.is_finished() && t.title == game.name
+			})
+		})
 	}
 
 	fn dismiss_finished(&mut self, cx: &mut Context<Self>) {
@@ -333,6 +351,7 @@ impl DownloadsView {
 									version_code: None,
 								},
 								source: conflict.source.clone(),
+								remove_source: conflict.remove_after,
 							})
 						})),
 				);
@@ -503,6 +522,7 @@ impl DownloadsView {
 		let rows = releases
 			.iter()
 			.filter(|r| needle.is_empty() || r.name.to_lowercase().contains(&needle))
+			.filter(|r| !r.incomplete || !self.downloading(&r.name))
 			.enumerate()
 			.map(|(ix, release)| {
 				let cover = match self.cover(&release.name) {
@@ -521,6 +541,27 @@ impl DownloadsView {
 						.bg(theme.muted)
 						.into_any_element(),
 				};
+				let resume = release.incomplete.then(|| {
+					let game = self.catalog_game(&release.name).cloned();
+					Button::new(("resume", ix))
+						.label(t!("dl.resume"))
+						.primary()
+						.xsmall()
+						.disabled(game.is_none())
+						.tooltip(if game.is_some() {
+							t!("dl.resume_hint")
+						} else {
+							t!("dl.resume_unavailable")
+						})
+						.on_click(cx.listener(move |this, _, _, _| {
+							if let Some(game) = &game {
+								this.engine.send(Command::Download {
+									game: game.clone(),
+									serial: None,
+								});
+							}
+						}))
+				});
 				let install = {
 					let path = release.path.clone();
 					let target = self.target.clone();
@@ -576,6 +617,7 @@ impl DownloadsView {
 				let delete = {
 					let engine = self.engine.clone();
 					let (name, size) = (release.name.clone(), release.size);
+					let incomplete = release.incomplete;
 					Button::new(("delete", ix))
 						.icon(Icon::new(IconName::Delete))
 						.ghost()
@@ -586,16 +628,23 @@ impl DownloadsView {
 								&engine,
 								Confirm {
 									title: t!("dl.delete_title").into_owned(),
-									text: t!(
-										"dl.delete_text",
-										name = name,
-										size = format_bytes(size)
-									)
+									text: if incomplete {
+										t!(
+											"dl.delete_partial_text",
+											name = name,
+											size = format_bytes(size)
+										)
+									} else {
+										t!("dl.delete_text", name = name, size = format_bytes(size))
+									}
 									.into_owned(),
 									ok: t!("common.delete").into_owned(),
 									danger: true,
 								},
-								Command::DeleteDownload(name.clone()),
+								Command::DeleteDownload {
+									name: name.clone(),
+									incomplete,
+								},
 								window,
 								cx,
 							);
@@ -604,11 +653,17 @@ impl DownloadsView {
 				table_row(("release", ix), ROW_HEIGHT, &theme)
 					.child(cover)
 					.child(
-						div()
+						h_flex()
 							.flex_1()
 							.min_w(px(NAME_MIN))
-							.truncate()
-							.child(release.name.clone()),
+							.gap_2()
+							.child(div().min_w_0().truncate().child(release.name.clone()))
+							.when(release.incomplete, |d| {
+								d.child(
+									soft_tag(theme.warning, t!("dl.incomplete").into_owned())
+										.flex_shrink_0(),
+								)
+							}),
 					)
 					.when(c[0], |r| {
 						r.child(
@@ -638,9 +693,10 @@ impl DownloadsView {
 							.flex_shrink_0()
 							.gap_1()
 							.justify_end()
-							.child(install)
-							.child(copy)
-							.child(inspect)
+							.map(|actions| match resume {
+								Some(resume) => actions.child(resume),
+								None => actions.child(install).child(copy).child(inspect),
+							})
 							.child(open)
 							.child(delete),
 					)

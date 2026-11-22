@@ -232,12 +232,14 @@ pub(super) fn spawn_uninstall(
 }
 
 /// For a signature mismatch: back up the saves, uninstall, install `source`
-/// again and put the saves back.
+/// again and put the saves back. With `remove_source` the release goes once
+/// it is installed, as it would have after a plain download and install.
 pub(super) fn spawn_reinstall(
 	ctx: InstallContext,
 	root: PathBuf,
 	app: AppRef,
 	source: PathBuf,
+	remove_source: bool,
 	sink: EventSink,
 ) -> TaskEntry {
 	let device = ctx.device.clone();
@@ -265,6 +267,23 @@ pub(super) fn spawn_reinstall(
 			install::install_from(&ctx, &source, &t, review_rx)
 				.await
 				.map_err(|e| t!("hs.new_not_installed", error = e, kept = kept).into_owned())?;
+			if remove_source {
+				let dir = source.clone();
+				let removed = tokio::task::spawn_blocking(move || {
+					if dir.is_dir() {
+						std::fs::remove_dir_all(&dir)
+					} else {
+						std::fs::remove_file(&dir)
+					}
+				})
+				.await
+				.map_err(|e| e.to_string())?;
+				if let Err(e) = removed {
+					t.report(crate::sideload::run::Update::Warning(
+						t!("dl.remove_failed", error = e).into_owned(),
+					));
+				}
+			}
 			if let Some(backup) = &backup {
 				t.stage(t!("hs.restoring"));
 				let progress = byte_progress(&t, backup.meta.bytes);
@@ -361,19 +380,22 @@ mod tests {
 			.unwrap_or_else(|| panic!("no conflict: {failed:?}"));
 		assert_eq!(conflict.package, "com.example.game");
 		assert_eq!(conflict.source, release);
+		assert!(!conflict.remove_after, "a folder installed by hand stays");
 
 		engine.send(Command::ReinstallKeepingSaves {
 			serial: "SER1".into(),
 			app: AppInfo {
-				package: conflict.package,
+				package: conflict.package.clone(),
 				name: "Game".into(),
 				version_code: None,
 			},
-			source: conflict.source,
+			source: conflict.source.clone(),
+			remove_source: conflict.remove_after,
 		});
 		let done = wait_finished(&engine, Some(failed.id + 1));
 		assert_eq!(done.state, TaskState::Done, "{done:?}");
 		assert_eq!(done.stage, "Reinstalled with saves");
+		assert!(release.exists());
 
 		let rec = fake.recorded.lock().unwrap();
 		assert!(
@@ -395,5 +417,21 @@ mod tests {
 			1,
 			"the backup is kept"
 		);
+		drop(rec);
+
+		// A download that only stayed because of the conflict goes afterwards.
+		engine.send(Command::ReinstallKeepingSaves {
+			serial: "SER1".into(),
+			app: AppInfo {
+				package: conflict.package,
+				name: "Game".into(),
+				version_code: None,
+			},
+			source: conflict.source,
+			remove_source: true,
+		});
+		let done = wait_finished(&engine, Some(failed.id + 2));
+		assert_eq!(done.state, TaskState::Done, "{done:?}");
+		assert!(!release.exists(), "the release is removed after installing");
 	}
 }

@@ -97,6 +97,22 @@ const SKIPPED_TOP_DIRS: [&str; 2] = ["cache", "code_cache"];
 /// The same, anywhere in the tree. Unreal's shader cache is also only
 /// readable by the app itself.
 const SKIPPED_DIRS: [&str; 1] = ["VulkanProgramBinaryCache"];
+/// Unity unpacks its IL2CPP metadata here from the APK. A copy from another
+/// build of the game, restored over a newer one, can keep it from starting.
+const SKIPPED_SUBDIRS: [&str; 1] = ["files/il2cpp"];
+
+fn is_rebuilt(relative: &str) -> bool {
+	let Some((dirs, _)) = relative.rsplit_once('/') else {
+		return false;
+	};
+	dirs.split('/')
+		.next()
+		.is_some_and(|top| SKIPPED_TOP_DIRS.contains(&top))
+		|| dirs.split('/').any(|d| SKIPPED_DIRS.contains(&d))
+		|| SKIPPED_SUBDIRS
+			.iter()
+			.any(|sub| dirs == *sub || dirs.starts_with(&format!("{sub}/")))
+}
 
 /// Scratch folders on the headset for moving private data through `run-as`.
 const BACKUP_TMP: &str = "/sdcard/backup_tmp";
@@ -108,16 +124,10 @@ fn relative_files(files: &[(String, u64)], remote_root: &str) -> Vec<(String, St
 		.iter()
 		.filter_map(|(remote, size)| {
 			let relative = remote.strip_prefix(&format!("{remote_root}/"))?;
-			let mut parts = relative.split('/');
 			if relative
 				.split('/')
 				.any(|part| part.is_empty() || part == "..")
-				|| parts
-					.next()
-					.is_some_and(|top| SKIPPED_TOP_DIRS.contains(&top) && relative.contains('/'))
-				|| relative
-					.rsplit_once('/')
-					.is_some_and(|(dirs, _)| dirs.split('/').any(|d| SKIPPED_DIRS.contains(&d)))
+				|| is_rebuilt(relative)
 			{
 				return None;
 			}
@@ -326,7 +336,8 @@ pub async fn restore(
 /// Backup files as another package expects them. Some names carry the
 /// package, like Unity's `shared_prefs/<package>.v2.playerprefs.xml`, and
 /// the other app would never look at them. Those get the new package in a
-/// temporary folder of links; with nothing to rename the backup is used as it is.
+/// temporary folder of links. Caches that older backups still carry are left
+/// out of it; with nothing to rename or leave out the backup is used as it is.
 struct Staged {
 	original: PathBuf,
 	temp: Option<PathBuf>,
@@ -338,24 +349,28 @@ impl Staged {
 			original: dir.to_path_buf(),
 			temp: None,
 		};
-		if old == new {
-			return Ok(unchanged);
-		}
 		let files = crate::adb::list_files(dir).map_err(io_err(dir))?;
-		let mut any_renamed = false;
+		let mut changed = false;
 		let renamed: Vec<(PathBuf, String)> = files
 			.into_iter()
-			.map(
-				|f| match crate::rename::rename_value(&f.relative, old, new) {
+			.filter_map(|f| {
+				if is_rebuilt(&f.relative) {
+					changed = true;
+					return None;
+				}
+				let relative = (old != new)
+					.then(|| crate::rename::rename_value(&f.relative, old, new))
+					.flatten();
+				match relative {
 					Some(relative) => {
-						any_renamed = true;
-						(f.path, relative)
+						changed = true;
+						Some((f.path, relative))
 					}
-					None => (f.path, f.relative),
-				},
-			)
+					None => Some((f.path, f.relative)),
+				}
+			})
 			.collect();
-		if !any_renamed {
+		if !changed {
 			return Ok(unchanged);
 		}
 		let stamp = SystemTime::now()
@@ -398,6 +413,44 @@ impl Drop for Staged {
 mod tests {
 	use super::*;
 	use crate::adb::AdbServer;
+
+	#[test]
+	fn rebuilt_folders() {
+		assert!(is_rebuilt("cache/a.bin"));
+		assert!(is_rebuilt("files/il2cpp/Metadata/global-metadata.dat"));
+		assert!(is_rebuilt("files/il2cpp/unity.ver"));
+		assert!(is_rebuilt("files/x/VulkanProgramBinaryCache/pso.bin"));
+		assert!(!is_rebuilt("cache"));
+		assert!(!is_rebuilt("files/il2cpp.sav"));
+		assert!(!is_rebuilt("files/SaveData/il2cpp/slot1.sav"));
+		assert!(!is_rebuilt("files/SaveData/slot1.sav"));
+	}
+
+	#[test]
+	fn restore_leaves_out_caches_from_old_backups() {
+		let dir = tempfile::tempdir().unwrap();
+		let data = dir.path().join("data");
+		std::fs::create_dir_all(data.join("files/il2cpp/Metadata")).unwrap();
+		std::fs::create_dir_all(data.join("files/SaveData")).unwrap();
+		std::fs::write(
+			data.join("files/il2cpp/Metadata/global-metadata.dat"),
+			b"old",
+		)
+		.unwrap();
+		std::fs::write(data.join("files/SaveData/slot1.sav"), b"save").unwrap();
+
+		let staged = Staged::new(&data, "com.a.b", "com.a.b").unwrap();
+		assert_ne!(staged.path(), data);
+		assert_eq!(
+			std::fs::read(staged.path().join("files/SaveData/slot1.sav")).unwrap(),
+			b"save"
+		);
+		assert!(!staged.path().join("files/il2cpp").exists());
+
+		std::fs::remove_dir_all(data.join("files/il2cpp")).unwrap();
+		let plain = Staged::new(&data, "com.a.b", "com.a.b").unwrap();
+		assert_eq!(plain.path(), data);
+	}
 
 	fn write_backup(root: &Path, package: &str, created: u64) {
 		let dir = root.join(package).join(created.to_string());
@@ -547,6 +600,10 @@ mod tests {
 				"/sdcard/Android/data/com.a.b/files/VulkanProgramBinaryCache/pso.bin".into(),
 				b"x".to_vec(),
 			));
+			rec.device_files.push((
+				"/sdcard/Android/data/com.a.b/files/il2cpp/Metadata/global-metadata.dat".into(),
+				b"x".to_vec(),
+			));
 			rec.unreadable = vec!["/sdcard/Android/data/com.a.b/files/locked.bin".into()];
 		}
 		// With run-as the app reads its own locked file for us.
@@ -564,6 +621,7 @@ mod tests {
 				.join("data/files/VulkanProgramBinaryCache")
 				.exists()
 		);
+		assert!(!full.dir.join("data/files/il2cpp").exists());
 
 		fake.recorded.lock().unwrap().run_as_refused = true;
 		let partial = back_up(&device, dir.path(), "com.a.b", "Game", Some(5), &|_| {})

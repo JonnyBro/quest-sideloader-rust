@@ -13,7 +13,8 @@ use gpui_kit::component::{
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use quest_sideloader_core::rename::{
-	Analysis, ChangeKind, check_package, obb_name, output_dir, rename_value, suggest_package,
+	Analysis, ChangeKind, apk_name, check_package, obb_name, output_dir, rename_value,
+	suggest_package,
 };
 use quest_sideloader_core::{Command, Engine};
 
@@ -469,6 +470,43 @@ impl RenameView {
 					&theme,
 					cx,
 				),
+				cx,
+			));
+		}
+		if analysis.resource_package {
+			let change = Change {
+				place: String::new(),
+				before: old.to_owned(),
+				after: new.to_owned(),
+				note: None,
+			};
+			sections = sections.child(self.section(
+				item,
+				"resource-package",
+				t!("rn.resource_package").into(),
+				changes("resource-package", &[change], &theme, cx),
+				cx,
+			));
+		}
+		let source_apk = analysis
+			.apk
+			.file_name()
+			.unwrap_or_default()
+			.to_string_lossy()
+			.into_owned();
+		let copy_apk = apk_name(&source_apk, old, new);
+		if copy_apk != source_apk {
+			let change = Change {
+				place: String::new(),
+				before: source_apk,
+				after: copy_apk,
+				note: None,
+			};
+			sections = sections.child(self.section(
+				item,
+				"apk",
+				t!("rn.apk_file").into(),
+				changes("apk", &[change], &theme, cx),
 				cx,
 			));
 		}

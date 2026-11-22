@@ -504,8 +504,9 @@ impl Shell {
 		let for_downloads = task.clone();
 		self.downloads
 			.update(cx, |d, cx| d.on_task(for_downloads, cx));
-		if finished && task.state == TaskState::Done {
-			// Downloads add release folders; installs may remove them.
+		if finished && (task.state == TaskState::Done || task.kind == TaskKind::Download) {
+			// Downloads add release folders, or leave a part behind when they
+			// stop; installs may remove folders.
 			self.downloads.update(cx, |d, cx| d.invalidate(cx));
 			if let Some(serial) = &task.serial {
 				// Installs and uninstalls change the app list.
@@ -854,6 +855,11 @@ impl Shell {
 					.packages
 					.iter()
 					.map(|p| (p.name.clone(), p.version_code))
+					.collect(),
+				installed_at: info
+					.packages
+					.iter()
+					.filter_map(|p| Some((p.name.clone(), p.installed?)))
 					.collect(),
 				free_bytes: info.storage.map(|s| s.free_bytes),
 			})

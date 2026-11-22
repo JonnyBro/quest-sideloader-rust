@@ -66,13 +66,20 @@ pub enum Command {
 	ListBackups,
 	/// Answered with [`Event::Downloads`].
 	ListDownloads,
-	/// Delete a release folder from the downloads folder by name.
-	DeleteDownload(String),
+	/// Delete a release folder from the downloads folder by name, or what an
+	/// unfinished download of it left.
+	DeleteDownload {
+		name: String,
+		incomplete: bool,
+	},
 	/// After a signature mismatch: back up saves, uninstall, install again, restore.
 	ReinstallKeepingSaves {
 		serial: String,
 		app: AppInfo,
 		source: PathBuf,
+		/// Delete `source` once the new build is installed; see
+		/// [`SignatureConflict::remove_after`](task::SignatureConflict).
+		remove_source: bool,
 	},
 	Reboot {
 		serial: String,
@@ -866,10 +873,10 @@ async fn run(
 					sink.emit(Event::Downloads(crate::downloaded::list(&root)))
 				});
 			}
-			Command::DeleteDownload(name) => {
+			Command::DeleteDownload { name, incomplete } => {
 				let (root, sink) = (state.settings.downloads_dir.clone(), state.sink.clone());
 				tokio::task::spawn_blocking(move || {
-					if let Err(e) = crate::downloaded::delete(&root, &name) {
+					if let Err(e) = crate::downloaded::delete(&root, &name, incomplete) {
 						sink.emit(Event::Error(
 							t!("eng.delete_failed", name = name, error = e).into_owned(),
 						));
@@ -881,6 +888,7 @@ async fn run(
 				serial,
 				app,
 				source,
+				remove_source,
 			} => {
 				let id = state.new_task_id();
 				let ctx = install::InstallContext {
@@ -896,6 +904,7 @@ async fn run(
 					state.paths.backups_dir(),
 					app.into(),
 					source,
+					remove_source,
 					state.sink.clone(),
 				);
 				state.tasks.insert(id, entry);

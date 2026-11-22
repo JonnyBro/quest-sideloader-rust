@@ -216,6 +216,7 @@ pub(super) async fn install_from(
 			let conflict = SignatureConflict {
 				package: package.clone(),
 				source: source_path,
+				remove_after: false,
 			};
 			tracker.update(|s| s.conflict = Some(conflict), true);
 			Err(SideloadError::Adb(crate::adb::AdbError::InstallFailed(

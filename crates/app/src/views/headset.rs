@@ -34,7 +34,7 @@ use crate::theme::Mono;
 use crate::ui_state::HeadsetPrefs;
 use crate::widgets::{
 	Confirm, card, centered, column_header, confirm, content_width, fit_columns, format_date,
-	open_folder, send_item, soft_tag, table_row,
+	open_folder, send_item, soft_tag, table_row, update_tip, with_tip,
 };
 
 type Details = Result<(DeviceDetails, HashMap<String, AppUsage>), String>;
@@ -81,6 +81,8 @@ struct Row {
 	cover: Option<PathBuf>,
 	/// The newest version the catalog has.
 	latest: Option<u64>,
+	/// Unix seconds of the last install or update.
+	installed: Option<u64>,
 }
 
 pub struct HeadsetView {
@@ -281,6 +283,7 @@ impl HeadsetView {
 						.filter_map(|g| g.version_code)
 						.max()
 				}),
+				installed: package.installed,
 				app: AppInfo {
 					package: package.name.clone(),
 					name,
@@ -553,12 +556,16 @@ impl HeadsetView {
 				};
 				let tag = match (row.app.version_code, row.latest) {
 					_ if self.copies.contains(&row.app.package) => {
-						Some(soft_tag(theme.info, t!("hs.copy").into_owned()))
+						Some(soft_tag(theme.info, t!("hs.copy").into_owned()).into_any_element())
 					}
-					(Some(have), Some(latest)) if have >= latest => {
-						Some(soft_tag(theme.success, t!("hs.latest").into_owned()))
-					}
-					(_, Some(_)) => Some(soft_tag(theme.warning, t!("hs.update").into_owned())),
+					(Some(have), Some(latest)) if have >= latest => Some(
+						soft_tag(theme.success, t!("hs.latest").into_owned()).into_any_element(),
+					),
+					(have, Some(latest)) => Some(with_tip(
+						("update-tip", ix),
+						soft_tag(theme.warning, t!("hs.update").into_owned()),
+						update_tip(have, Some(latest), row.installed),
+					)),
 					_ => None,
 				};
 				let version = row

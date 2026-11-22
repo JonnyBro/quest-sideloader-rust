@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
-use super::analyze::{DEBUGGABLE, PLATFORM_LOADER, check_package, obb_name, planned_changes};
+use super::analyze::{
+	DEBUGGABLE, PLATFORM_LOADER, apk_name, check_package, obb_name, planned_changes,
+};
 use super::arsc::ResourceTable;
 use super::axml::Axml;
 use super::keys::{KeyError, KeyStore};
@@ -177,7 +179,8 @@ fn build_into(
 			.enumerate()
 			.filter_map(|(i, s)| Some((i as u32, rename_value(s, old, new)?)))
 			.collect();
-		if !renamed.is_empty() {
+		let strings_renamed = !renamed.is_empty();
+		if strings_renamed {
 			lines.push("Resource strings:".into());
 			for (index, value) in renamed {
 				lines.push(format!(
@@ -186,6 +189,12 @@ fn build_into(
 				));
 				table.strings.set(index, &value);
 			}
+		}
+		let package_renamed = table.rename_package(old, new);
+		if package_renamed {
+			lines.push(format!("Resource table package: {old} -> {new}"));
+		}
+		if strings_renamed || package_renamed {
 			replace.insert("resources.arsc".to_owned(), table.write());
 		}
 	}
@@ -219,8 +228,13 @@ fn build_into(
 	));
 
 	report(Update::Stage(t!("ren.stage_signing").into_owned()));
-	let apk_name = apk.file_name().unwrap_or_default();
-	let out_apk = tmp.join(apk_name);
+	let source_name = apk.file_name().unwrap_or_default().to_string_lossy();
+	let out_name = apk_name(&source_name, old, new);
+	if out_name != source_name {
+		lines.push(String::new());
+		lines.push(format!("APK file: {source_name} -> {out_name}"));
+	}
+	let out_apk = tmp.join(&out_name);
 	write_signed_apk(apk, &out_apk, &replace, &key, &|done, total| {
 		report(Update::Bytes { done, total })
 	})?;
@@ -408,6 +422,11 @@ mod tests {
 				.unwrap()
 				.contains("com.game -> com.copy")
 		);
+		assert!(
+			std::fs::read_to_string(out.join("rename-report.txt"))
+				.unwrap()
+				.contains("Resource table package: com.game -> com.copy")
+		);
 		assert_eq!(
 			verify_v2(&out.join("game.apk")).unwrap(),
 			test_key().certificate()
@@ -438,7 +457,14 @@ mod tests {
 		assert_eq!(debuggable, Some(true));
 		let table = ResourceTable::parse(&read("resources.arsc")).unwrap();
 		assert_eq!(table.strings.get(0), Some("com.copy.files"));
+		assert_eq!(table.packages[0].name, "com.copy");
 		assert_eq!(read(PLATFORM_LOADER), b"patched loader");
+
+		assert!(
+			!std::fs::read_to_string(out.join("rename-report.txt"))
+				.unwrap()
+				.contains("APK file:")
+		);
 
 		// The original is untouched and a second build doesn't overwrite.
 		assert!(root.join("com.game/main.5.com.game.obb").exists());
@@ -446,5 +472,34 @@ mod tests {
 			build(&request, &keys, &|_| {}),
 			Err(BuildError::Invalid(_))
 		));
+	}
+
+	#[test]
+	fn renames_an_apk_named_after_the_package() {
+		let dir = tempfile::tempdir().unwrap();
+		let root = release(dir.path());
+		std::fs::rename(root.join("game.apk"), root.join("com.game.apk")).unwrap();
+		std::fs::write(root.join("install.txt"), "adb install com.game.apk\n").unwrap();
+		let keys = KeyStore::new(dir.path().join("signing"));
+		let request = BuildRequest {
+			source: root,
+			new_package: "com.copy".into(),
+			loader: None,
+			debuggable: false,
+			dest_dir: dir.path().to_path_buf(),
+		};
+		let out = build(&request, &keys, &|_| {}).unwrap();
+		assert!(!out.join("com.game.apk").exists());
+		let meta = crate::sideload::read_apk_meta(&out.join("com.copy.apk")).unwrap();
+		assert_eq!(meta.package, "com.copy");
+		assert_eq!(
+			std::fs::read_to_string(out.join("install.txt")).unwrap(),
+			"adb install com.copy.apk\n"
+		);
+		assert!(
+			std::fs::read_to_string(out.join("rename-report.txt"))
+				.unwrap()
+				.contains("APK file: com.game.apk -> com.copy.apk")
+		);
 	}
 }

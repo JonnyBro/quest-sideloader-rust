@@ -21,7 +21,10 @@ use quest_sideloader_core::{CatalogStatus, Command, Engine, format_bytes};
 use serde::{Deserialize, Serialize};
 
 use crate::theme::Mono;
-use crate::widgets::{centered, column_header, content_width, fit_columns, soft_tag, table_row};
+use crate::widgets::{
+	centered, column_header, content_width, fit_columns, format_date, soft_tag, table_row,
+	update_tip, with_tip,
+};
 
 const ROW_HEIGHT: f32 = 52.;
 const COVER: (f32, f32) = (80., 45.);
@@ -130,6 +133,8 @@ pub struct Installed {
 	pub device_name: String,
 	pub serial: String,
 	pub versions: HashMap<String, Option<u64>>,
+	/// Unix seconds each package was installed or last updated.
+	pub installed_at: HashMap<String, u64>,
 	pub free_bytes: Option<u64>,
 }
 
@@ -144,6 +149,16 @@ impl Installed {
 				_ => GameStatus::Installed,
 			},
 		}
+	}
+
+	fn update_tip(&self, game: &Game) -> Option<String> {
+		(self.status(game) == GameStatus::UpdateAvailable).then(|| {
+			update_tip(
+				self.versions.get(&game.package).copied().flatten(),
+				game.version_code,
+				self.installed_at.get(&game.package).copied(),
+			)
+		})
 	}
 }
 
@@ -993,7 +1008,11 @@ impl CatalogView {
 								.w(px(STATUS_W))
 								.flex_shrink_0()
 								.justify_end()
-								.children(status.and_then(|s| status_tag(s, &theme))),
+								.children(status.and_then(|s| {
+									let tip =
+										self.installed.as_ref().and_then(|a| a.update_tip(game));
+									status_badge(("status-row", index), s, &theme, tip)
+								})),
 						)
 					})
 					.context_menu(self.menu(index))
@@ -1080,7 +1099,11 @@ impl CatalogView {
 										.mono(cx)
 										.child(meta.join("  ")),
 								)
-								.children(status.and_then(|s| status_tag(s, &theme))),
+								.children(status.and_then(|s| {
+									let tip =
+										self.installed.as_ref().and_then(|a| a.update_tip(game));
+									status_badge(("status-card", index), s, &theme, tip)
+								})),
 						)
 						.context_menu(self.menu(index))
 				});
@@ -1202,12 +1225,23 @@ impl CatalogView {
 			),
 			(t!("lib.col_popularity").into(), rank_text(rank), true),
 		];
-		if let Some(Some(version)) = self
-			.installed
-			.as_ref()
-			.and_then(|apps| apps.versions.get(&game.package))
+		if let Some(apps) = &self.installed
+			&& let Some(Some(version)) = apps.versions.get(&game.package)
 		{
-			facts.push((t!("lib.col_installed").into(), version.to_string(), true));
+			let mut text = version.to_string();
+			if let Some(at) = apps.installed_at.get(&game.package) {
+				text.push_str(&format!(", {}", format_date(*at)));
+			}
+			facts.push((t!("lib.col_installed").into(), text, true));
+			if status == Some(GameStatus::UpdateAvailable)
+				&& let Some(latest) = game.version_code
+			{
+				facts.push((
+					t!("lib.update").into(),
+					format!("{version} -> {latest}"),
+					true,
+				));
+			}
 		}
 
 		let install_tip = match &self.installed {
@@ -1443,6 +1477,20 @@ fn cover(catalog: &Catalog, game: &Game, size: (f32, f32), theme: &Theme) -> Any
 	}
 }
 
+/// The status tag, saying which versions an update is about on hover.
+fn status_badge(
+	id: impl Into<ElementId>,
+	status: GameStatus,
+	theme: &Theme,
+	tip: Option<String>,
+) -> Option<AnyElement> {
+	let tag = status_tag(status, theme)?;
+	Some(match tip {
+		Some(tip) => with_tip(id, tag, tip),
+		None => tag.into_any_element(),
+	})
+}
+
 fn status_tag(status: GameStatus, theme: &Theme) -> Option<impl IntoElement> {
 	match status {
 		GameStatus::NotInstalled => None,
@@ -1648,6 +1696,7 @@ mod tests {
 			device_name: "Quest 3".into(),
 			serial: "S".into(),
 			versions: HashMap::from([("com.a".into(), Some(10)), ("com.b".into(), None)]),
+			installed_at: HashMap::new(),
 			free_bytes: None,
 		};
 		assert_eq!(
@@ -1719,6 +1768,7 @@ mod tests {
 			device_name: "Quest 3".into(),
 			serial: "S".into(),
 			versions: HashMap::new(),
+			installed_at: HashMap::new(),
 			free_bytes: Some(100 * 1024 * 1024),
 		};
 		let mut big = game("com.a", Some(1));

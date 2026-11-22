@@ -174,7 +174,7 @@ impl DevicesView {
 										.text_sm()
 										.child((i + 1).to_string()),
 								)
-								.child(div().pt_0p5().child(step.into_owned()))
+								.child(div().flex_1().min_w_0().pt_0p5().child(step.into_owned()))
 						})),
 				)
 				.when(cfg!(windows), |d| {
@@ -209,6 +209,7 @@ impl DevicesView {
 			.p_8()
 			.child(
 				div()
+					.w_full()
 					.max_w(px(620.))
 					.p_6()
 					.rounded(theme.radius_lg)

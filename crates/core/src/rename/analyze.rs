@@ -25,6 +25,8 @@ pub struct Analysis {
 	pub version_name: Option<String>,
 	pub manifest: Vec<ManifestChange>,
 	pub resources: Vec<String>,
+	/// The resource table is named after the package and gets the new name too.
+	pub resource_package: bool,
 	/// Code strings that mention the package; these stay as they are.
 	pub dex_strings: Vec<String>,
 	pub dex_count: usize,
@@ -201,10 +203,12 @@ pub fn analyze(path: &Path) -> Result<Analysis, SideloadError> {
 		.any(|a| a.is_android("debuggable", DEBUGGABLE) && a.as_bool() == Some(true));
 
 	let mut resources = Vec::new();
+	let mut resource_package = false;
 	let mut firebase = false;
 	if let Some(data) = read("resources.arsc")? {
 		let table = ResourceTable::parse(&data).map_err(|e| apk_err(e.to_string()))?;
 		firebase = table.has_key("google_app_id");
+		resource_package = table.packages.iter().any(|p| p.name == package);
 		resources = table
 			.strings
 			.iter()
@@ -277,6 +281,7 @@ pub fn analyze(path: &Path) -> Result<Analysis, SideloadError> {
 		version_name: meta.version_name.clone(),
 		manifest,
 		resources,
+		resource_package,
 		dex_strings,
 		dex_count,
 		jni_libraries,
@@ -303,6 +308,12 @@ pub fn obb_name(name: &str, old: &str, new: &str) -> String {
 		}
 		_ => name.to_owned(),
 	}
+}
+
+/// The copy's APK file name. It changes the same way as install.txt, which
+/// would otherwise point at a file that isn't there.
+pub fn apk_name(name: &str, old: &str, new: &str) -> String {
+	rename_value(name, old, new).unwrap_or_else(|| name.to_owned())
 }
 
 pub fn suggest_package(old: &str) -> String {
@@ -437,6 +448,23 @@ mod tests {
 		assert_eq!(
 			obb_name("main.x.com.game.obb", "com.game", "com.copy"),
 			"main.x.com.game.obb"
+		);
+	}
+
+	#[test]
+	fn renames_apk_files_like_install_txt() {
+		assert_eq!(
+			apk_name("com.game.apk", "com.game", "com.copy"),
+			"com.copy.apk"
+		);
+		assert_eq!(
+			apk_name("com.game_v12.apk", "com.game", "com.copy"),
+			"com.game_v12.apk"
+		);
+		assert_eq!(apk_name("game.apk", "com.game", "com.copy"), "game.apk");
+		assert_eq!(
+			apk_name("com.gamepad.apk", "com.game", "com.copy"),
+			"com.gamepad.apk"
 		);
 	}
 

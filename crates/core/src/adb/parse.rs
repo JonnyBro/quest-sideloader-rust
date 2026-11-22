@@ -134,24 +134,48 @@ pub fn parse_df(text: &str) -> Option<Storage> {
 pub struct Package {
 	pub name: String,
 	pub version_code: Option<u64>,
+	/// The installed APK, when the listing was made with `-f`.
+	pub apk: Option<String>,
+	/// Unix seconds of the last install or update.
+	pub installed: Option<u64>,
 }
 
-/// Parses `pm list packages --show-versioncode`: `package:com.foo versionCode:123`.
+/// Parses `pm list packages --show-versioncode`: `package:com.foo versionCode:123`,
+/// or `package:/data/app/.../base.apk=com.foo versionCode:123` with `-f`.
 pub fn parse_packages(text: &str) -> Vec<Package> {
 	let mut packages: Vec<Package> = text
 		.lines()
 		.filter_map(|line| {
 			let rest = line.trim().strip_prefix("package:")?;
 			let mut parts = rest.split_whitespace();
-			let name = parts.next()?.to_owned();
+			// The path can hold '=' too, the package name can't.
+			let (apk, name) = match parts.next()?.rsplit_once('=') {
+				Some((apk, name)) => (Some(apk.to_owned()), name.to_owned()),
+				None => (None, rest.split_whitespace().next()?.to_owned()),
+			};
 			let version_code = parts
 				.find_map(|p| p.strip_prefix("versionCode:"))
 				.and_then(|v| v.parse().ok());
-			Some(Package { name, version_code })
+			Some(Package {
+				name,
+				version_code,
+				apk,
+				installed: None,
+			})
 		})
 		.collect();
 	packages.sort_by_cached_key(|p| p.name.to_lowercase());
 	packages
+}
+
+/// `stat -c '%Y %n'` lines: modification time and path.
+pub fn parse_stat_times(text: &str) -> std::collections::HashMap<String, u64> {
+	text.lines()
+		.filter_map(|line| {
+			let (time, path) = line.trim().split_once(' ')?;
+			Some((path.to_owned(), time.parse().ok()?))
+		})
+		.collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -235,17 +259,43 @@ mod tests {
 			vec![
 				Package {
 					name: "com.a.app".into(),
-					version_code: Some(7)
+					version_code: Some(7),
+					apk: None,
+					installed: None,
 				},
 				Package {
 					name: "com.b.game".into(),
-					version_code: Some(42)
+					version_code: Some(42),
+					apk: None,
+					installed: None,
 				},
 				Package {
 					name: "com.C.nover".into(),
-					version_code: None
+					version_code: None,
+					apk: None,
+					installed: None,
 				},
 			]
 		);
+	}
+
+	#[test]
+	fn packages_with_paths_and_times() {
+		let text = "package:/data/app/~~9vund==/com.balls.hvr-zor==/base.apk=com.balls.hvr versionCode:200534\n";
+		let packages = parse_packages(text);
+		assert_eq!(packages[0].name, "com.balls.hvr");
+		assert_eq!(packages[0].version_code, Some(200534));
+		assert_eq!(
+			packages[0].apk.as_deref(),
+			Some("/data/app/~~9vund==/com.balls.hvr-zor==/base.apk")
+		);
+		let times = parse_stat_times(
+			"1795211234 /data/app/~~9vund==/com.balls.hvr-zor==/base.apk\nstat: x: No such file\n",
+		);
+		assert_eq!(
+			times.get("/data/app/~~9vund==/com.balls.hvr-zor==/base.apk"),
+			Some(&1795211234)
+		);
+		assert_eq!(times.len(), 1);
 	}
 }

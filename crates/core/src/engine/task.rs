@@ -37,6 +37,9 @@ pub enum TaskKind {
 pub struct SignatureConflict {
 	pub package: String,
 	pub source: PathBuf,
+	/// `source` is a download that only stayed because the install failed;
+	/// with "Keep downloaded files" off it goes once a reinstall succeeds.
+	pub remove_after: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]

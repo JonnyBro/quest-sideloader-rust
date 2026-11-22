@@ -6,6 +6,9 @@ use super::strpool::{self, StringPool};
 const TABLE_TYPE: u16 = 0x0002;
 const PACKAGE_TYPE: u16 = 0x0200;
 const TYPE_TYPE: u16 = 0x0201;
+/// ResTable_package: the name follows the chunk header and the id.
+const PACKAGE_NAME: usize = 12;
+const PACKAGE_NAME_UNITS: usize = 128;
 
 /// Two letters, or three packed into the two bytes (high bit set).
 fn unpack_locale(a: u8, b: u8) -> Option<String> {
@@ -38,10 +41,14 @@ pub struct ResourceTable {
 	after: Vec<u8>,
 }
 
-/// Its name is Gradle's namespace, which needn't match the application id;
-/// Android doesn't compare the two, so renaming leaves it alone.
+/// Its name is Gradle's namespace, usually the application id.
+/// `getIdentifier(name, type, getPackageName())` looks resources up by it, so
+/// Unity and GameActivity find nothing in a copy that keeps the old name.
 #[derive(Debug, Clone)]
 pub struct Package {
+	pub name: String,
+	/// Where the name field sits: in `after` (true) or `before`, and at which byte.
+	name_at: (bool, usize),
 	/// Resource entry names, such as `app_name` or `google_app_id`.
 	pub keys: StringPool,
 	/// Languages the resources have versions for, like `ru` or `pt-BR`.
@@ -73,7 +80,11 @@ impl ResourceTable {
 					at += chunk_size;
 					continue;
 				}
-				PACKAGE_TYPE => packages.push(Package::parse(chunk)?),
+				PACKAGE_TYPE => {
+					let target = if strings.is_none() { &before } else { &after };
+					let name_at = (strings.is_some(), target.len() + PACKAGE_NAME);
+					packages.push(Package::parse(chunk, name_at)?);
+				}
 				_ => {}
 			}
 			if strings.is_none() {
@@ -104,6 +115,32 @@ impl ResourceTable {
 		out
 	}
 
+	/// Gives packages named `old` the name `new`. False when none is named
+	/// `old`, or `new` doesn't fit the fixed 128-unit field.
+	pub fn rename_package(&mut self, old: &str, new: &str) -> bool {
+		let units: Vec<u16> = new.encode_utf16().collect();
+		if units.len() >= PACKAGE_NAME_UNITS {
+			return false;
+		}
+		let mut field = [0u8; PACKAGE_NAME_UNITS * 2];
+		for (slot, unit) in field.as_chunks_mut::<2>().0.iter_mut().zip(&units) {
+			slot.copy_from_slice(&unit.to_le_bytes());
+		}
+		let mut renamed = false;
+		for package in self.packages.iter_mut().filter(|p| p.name == old) {
+			let (in_after, at) = package.name_at;
+			let bytes = if in_after {
+				&mut self.after
+			} else {
+				&mut self.before
+			};
+			bytes[at..at + field.len()].copy_from_slice(&field);
+			package.name = new.to_owned();
+			renamed = true;
+		}
+		renamed
+	}
+
 	pub fn has_key(&self, key: &str) -> bool {
 		self.packages
 			.iter()
@@ -112,8 +149,16 @@ impl ResourceTable {
 }
 
 impl Package {
-	fn parse(chunk: &[u8]) -> Result<Self, FormatError> {
+	fn parse(chunk: &[u8], name_at: (bool, usize)) -> Result<Self, FormatError> {
 		let r = Reader::new(chunk);
+		let mut units = Vec::with_capacity(PACKAGE_NAME_UNITS);
+		for i in 0..PACKAGE_NAME_UNITS {
+			match r.u16(PACKAGE_NAME + i * 2)? {
+				0 => break,
+				unit => units.push(unit),
+			}
+		}
+		let name = String::from_utf16_lossy(&units);
 		// After the header, id, name, typeStrings and lastPublicType.
 		let key_strings = r.u32(12 + 256 + 8)? as usize;
 		let mut locales = Vec::new();
@@ -143,6 +188,8 @@ impl Package {
 		}
 		locales.sort();
 		Ok(Self {
+			name,
+			name_at,
 			keys: StringPool::parse(r.slice(key_strings, chunk.len() - key_strings)?)?,
 			locales,
 		})
@@ -215,5 +262,21 @@ pub(crate) mod tests {
 		let again = ResourceTable::parse(&table.write()).unwrap();
 		assert_eq!(again.strings.get(0), Some("com.b.files"));
 		assert!(again.has_key("google_app_id"));
+	}
+
+	#[test]
+	fn renames_the_package() {
+		let data = table("com.a", &["com.a.files"], &["app_name"]);
+		let mut table = ResourceTable::parse(&data).unwrap();
+		assert_eq!(table.packages[0].name, "com.a");
+		assert!(!table.rename_package("com.other", "com.b"));
+		assert!(!table.rename_package("com.a", &"x".repeat(128)));
+		assert!(table.rename_package("com.a", "com.copy"));
+		let written = table.write();
+		assert_eq!(written.len(), data.len());
+		let again = ResourceTable::parse(&written).unwrap();
+		assert_eq!(again.packages[0].name, "com.copy");
+		assert!(again.has_key("app_name"));
+		assert_eq!(again.strings.get(0), Some("com.a.files"));
 	}
 }

@@ -739,6 +739,18 @@ lib.sort_status:
   en: "Status on the headset"
   ru: "Статус на шлеме"
   uk: "Статус на шоломі"
+lib.update:
+  en: "Update"
+  ru: "Обновление"
+  uk: "Оновлення"
+common.update_tip:
+  en: "On the headset: %{have}, in the catalog: %{latest}"
+  ru: "На шлеме: %{have}, в каталоге: %{latest}"
+  uk: "На шоломі: %{have}, у каталозі: %{latest}"
+common.installed_at:
+  en: "Installed %{date}"
+  ru: "Установлено %{date}"
+  uk: "Встановлено %{date}"
 lib.col_installed:
   en: "Installed"
   ru: "Установлена"
@@ -1199,6 +1211,26 @@ dl.delete_title:
   en: "Delete this release?"
   ru: "Удалить этот релиз?"
   uk: "Видалити цей реліз?"
+dl.incomplete:
+  en: "not finished"
+  ru: "не докачано"
+  uk: "не докачано"
+dl.resume:
+  en: "Resume"
+  ru: "Продолжить"
+  uk: "Продовжити"
+dl.resume_hint:
+  en: "Download the rest; the parts already on disk are kept"
+  ru: "Докачать остальное; уже скачанные части останутся"
+  uk: "Докачати решту; вже завантажені частини залишаться"
+dl.resume_unavailable:
+  en: "This release isn't in the catalog of the active mirror"
+  ru: "Этого релиза нет в каталоге текущего зеркала"
+  uk: "Цього релізу немає в каталозі поточного дзеркала"
+dl.delete_partial_text:
+  en: "The downloaded part of %{name} (%{size}) will be deleted. Downloading it again starts from the beginning."
+  ru: "Скачанная часть %{name} (%{size}) будет удалена. Новая загрузка начнётся с начала."
+  uk: "Завантажену частину %{name} (%{size}) буде видалено. Нове завантаження почнеться з початку."
 dl.delete_text:
   en: "%{name} (%{size}) will be removed from the downloads folder. It stays on the headset if it is installed."
   ru: "%{name} (%{size}) будет удалён из папки загрузок. На шлеме он останется, если установлен."
@@ -1395,6 +1427,14 @@ rn.resources:
   en: "Resource strings: %{n}"
   ru: "Строки ресурсов: %{n}"
   uk: "Рядки ресурсів: %{n}"
+rn.resource_package:
+  en: "Resource table name"
+  ru: "Имя таблицы ресурсов"
+  uk: "Назва таблиці ресурсів"
+rn.apk_file:
+  en: "APK file"
+  ru: "Файл APK"
+  uk: "Файл APK"
 rn.obb:
   en: "OBB files: %{n}"
   ru: "Файлы OBB: %{n}"

@@ -8,6 +8,7 @@ use std::rc::Rc;
 use gpui_kit::component::button::ButtonVariant;
 use gpui_kit::component::menu::PopupMenuItem;
 use gpui_kit::component::tag::Tag;
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{ActiveTheme, Sizable, Theme, WindowExt, h_flex, v_flex};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -115,6 +116,32 @@ pub fn centered(text: String, cx: &App) -> AnyElement {
 		.text_color(cx.theme().muted_foreground)
 		.child(text)
 		.into_any_element()
+}
+
+/// `element` with `tip` shown on hover.
+pub fn with_tip(id: impl Into<ElementId>, element: impl IntoElement, tip: String) -> AnyElement {
+	div()
+		.id(id)
+		.child(element)
+		.tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+		.into_any_element()
+}
+
+/// What "update available" is about: the version on the headset, when it was
+/// installed, and the version it would update to.
+pub fn update_tip(have: Option<u64>, latest: Option<u64>, installed: Option<u64>) -> String {
+	let version = |v: Option<u64>| v.map_or_else(|| "?".to_owned(), |v| v.to_string());
+	let mut tip = t!(
+		"common.update_tip",
+		have = version(have),
+		latest = version(latest)
+	)
+	.into_owned();
+	if let Some(installed) = installed {
+		tip.push('\n');
+		tip.push_str(&t!("common.installed_at", date = format_date(installed)));
+	}
+	tip
 }
 
 pub fn format_date(unix: u64) -> String {

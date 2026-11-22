@@ -20,14 +20,12 @@ use crate::archive::{self, ArchiveError};
 use crate::catalog::{
 	CatalogError, FetchProgress, Fetcher, Game, Mirror, RemoteFile, release_file_path,
 };
+use crate::downloaded::INCOMPLETE_DIR;
 use crate::format_bytes;
 use crate::sideload::SideloadError;
 use crate::sideload::run::Update;
 
 const MIB: u64 = 1024 * 1024;
-/// Downloads in progress live here; a release is moved into the downloads
-/// folder only once it's complete, so a folder there is always whole.
-const INCOMPLETE_DIR: &str = ".incomplete";
 
 #[derive(Debug, thiserror::Error)]
 enum JobError {
@@ -373,7 +371,18 @@ async fn run(
 		title_from_files: false,
 	};
 	check_headset_space(&ctx, &files_dir).await?;
-	install::install_from(&ctx, &files_dir, tracker, review).await?;
+	let installed = install::install_from(&ctx, &files_dir, tracker, review).await;
+	if installed.is_err() && !deps.keep_downloads {
+		tracker.update(
+			|s| {
+				if let Some(conflict) = &mut s.conflict {
+					conflict.remove_after = true;
+				}
+			},
+			true,
+		);
+	}
+	installed?;
 
 	if deps.keep_downloads {
 		return Ok(Some(files_dir));
@@ -1057,7 +1066,7 @@ mod tests {
 				!s.dir
 					.path()
 					.join("downloads")
-					.join(super::super::INCOMPLETE_DIR)
+					.join(crate::downloaded::INCOMPLETE_DIR)
 					.exists(),
 				"temporary files removed after unpacking"
 			);

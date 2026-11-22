@@ -18,8 +18,8 @@ mod verify;
 mod zipw;
 
 pub use analyze::{
-	Analysis, ChangeKind, ManifestChange, PLATFORM_LOADER, analyze, check_package, obb_name,
-	suggest_package,
+	Analysis, ChangeKind, ManifestChange, PLATFORM_LOADER, analyze, apk_name, check_package,
+	obb_name, suggest_package,
 };
 pub use build::{BuildError, BuildRequest, build, output_dir};
 pub use inspect::{Certificate, Feature, Inspection, Signature, inspect};
