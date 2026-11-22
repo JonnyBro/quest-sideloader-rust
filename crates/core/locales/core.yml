@@ -715,6 +715,10 @@ adb.command_failed:
   en: "`%{command}` failed: %{detail}"
   ru: "`%{command}` завершилась с ошибкой: %{detail}"
   uk: "`%{command}` завершилася з помилкою: %{detail}"
+adb.name_taken:
+  en: "%{name} already exists in this folder"
+  ru: "%{name} уже есть в этой папке"
+  uk: "%{name} вже є в цій теці"
 dld.not_release:
   en: "not a release folder: %{name}"
   ru: "это не папка релиза: %{name}"

@@ -115,6 +115,19 @@ pub enum Command {
 		local: Vec<PathBuf>,
 		dir: String,
 	},
+	/// Create folder `name` in the headset folder `dir`, then list `dir` again.
+	MakeDir {
+		serial: String,
+		dir: String,
+		name: String,
+	},
+	/// Rename `from` to `to` inside the headset folder `dir`, then list it again.
+	RenameFile {
+		serial: String,
+		dir: String,
+		from: String,
+		to: String,
+	},
 	/// Delete headset files or folders, then list `dir` again.
 	DeleteFiles {
 		serial: String,
@@ -929,6 +942,17 @@ async fn run(
 				let entry =
 					files::spawn_push(id, state.adb.device(serial), local, dir, state.sink.clone());
 				state.tasks.insert(id, entry);
+			}
+			Command::MakeDir { serial, dir, name } => {
+				files::spawn_make_dir(state.adb.device(serial), dir, name, state.sink.clone());
+			}
+			Command::RenameFile {
+				serial,
+				dir,
+				from,
+				to,
+			} => {
+				files::spawn_rename(state.adb.device(serial), dir, from, to, state.sink.clone());
 			}
 			Command::DeleteFiles { serial, paths, dir } => {
 				files::spawn_delete(state.adb.device(serial), paths, dir, state.sink.clone());

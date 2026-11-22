@@ -5,7 +5,8 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
-use gpui_kit::component::button::ButtonVariant;
+use gpui_kit::component::button::{Button, ButtonVariant, ButtonVariants};
+use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::menu::PopupMenuItem;
 use gpui_kit::component::tag::Tag;
 use gpui_kit::component::tooltip::Tooltip;
@@ -48,6 +49,71 @@ pub fn confirm(
 				}
 				true
 			})
+	});
+}
+
+/// Asks for a file or folder name. `on_ok` gets it trimmed; it isn't called
+/// while the name is empty or one `valid` rejects.
+pub fn prompt_name(
+	title: String,
+	initial: &str,
+	ok: String,
+	valid: fn(&str) -> bool,
+	on_ok: impl Fn(String, &mut App) + 'static,
+	window: &mut Window,
+	cx: &mut App,
+) {
+	let input = cx.new(|cx| InputState::new(window, cx).default_value(initial.to_owned()));
+	input.update(cx, |state, cx| {
+		state.focus(window, cx);
+		state.select_all(window, cx);
+	});
+	let submit = {
+		let input = input.clone();
+		Rc::new(move |window: &mut Window, cx: &mut App| {
+			let name = input.read(cx).value().trim().to_owned();
+			if valid(&name) {
+				window.close_dialog(cx);
+				on_ok(name, cx);
+			}
+		})
+	};
+	let enter = {
+		let submit = submit.clone();
+		window.subscribe(&input, cx, move |_, event: &InputEvent, window, cx| {
+			if matches!(event, InputEvent::PressEnter { .. }) {
+				submit(window, cx);
+			}
+		})
+	};
+	// The dialog's builder runs on every render; it holds the subscription so
+	// Enter keeps working while the dialog is open.
+	let enter = Rc::new(enter);
+	window.open_dialog(cx, move |dialog, _, _| {
+		let _ = &enter;
+		let submit = submit.clone();
+		dialog
+			.title(title.clone())
+			.w(px(440.))
+			.child(Input::new(&input))
+			.footer(
+				h_flex()
+					.w_full()
+					.justify_end()
+					.gap_2()
+					.child(
+						Button::new("name-cancel")
+							.label(t!("common.cancel"))
+							.outline()
+							.on_click(|_, window, cx| window.close_dialog(cx)),
+					)
+					.child(
+						Button::new("name-ok")
+							.label(ok.clone())
+							.primary()
+							.on_click(move |_, window, cx| submit(window, cx)),
+					),
+			)
 	});
 }
 

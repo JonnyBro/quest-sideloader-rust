@@ -10,12 +10,14 @@ use gpui_kit::component::{ActiveTheme, Disableable, Icon, IconName, Sizable, h_f
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use quest_sideloader_core::adb::RemoteEntry;
-use quest_sideloader_core::adb::browse::{STORAGE_ROOT, join};
+use quest_sideloader_core::adb::browse::{STORAGE_ROOT, join, valid_name};
 use quest_sideloader_core::{Command, Engine, format_bytes};
 
 use crate::icons::AppIcon;
 use crate::theme::Mono;
-use crate::widgets::{Confirm, centered, column_header, confirm, format_date, table_row};
+use crate::widgets::{
+	Confirm, centered, column_header, confirm, format_date, prompt_name, table_row,
+};
 
 const ROW_HEIGHT: f32 = 36.;
 const SIZE_W: f32 = 96.;
@@ -195,6 +197,60 @@ impl FilesView {
 		);
 	}
 
+	fn new_folder(&self, window: &mut Window, cx: &mut App) {
+		let Some(serial) = self.serial.clone() else {
+			return;
+		};
+		let (engine, dir) = (self.engine.clone(), self.path.clone());
+		prompt_name(
+			t!("files.new_folder").into_owned(),
+			"",
+			t!("files.create").into_owned(),
+			valid_name,
+			move |name, _| {
+				engine.send(Command::MakeDir {
+					serial: serial.clone(),
+					dir: dir.clone(),
+					name,
+				})
+			},
+			window,
+			cx,
+		);
+	}
+
+	fn rename(&self, window: &mut Window, cx: &mut App) {
+		let Some(serial) = self.serial.clone() else {
+			return;
+		};
+		if self.selected.len() != 1 {
+			return;
+		}
+		let Some(from) = self.selected.iter().next().cloned() else {
+			return;
+		};
+		let (engine, dir) = (self.engine.clone(), self.path.clone());
+		let initial = from.clone();
+		prompt_name(
+			t!("files.rename_title", name = from).into_owned(),
+			&initial,
+			t!("files.rename").into_owned(),
+			valid_name,
+			move |to, _| {
+				if to != from {
+					engine.send(Command::RenameFile {
+						serial: serial.clone(),
+						dir: dir.clone(),
+						from: from.clone(),
+						to,
+					});
+				}
+			},
+			window,
+			cx,
+		);
+	}
+
 	fn breadcrumbs(&self, cx: &mut Context<Self>) -> impl IntoElement {
 		let theme = cx.theme();
 		let relative = self.path.strip_prefix(STORAGE_ROOT).unwrap_or_default();
@@ -267,6 +323,14 @@ impl FilesView {
 			)
 			.child(self.breadcrumbs(cx))
 			.child(
+				Button::new("rename")
+					.label(t!("files.rename"))
+					.outline()
+					.small()
+					.disabled(self.selected.len() != 1)
+					.on_click(cx.listener(|this, _, window, cx| this.rename(window, cx))),
+			)
+			.child(
 				Button::new("delete")
 					.icon(Icon::new(IconName::Delete))
 					.label(t!("common.delete"))
@@ -287,6 +351,14 @@ impl FilesView {
 						let paths = this.selected_paths();
 						this.pull(paths, cx);
 					})),
+			)
+			.child(
+				Button::new("new-folder")
+					.icon(Icon::new(IconName::FolderOpen))
+					.label(t!("files.new_folder"))
+					.outline()
+					.small()
+					.on_click(cx.listener(|this, _, window, cx| this.new_folder(window, cx))),
 			)
 			.child(
 				Button::new("push-folder")

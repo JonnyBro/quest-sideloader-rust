@@ -187,3 +187,21 @@ pub(super) fn spawn_delete(device: Device, paths: Vec<String>, dir: String, sink
 		spawn_list(device, dir, sink);
 	});
 }
+
+pub(super) fn spawn_make_dir(device: Device, dir: String, name: String, sink: EventSink) {
+	tokio::spawn(async move {
+		if let Err(e) = device.make_dir(&dir, &name).await {
+			sink.emit(Event::Error(e.to_string()));
+		}
+		spawn_list(device, dir, sink);
+	});
+}
+
+pub(super) fn spawn_rename(device: Device, dir: String, from: String, to: String, sink: EventSink) {
+	tokio::spawn(async move {
+		if let Err(e) = device.rename_in(&dir, &from, &to).await {
+			sink.emit(Event::Error(e.to_string()));
+		}
+		spawn_list(device, dir, sink);
+	});
+}

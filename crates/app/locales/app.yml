@@ -215,6 +215,22 @@ files.empty:
   en: "The folder is empty"
   ru: "Папка пуста"
   uk: "Тека порожня"
+files.new_folder:
+  en: "New folder"
+  ru: "Новая папка"
+  uk: "Нова тека"
+files.create:
+  en: "Create"
+  ru: "Создать"
+  uk: "Створити"
+files.rename:
+  en: "Rename"
+  ru: "Переименовать"
+  uk: "Перейменувати"
+files.rename_title:
+  en: "Rename %{name}"
+  ru: "Переименовать %{name}"
+  uk: "Перейменувати %{name}"
 files.delete_title:
   en: "Delete from the headset?"
   ru: "Удалить со шлема?"
