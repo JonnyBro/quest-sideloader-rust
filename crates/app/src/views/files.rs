@@ -29,6 +29,7 @@ pub struct FilesView {
 	path: String,
 	/// `None` while the folder loads.
 	entries: Option<Result<Vec<RemoteEntry>, String>>,
+	requested: Option<(String, String)>,
 	/// Names in the current folder.
 	selected: HashSet<String>,
 	/// Paths picked with Copy or Cut, waiting for Paste.
@@ -47,12 +48,12 @@ impl FilesView {
 			serial: None,
 			path: STORAGE_ROOT.to_owned(),
 			entries: None,
+			requested: None,
 			selected: HashSet::new(),
 			clipboard: None,
 		}
 	}
 
-	/// Another headset starts again at the top; the same one keeps its folder.
 	pub fn set_serial(&mut self, serial: Option<String>, cx: &mut Context<Self>) {
 		if self.serial == serial {
 			return;
@@ -60,6 +61,7 @@ impl FilesView {
 		self.serial = serial;
 		self.path = STORAGE_ROOT.to_owned();
 		self.entries = None;
+		self.requested = None;
 		self.selected.clear();
 		self.clipboard = None;
 		cx.notify();
@@ -67,7 +69,8 @@ impl FilesView {
 
 	/// Lists the folder the first time the tab shows.
 	pub fn ensure_loaded(&mut self) {
-		if self.entries.is_none() {
+		let current = self.serial.clone().map(|s| (s, self.path.clone()));
+		if self.entries.is_none() && self.requested != current {
 			self.load();
 		}
 	}
@@ -90,8 +93,9 @@ impl FilesView {
 		cx.notify();
 	}
 
-	fn load(&self) {
+	fn load(&mut self) {
 		if let Some(serial) = &self.serial {
+			self.requested = Some((serial.clone(), self.path.clone()));
 			self.engine.send(Command::ListDir {
 				serial: serial.clone(),
 				path: self.path.clone(),
