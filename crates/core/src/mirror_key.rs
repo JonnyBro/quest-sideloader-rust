@@ -26,6 +26,22 @@ const RETRY_PENDING: Duration = Duration::from_secs(60);
 const RETRY_REFUSED: Duration = Duration::from_secs(60 * 60);
 const RETRY_FAILED: Duration = Duration::from_secs(5 * 60);
 
+/// Whether a mirror gets a key and how getting one went, for showing the user.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KeyStatus {
+	/// The mirror isn't the one the key is for.
+	NotUsed,
+	/// The key's mirror, but this build can't get a key.
+	NotInBuild,
+	/// Not asked for one yet.
+	NotFetched,
+	/// Unix seconds when the key stops working, if known.
+	Ready {
+		expires_at: Option<u64>,
+	},
+	Failed(String),
+}
+
 /// Hands out the mirror key; clones share one cache. The default has no key.
 #[derive(Clone, Default)]
 pub struct MirrorKeys(Option<Arc<Inner>>);
@@ -53,6 +69,8 @@ struct State {
 	/// The mirror refused the cached key.
 	stale: bool,
 	next_try: Option<Instant>,
+	/// Why the last request for a key failed; cleared by a success.
+	last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -131,6 +149,31 @@ impl MirrorKeys {
 		self.current().await
 	}
 
+	pub async fn status_for(&self, mirror: &Mirror) -> KeyStatus {
+		if !self.is_key_mirror(mirror) {
+			return KeyStatus::NotUsed;
+		}
+		let Some(inner) = &self.0 else {
+			return KeyStatus::NotInBuild;
+		};
+		let cache_file = match &inner.source {
+			Source::Remote { cache_file, .. } => cache_file.as_deref(),
+			#[cfg(test)]
+			Source::Fixed { .. } => return KeyStatus::Ready { expires_at: None },
+		};
+		let mut state = inner.state.lock().await;
+		if !state.loaded {
+			state.load(cache_file);
+		}
+		match (&state.key, &state.last_error) {
+			(Some(key), _) if unix_now() < key.expires_at && !state.stale => KeyStatus::Ready {
+				expires_at: Some(key.expires_at),
+			},
+			(_, Some(error)) => KeyStatus::Failed(error.clone()),
+			_ => KeyStatus::NotFetched,
+		}
+	}
+
 	/// The mirror answered 403 to `key`: ask for a new one next time.
 	pub async fn refused(&self, key: &str) {
 		let Some(inner) = &self.0 else { return };
@@ -170,10 +213,12 @@ impl MirrorKeys {
 					tracing::info!("got a mirror key");
 					state.key = Some(key);
 					state.stale = false;
+					state.last_error = None;
 					state.save(cache_file);
 				}
 				Err(e) => {
 					tracing::warn!("couldn't get a mirror key: {}", e.message);
+					state.last_error = Some(e.message);
 					state.next_try = Some(Instant::now() + e.retry_in.max(MIN_INTERVAL));
 				}
 			}

@@ -22,8 +22,9 @@ use gpui_kit::component::{
 };
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use quest_sideloader_core::catalog::{Catalog, Game};
+use quest_sideloader_core::catalog::{Catalog, Game, MirrorHealth};
 use quest_sideloader_core::contribute::{Candidate, Reason, find_candidates};
+use quest_sideloader_core::mirror_key::KeyStatus;
 use quest_sideloader_core::{CatalogStatus, Command, Engine, format_bytes};
 use serde::{Deserialize, Serialize};
 
@@ -184,6 +185,9 @@ pub struct CatalogView {
 	ranks: Vec<Option<u32>>,
 	status: CatalogStatus,
 	mirror: Option<String>,
+	mirror_id: Option<String>,
+	/// How the active mirror has been answering.
+	health: Option<MirrorHealth>,
 	installed: Option<Installed>,
 	/// Installed packages the catalog has a newer version of.
 	updates: usize,
@@ -236,6 +240,8 @@ impl CatalogView {
 			ranks: Vec::new(),
 			status: CatalogStatus::Idle,
 			mirror: None,
+			mirror_id: None,
+			health: None,
 			installed: None,
 			updates: 0,
 			pc_free: None,
@@ -296,9 +302,65 @@ impl CatalogView {
 		cx.notify();
 	}
 
-	pub fn set_mirror(&mut self, mirror: Option<String>, cx: &mut Context<Self>) {
-		self.mirror = mirror;
+	/// The active mirror's ID and name.
+	pub fn set_mirror(&mut self, mirror: Option<(String, String)>, cx: &mut Context<Self>) {
+		let (id, name) = mirror.unzip();
+		if self.mirror_id != id {
+			self.health = None;
+		}
+		self.mirror_id = id;
+		self.mirror = name;
 		cx.notify();
+	}
+
+	pub fn set_health(&mut self, health: MirrorHealth, cx: &mut Context<Self>) {
+		if self.mirror_id.as_ref() == Some(&health.mirror_id) {
+			self.health = Some(health);
+			cx.notify();
+		}
+	}
+
+	/// A dot for the mirror's state and the details for its tooltip.
+	fn health_dot(&self, cx: &App) -> Option<AnyElement> {
+		self.mirror.as_ref()?;
+		let theme = cx.theme();
+		let health = self.health.as_ref();
+		let key = health.map(|h| &h.key);
+		let color = match health {
+			Some(h) if h.failing() => theme.danger,
+			_ if matches!(key, Some(KeyStatus::Failed(_) | KeyStatus::NotInBuild)) => theme.warning,
+			Some(h) if h.last_ok.is_some() => theme.success,
+			_ => theme.muted_foreground,
+		};
+		let mut lines = vec![
+			match &self.catalog {
+				Some(c) => t!("lib.health_synced", ago = ago(c.synced_at)),
+				None => t!("lib.health_never_synced"),
+			}
+			.into_owned(),
+		];
+		lines.push(match health.and_then(|h| h.last_ok) {
+			Some(at) => t!("lib.health_ok", ago = ago(at)).into_owned(),
+			None => t!("lib.health_no_answer").into_owned(),
+		});
+		if let Some((at, error)) = health.and_then(|h| h.last_error.as_ref()) {
+			lines.push(t!("lib.health_error", ago = ago(*at), error = error).into_owned());
+		}
+		lines.push(match key {
+			None | Some(KeyStatus::NotUsed) => t!("lib.key_not_used").into_owned(),
+			Some(KeyStatus::NotInBuild) => t!("lib.key_not_in_build").into_owned(),
+			Some(KeyStatus::NotFetched) => t!("lib.key_not_fetched").into_owned(),
+			Some(KeyStatus::Ready {
+				expires_at: Some(at),
+			}) => t!("lib.key_ready_until", date = format_date(*at)).into_owned(),
+			Some(KeyStatus::Ready { expires_at: None }) => t!("lib.key_ready").into_owned(),
+			Some(KeyStatus::Failed(e)) => t!("lib.key_failed", error = e).into_owned(),
+		});
+		Some(with_tip(
+			"mirror-health",
+			div().size_2().rounded_full().bg(color),
+			lines.join("\n"),
+		))
 	}
 
 	pub fn set_held(&mut self, held: HashSet<String>, cx: &mut Context<Self>) {
@@ -572,6 +634,7 @@ impl CatalogView {
 					.clone()
 					.map(|name| div().flex_shrink_0().text_color(muted).child(name)),
 			)
+			.children(self.health_dot(cx))
 			.child(div().flex_1().min_w_0().text_sm().child(status))
 			.when(self.mirror.is_some(), |this| {
 				this.child(

@@ -959,6 +959,50 @@ lib.synced:
   en: "%{n} games, synced %{ago}"
   ru: "игр: %{n}, синхронизировано %{ago}"
   uk: "ігор: %{n}, синхронізовано %{ago}"
+lib.health_synced:
+  en: "Catalog synced %{ago}"
+  ru: "Каталог синхронизирован %{ago}"
+  uk: "Каталог синхронізовано %{ago}"
+lib.health_never_synced:
+  en: "The catalog hasn't been synced yet"
+  ru: "Каталог ещё не синхронизировался"
+  uk: "Каталог ще не синхронізувався"
+lib.health_ok:
+  en: "Last answer from the mirror: %{ago}"
+  ru: "Последний ответ зеркала: %{ago}"
+  uk: "Остання відповідь дзеркала: %{ago}"
+lib.health_no_answer:
+  en: "No answer from the mirror since the app started"
+  ru: "С запуска приложения зеркало ещё не отвечало"
+  uk: "Від запуску застосунку дзеркало ще не відповідало"
+lib.health_error:
+  en: "Last error (%{ago}): %{error}"
+  ru: "Последняя ошибка (%{ago}): %{error}"
+  uk: "Остання помилка (%{ago}): %{error}"
+lib.key_not_used:
+  en: "API key: not sent to this mirror"
+  ru: "API-ключ: этому зеркалу не отправляется"
+  uk: "API-ключ: цьому дзеркалу не надсилається"
+lib.key_not_in_build:
+  en: "API key: this build can't get one, so the mirror refuses it"
+  ru: "API-ключ: эта сборка не может его получить, поэтому зеркало ей откажет"
+  uk: "API-ключ: ця збірка не може його отримати, тому дзеркало їй відмовить"
+lib.key_not_fetched:
+  en: "API key: not requested yet"
+  ru: "API-ключ: ещё не запрашивался"
+  uk: "API-ключ: ще не запитувався"
+lib.key_ready:
+  en: "API key: received"
+  ru: "API-ключ: получен"
+  uk: "API-ключ: отримано"
+lib.key_ready_until:
+  en: "API key: received, valid until %{date}"
+  ru: "API-ключ: получен, действует до %{date}"
+  uk: "API-ключ: отримано, діє до %{date}"
+lib.key_failed:
+  en: "API key: couldn't get one (%{error})"
+  ru: "API-ключ: не удалось получить (%{error})"
+  uk: "API-ключ: не вдалося отримати (%{error})"
 lib.no_match:
   en: "Nothing matches the filter."
   ru: "Ничего не подходит под фильтр."

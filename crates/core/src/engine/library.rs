@@ -58,9 +58,11 @@ impl Library {
 		keys: MirrorKeys,
 		sink: EventSink,
 	) -> Self {
+		let health_sink = sink.clone();
 		let fetcher = Fetcher::new(rclone_path)
 			.expect("HTTP client with default TLS settings")
-			.with_keys(keys);
+			.with_keys(keys)
+			.on_health(move |health| health_sink.emit(Event::MirrorHealth(health)));
 		let sink = LibrarySink {
 			sink,
 			current: Arc::new(Mutex::new(None)),
@@ -96,7 +98,7 @@ impl Library {
 	pub fn set_rclone_path(&mut self, path: Option<PathBuf>) {
 		match Fetcher::new(path) {
 			Ok(fetcher) => {
-				let fetcher = fetcher.with_keys(self.fetcher.keys().clone());
+				let fetcher = fetcher.sharing_state_of(&self.fetcher);
 				fetcher.set_bandwidth_limit(self.limit.0, self.limit.1);
 				self.fetcher = fetcher;
 			}
@@ -123,6 +125,7 @@ impl Library {
 		let fetcher = self.fetcher.clone();
 		let root = self.root.clone();
 		self.job = Some(tokio::spawn(async move {
+			fetcher.announce_health(&mirror).await;
 			let cached = {
 				let (root, id) = (root.clone(), mirror.id.clone());
 				tokio::task::spawn_blocking(move || Catalog::load(&root, &id)).await

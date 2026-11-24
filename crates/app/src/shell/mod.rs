@@ -243,7 +243,12 @@ impl Shell {
 		let catalog = cx.new(|cx| {
 			let mut view = CatalogView::new(engine.clone(), window, cx);
 			view.set_prefs(&ui.catalog);
-			view.set_mirror(settings.active_mirror().map(|m| m.name.clone()), cx);
+			view.set_mirror(
+				settings
+					.active_mirror()
+					.map(|m| (m.id.clone(), m.name.clone())),
+				cx,
+			);
 			view.set_no_upload(no_upload(&settings, &copies), cx);
 			view
 		});
@@ -624,7 +629,10 @@ impl Shell {
 	}
 
 	fn sync_catalog_settings(&mut self, cx: &mut Context<Self>) {
-		let mirror = self.settings.active_mirror().map(|m| m.name.clone());
+		let mirror = self
+			.settings
+			.active_mirror()
+			.map(|m| (m.id.clone(), m.name.clone()));
 		let no_upload = no_upload(&self.settings, &self.copies);
 		let held = held_updates(&self.settings);
 		self.headset

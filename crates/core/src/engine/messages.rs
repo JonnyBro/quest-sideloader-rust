@@ -254,6 +254,8 @@ pub enum Event {
 	/// The active mirror's catalog; `None` when there is no mirror or it was never synced.
 	CatalogLoaded(Option<Arc<Catalog>>),
 	CatalogStatus(CatalogStatus),
+	/// How a mirror has been answering; sent whenever that changes.
+	MirrorHealth(crate::catalog::MirrorHealth),
 	/// install.txt has lines that need the user's decision; answer with
 	/// [`Command::ReviewScript`].
 	ScriptReview {

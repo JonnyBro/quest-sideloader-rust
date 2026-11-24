@@ -146,6 +146,9 @@ impl Shell {
 					.update(cx, |d, cx| d.set_catalog(for_downloads, cx));
 				self.catalog.update(cx, |c, cx| c.set_catalog(catalog, cx));
 			}
+			Event::MirrorHealth(health) => {
+				self.catalog.update(cx, |c, cx| c.set_health(health, cx));
+			}
 			Event::CatalogStatus(status) => {
 				self.catalog.update(cx, |c, cx| c.set_status(status, cx));
 			}

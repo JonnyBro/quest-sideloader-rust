@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 use super::CatalogError;
+use super::health::{HealthTracker, MirrorHealth};
 use super::mirror::{Mirror, MirrorKind, release_hash};
 use crate::mirror_key::MirrorKeys;
 
@@ -29,6 +30,7 @@ pub struct Fetcher {
 	parallel: Arc<AtomicU8>,
 	/// Sent as [`crate::mirror_key::HEADER`] to vrSrc's mirror only; never logged.
 	keys: MirrorKeys,
+	health: HealthTracker,
 }
 
 /// How rclone reaches one mirror.
@@ -81,7 +83,44 @@ impl Fetcher {
 			limit: Arc::new(AtomicU64::new(0)),
 			parallel: Arc::new(AtomicU8::new(1)),
 			keys: MirrorKeys::default(),
+			health: HealthTracker::default(),
 		})
+	}
+
+	/// Calls `listener` whenever a request to a mirror succeeds or fails.
+	pub fn on_health(mut self, listener: impl Fn(MirrorHealth) + Send + Sync + 'static) -> Self {
+		self.health = self.health.with_listener(listener);
+		self
+	}
+
+	/// Keeps what `other` knows about mirrors and keys, with its listener.
+	pub fn sharing_state_of(mut self, other: &Fetcher) -> Self {
+		self.keys = other.keys.clone();
+		self.health = other.health.clone();
+		self
+	}
+
+	/// What is known about `mirror` so far; sends no request to it.
+	pub async fn mirror_health(&self, mirror: &Mirror) -> MirrorHealth {
+		let key = self.keys.status_for(mirror).await;
+		self.health.snapshot(&mirror.id, key)
+	}
+
+	/// Tells the listener what is known about `mirror` so far.
+	pub async fn announce_health(&self, mirror: &Mirror) {
+		let key = self.keys.status_for(mirror).await;
+		self.health.announce(&mirror.id, key);
+	}
+
+	async fn record<T>(&self, mirror: &Mirror, result: &Result<T, CatalogError>) {
+		let error = match result {
+			Ok(_) => None,
+			// Problems on this computer, not the mirror's.
+			Err(CatalogError::RcloneNotFound(_) | CatalogError::Io { .. }) => return,
+			Err(e) => Some(e.to_string()),
+		};
+		let key = self.keys.status_for(mirror).await;
+		self.health.record(&mirror.id, error, key);
 	}
 
 	pub fn with_keys(mut self, keys: MirrorKeys) -> Self {
@@ -137,13 +176,15 @@ impl Fetcher {
 			.run_rclone(copy(key.as_deref()), progress)
 			.await
 			.map_err(|e| with_status(e, &at.shown));
-		match self.renewed_key(mirror, key, &result).await {
+		let result = match self.renewed_key(mirror, key, &result).await {
 			Some(fresh) => self
 				.run_rclone(copy(Some(&fresh)), progress)
 				.await
 				.map_err(|e| with_status(e, &at.shown)),
 			None => result,
-		}
+		};
+		self.record(mirror, &result).await;
+		result
 	}
 
 	/// After a 403 to a key: a different key to try once, if there is one.
@@ -195,10 +236,12 @@ impl Fetcher {
 		};
 		let key = self.keys.key_for(mirror).await;
 		let result = self.lsjson(&at, &folder, key.as_deref()).await;
-		match self.renewed_key(mirror, key, &result).await {
+		let result = match self.renewed_key(mirror, key, &result).await {
 			Some(fresh) => self.lsjson(&at, &folder, Some(&fresh)).await,
 			None => result,
-		}
+		};
+		self.record(mirror, &result).await;
+		result
 	}
 
 	async fn lsjson(

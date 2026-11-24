@@ -2,6 +2,7 @@
 //! metadata archive (`meta.7z`) with thumbnails and notes.
 
 mod fetch;
+mod health;
 mod list;
 mod mirror;
 mod rclone_config;
@@ -10,6 +11,7 @@ mod store;
 use std::path::PathBuf;
 
 pub use fetch::{FetchProgress, Fetcher, RcloneAccess, RemoteFile, release_file_path};
+pub use health::MirrorHealth;
 pub use list::{BadHeader, Game, parse_game_list};
 pub use mirror::{Mirror, MirrorKind, rclone_remotes, release_hash};
 pub use rclone_config::check_mirror_rclone_config;
