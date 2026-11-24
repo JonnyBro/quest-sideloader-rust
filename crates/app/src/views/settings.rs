@@ -1,4 +1,5 @@
 use rust_i18n::t;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -17,6 +18,7 @@ use quest_sideloader_core::{AppPaths, Command, Engine, Settings};
 use crate::dialogs::mirror::{self, MirrorForm};
 use crate::icons::AppIcon;
 use crate::theme::Mono;
+use crate::widgets::{column_header, table_row};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Category {
@@ -90,6 +92,8 @@ pub struct SettingsView {
 	keys: KeyStore,
 	key_rows: Option<Vec<KeyRow>>,
 	key_message: Option<Result<String, String>>,
+	/// Game names by package, from the synced catalog.
+	game_names: HashMap<String, String>,
 	_inputs: Vec<Subscription>,
 }
 
@@ -153,6 +157,7 @@ impl SettingsView {
 			keys: KeyStore::new(paths.signing_dir()),
 			key_rows: None,
 			key_message: None,
+			game_names: HashMap::new(),
 			_inputs: subscriptions,
 		};
 		view.fill_inputs(window, cx);
@@ -178,6 +183,7 @@ impl SettingsView {
 			self.draft.theme = settings.theme;
 			self.draft.language = settings.language;
 			self.draft.contribute_ignored = settings.contribute_ignored.clone();
+			self.draft.update_ignored = settings.update_ignored.clone();
 			self.saved = settings;
 		} else {
 			self.saved = settings.clone();
@@ -187,6 +193,11 @@ impl SettingsView {
 		self.saving = false;
 		cx.notify();
 		std::mem::take(&mut self.announce)
+	}
+
+	pub fn set_game_names(&mut self, names: HashMap<String, String>, cx: &mut Context<Self>) {
+		self.game_names = names;
+		cx.notify();
 	}
 
 	pub fn save_failed(&mut self, cx: &mut Context<Self>) {
@@ -581,6 +592,11 @@ impl SettingsView {
 				cx,
 			))
 			.child(field(
+				t!("set.held_updates").into(),
+				self.held_updates(cx),
+				cx,
+			))
+			.child(field(
 				t!("set.notifications").into(),
 				Checkbox::new("notifications")
 					.label(t!("set.notify").into_owned())
@@ -654,6 +670,69 @@ impl SettingsView {
 					),
 				cx,
 			))
+	}
+
+	/// Packages whose updates aren't offered; removing one saves at once.
+	fn held_updates(&self, cx: &mut Context<Self>) -> AnyElement {
+		let packages = &self.saved.update_ignored;
+		if packages.is_empty() {
+			return hint(t!("set.held_none").into(), cx).into_any_element();
+		}
+		let theme = cx.theme().clone();
+		let header = column_header(cx)
+			.px_3()
+			.child(
+				div()
+					.w(px(200.))
+					.flex_shrink_0()
+					.child(t!("lib.col_game").into_owned()),
+			)
+			.child(div().flex_1().child(t!("lib.package").into_owned()));
+		let rows = packages.iter().enumerate().map(|(ix, package)| {
+			let remove = package.clone();
+			let name = match self.game_names.get(package) {
+				Some(name) => div().child(name.clone()),
+				None => div().text_color(theme.muted_foreground).child("-"),
+			};
+			table_row(("held-row", ix), 32., &theme)
+				.px_3()
+				.text_sm()
+				.when(ix + 1 == packages.len(), |row| row.border_b_0())
+				.child(name.w(px(200.)).flex_shrink_0().truncate())
+				.child(
+					div()
+						.flex_1()
+						.min_w_0()
+						.truncate()
+						.mono(cx)
+						.text_color(theme.muted_foreground)
+						.child(package.clone()),
+				)
+				.child(
+					Button::new(("unhold", ix))
+						.icon(Icon::new(IconName::Delete))
+						.xsmall()
+						.ghost()
+						.tooltip(t!("set.held_remove"))
+						.on_click(cx.listener(move |this, _, _, cx| {
+							this.save_now(|s| s.update_ignored.retain(|p| p != &remove));
+							cx.notify();
+						})),
+				)
+		});
+		v_flex()
+			.gap_2()
+			.child(hint(t!("set.held_intro").into(), cx))
+			.child(
+				v_flex()
+					.border_1()
+					.border_color(theme.border)
+					.rounded(px(6.))
+					.overflow_hidden()
+					.child(header)
+					.children(rows),
+			)
+			.into_any_element()
 	}
 
 	fn mirrors(&self, cx: &mut Context<Self>) -> impl IntoElement {

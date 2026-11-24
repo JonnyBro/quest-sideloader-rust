@@ -150,6 +150,11 @@ impl HeadsetView {
 					(Some(have), Some(latest)) if have >= latest => Some(
 						soft_tag(theme.success, t!("hs.latest").into_owned()).into_any_element(),
 					),
+					(have, Some(latest)) if self.held.contains(&row.app.package) => Some(with_tip(
+						("held-tip", ix),
+						soft_tag(theme.muted_foreground, t!("hs.update_held").into_owned()),
+						update_tip(have, Some(latest), row.installed),
+					)),
 					(have, Some(latest)) => Some(with_tip(
 						("update-tip", ix),
 						soft_tag(theme.warning, t!("hs.update").into_owned()),

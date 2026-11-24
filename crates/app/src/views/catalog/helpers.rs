@@ -95,6 +95,11 @@ pub(super) fn popularity_ranks(games: &[Game]) -> Vec<Option<u32>> {
 		.collect()
 }
 
+/// The mirror marks adult games with `(18+)` in their name; there's no tag for it.
+pub(super) fn is_adult(game: &Game) -> bool {
+	game.name.contains("(18+)")
+}
+
 pub(super) fn rank_text(rank: Option<u32>) -> String {
 	rank.map(|r| format!("#{r}")).unwrap_or_default()
 }
@@ -172,6 +177,16 @@ mod tests {
 	}
 
 	#[test]
+	fn adult_marker_in_name() {
+		let mut g = game("com.a", None);
+		g.name = "Cherry VX (18+)".into();
+		assert!(is_adult(&g));
+		g.name = "1976".into();
+		g.release_name = "1976 v18+1.34 -VRP".into();
+		assert!(!is_adult(&g), "a version code of 18 isn't the marker");
+	}
+
+	#[test]
 	fn loose_search() {
 		let key = search_key("Resident Evil 4");
 		assert_eq!(key, ("residentevil4".into(), "re4".into()));
@@ -187,12 +202,13 @@ mod tests {
 
 	#[test]
 	fn status_against_device() {
-		let apps = Installed {
+		let mut apps = Installed {
 			device_name: "Quest 3".into(),
 			serial: "S".into(),
 			versions: HashMap::from([("com.a".into(), Some(10)), ("com.b".into(), None)]),
 			installed_at: HashMap::new(),
 			free_bytes: None,
+			held: HashSet::new(),
 		};
 		assert_eq!(
 			apps.status(&game("com.a", Some(11))),
@@ -205,6 +221,8 @@ mod tests {
 			apps.status(&game("com.c", Some(1))),
 			GameStatus::NotInstalled
 		);
+		apps.held.insert("com.a".into());
+		assert_eq!(apps.status(&game("com.a", Some(11))), GameStatus::Installed);
 	}
 
 	#[test]
@@ -265,6 +283,7 @@ mod tests {
 			versions: HashMap::new(),
 			installed_at: HashMap::new(),
 			free_bytes: Some(100 * 1024 * 1024),
+			held: HashSet::new(),
 		};
 		let mut big = game("com.a", Some(1));
 		big.size_mb = Some(150.0);

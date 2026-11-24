@@ -115,6 +115,8 @@ pub struct HeadsetView {
 	hidden: usize,
 	/// Renamed copies made here.
 	copies: HashSet<String>,
+	/// Packages whose updates the user doesn't want offered.
+	held: HashSet<String>,
 	/// Which app columns fit: package, version, size, badge.
 	app_cols: [bool; 4],
 	/// Which backup columns fit: package, date, size.
@@ -153,6 +155,7 @@ impl HeadsetView {
 			rows: Vec::new(),
 			hidden: 0,
 			copies: HashSet::new(),
+			held: HashSet::new(),
 			app_cols: [true; 4],
 			backup_cols: [true; 3],
 			leftovers: None,
@@ -178,6 +181,13 @@ impl HeadsetView {
 
 	pub fn set_copies(&mut self, copies: HashSet<String>) {
 		self.copies = copies;
+	}
+
+	pub fn set_held(&mut self, held: HashSet<String>, cx: &mut Context<Self>) {
+		if self.held != held {
+			self.held = held;
+			cx.notify();
+		}
 	}
 
 	pub fn set_copies_and_notify(&mut self, copies: HashSet<String>, cx: &mut Context<Self>) {
@@ -239,10 +249,9 @@ impl HeadsetView {
 
 	pub fn set_catalog(&mut self, catalog: Option<Arc<Catalog>>, cx: &mut Context<Self>) {
 		self.names = catalog
-			.iter()
-			.flat_map(|c| c.games.iter())
-			.map(|g| (g.package.clone(), g.name.clone()))
-			.collect();
+			.as_deref()
+			.map(crate::shell::game_names)
+			.unwrap_or_default();
 		self.catalog = catalog;
 		cx.notify();
 	}

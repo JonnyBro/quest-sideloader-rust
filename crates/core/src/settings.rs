@@ -110,6 +110,10 @@ pub struct Settings {
 	/// Packages the user doesn't want to be asked to upload again.
 	#[serde(skip_serializing_if = "Vec::is_empty")]
 	pub contribute_ignored: Vec<String>,
+	/// Installed packages whose catalog updates aren't offered, for example
+	/// to keep mods that need an older version.
+	#[serde(skip_serializing_if = "Vec::is_empty")]
+	pub update_ignored: Vec<String>,
 }
 
 impl Settings {
@@ -230,6 +234,7 @@ impl Default for Settings {
 			active_mirror: None,
 			mirrors: Vec::new(),
 			contribute_ignored: Vec::new(),
+			update_ignored: Vec::new(),
 		}
 	}
 }
@@ -366,6 +371,7 @@ mod tests {
 				password: "aGk=".into(),
 			}],
 			contribute_ignored: vec!["com.discord".into()],
+			update_ignored: vec!["com.beatgames.beatsaber".into()],
 		};
 		settings.save(&paths).unwrap();
 		assert_eq!(Settings::load(&paths).unwrap(), settings);

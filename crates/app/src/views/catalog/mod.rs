@@ -116,6 +116,8 @@ pub struct CatalogPrefs {
 	pub descending: bool,
 	pub filter: Filter,
 	pub layout: Layout,
+	/// Games the mirror marks `(18+)`; installed ones are shown either way.
+	pub show_adult: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -143,12 +145,15 @@ pub struct Installed {
 	/// Unix seconds each package was installed or last updated.
 	pub installed_at: HashMap<String, u64>,
 	pub free_bytes: Option<u64>,
+	/// Packages whose updates the user doesn't want offered.
+	pub held: HashSet<String>,
 }
 
 impl Installed {
 	fn status(&self, game: &Game) -> GameStatus {
 		match self.versions.get(&game.package) {
 			None => GameStatus::NotInstalled,
+			Some(_) if self.held.contains(&game.package) => GameStatus::Installed,
 			Some(installed) => match (game.version_code, installed) {
 				(Some(available), Some(installed)) if available > *installed => {
 					GameStatus::UpdateAvailable
@@ -189,6 +194,7 @@ pub struct CatalogView {
 	sort: Sort,
 	descending: bool,
 	layout: Layout,
+	show_adult: bool,
 	selected: Option<usize>,
 	rows: Vec<usize>,
 	rows_dirty: bool,
@@ -238,6 +244,7 @@ impl CatalogView {
 			sort: Sort::Name,
 			descending: false,
 			layout: Layout::List,
+			show_adult: false,
 			selected: None,
 			rows: Vec::new(),
 			rows_dirty: true,
@@ -258,6 +265,7 @@ impl CatalogView {
 		self.descending = prefs.descending;
 		self.filter = prefs.filter;
 		self.layout = prefs.layout;
+		self.show_adult = prefs.show_adult;
 	}
 
 	pub fn prefs(&self) -> CatalogPrefs {
@@ -266,6 +274,7 @@ impl CatalogView {
 			descending: self.descending,
 			filter: self.filter,
 			layout: self.layout,
+			show_adult: self.show_adult,
 		}
 	}
 
@@ -290,6 +299,17 @@ impl CatalogView {
 	pub fn set_mirror(&mut self, mirror: Option<String>, cx: &mut Context<Self>) {
 		self.mirror = mirror;
 		cx.notify();
+	}
+
+	pub fn set_held(&mut self, held: HashSet<String>, cx: &mut Context<Self>) {
+		if let Some(apps) = &mut self.installed
+			&& apps.held != held
+		{
+			apps.held = held;
+			self.rows_dirty = true;
+			self.count_updates();
+			cx.notify();
+		}
 	}
 
 	pub fn set_installed(&mut self, installed: Option<Installed>, cx: &mut Context<Self>) {
@@ -400,7 +420,9 @@ impl CatalogView {
 					Filter::Installed => status != GameStatus::NotInstalled,
 					Filter::Updates => status == GameStatus::UpdateAvailable,
 				};
-				matches_search && matches_filter
+				let shown =
+					self.show_adult || status != GameStatus::NotInstalled || !is_adult(game);
+				matches_search && matches_filter && shown
 			})
 			.collect();
 		let rank = |i: usize| installed.map_or(2, |apps| status_rank(apps.status(&games[i])));
@@ -627,7 +649,24 @@ impl CatalogView {
 						"filter-updates",
 						Filter::Updates,
 						t!("lib.updates").into(),
-					)),
+					))
+					.child(
+						Button::new("filter-adult")
+							.label("18+")
+							.ghost()
+							.small()
+							.selected(self.show_adult)
+							.tooltip(if self.show_adult {
+								t!("lib.adult_shown")
+							} else {
+								t!("lib.adult_hidden")
+							})
+							.on_click(cx.listener(|this, _, _, cx| {
+								this.show_adult = !this.show_adult;
+								this.rows_dirty = true;
+								cx.notify();
+							})),
+					),
 			)
 			// The list sorts by its column headers; the grid has none.
 			.when(self.layout == Layout::Grid, |bar| {

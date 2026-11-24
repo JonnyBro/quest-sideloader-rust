@@ -138,6 +138,9 @@ impl Shell {
 				let for_headset = catalog.clone();
 				self.headset
 					.update(cx, |h, cx| h.set_catalog(for_headset, cx));
+				let names = catalog.as_deref().map(game_names).unwrap_or_default();
+				self.settings_view
+					.update(cx, |s, cx| s.set_game_names(names, cx));
 				let for_downloads = catalog.clone();
 				self.downloads
 					.update(cx, |d, cx| d.set_catalog(for_downloads, cx));

@@ -299,6 +299,7 @@ impl Shell {
 			let mut view = HeadsetView::new(engine.clone(), window, cx);
 			view.set_prefs(&ui.headset);
 			view.set_copies(copies.clone());
+			view.set_held(held_updates(&settings), cx);
 			view
 		});
 		let headset_events = cx.subscribe_in(
@@ -598,6 +599,7 @@ impl Shell {
 					.filter_map(|p| Some((p.name.clone(), p.installed?)))
 					.collect(),
 				free_bytes: info.storage.map(|s| s.free_bytes),
+				held: held_updates(&self.settings),
 			})
 		});
 		self.catalog
@@ -624,9 +626,13 @@ impl Shell {
 	fn sync_catalog_settings(&mut self, cx: &mut Context<Self>) {
 		let mirror = self.settings.active_mirror().map(|m| m.name.clone());
 		let no_upload = no_upload(&self.settings, &self.copies);
+		let held = held_updates(&self.settings);
+		self.headset
+			.update(cx, |h, cx| h.set_held(held.clone(), cx));
 		self.catalog.update(cx, |c, cx| {
 			c.set_mirror(mirror, cx);
 			c.set_no_upload(no_upload, cx);
+			c.set_held(held, cx);
 		});
 	}
 
@@ -656,6 +662,23 @@ impl Shell {
 	fn active_tasks(&self) -> impl Iterator<Item = &TaskSnapshot> {
 		self.tasks.iter().filter(|t| !t.state.is_finished())
 	}
+}
+
+/// Game name by package. A package can have several entries, such as a game
+/// and a save patch for it; the list is sorted by name, so the first one is
+/// usually the game itself.
+pub fn game_names(catalog: &quest_sideloader_core::catalog::Catalog) -> HashMap<String, String> {
+	let mut names = HashMap::new();
+	for game in &catalog.games {
+		names
+			.entry(game.package.clone())
+			.or_insert_with(|| game.name.clone());
+	}
+	names
+}
+
+fn held_updates(settings: &Settings) -> HashSet<String> {
+	settings.update_ignored.iter().cloned().collect()
 }
 
 /// Packages never offered for upload: ignored by the user, or renamed copies.

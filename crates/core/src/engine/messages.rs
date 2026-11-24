@@ -162,6 +162,11 @@ pub enum Command {
 	},
 	/// Stop offering this package for upload.
 	IgnoreContribution(String),
+	/// Stop (`hold`) or resume offering catalog updates for this package.
+	HoldUpdates {
+		package: String,
+		hold: bool,
+	},
 	/// Moves a queued download by `delta` places (negative is earlier).
 	MoveDownload {
 		task: TaskId,

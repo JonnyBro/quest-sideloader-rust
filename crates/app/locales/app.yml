@@ -107,6 +107,10 @@ hs.update:
   en: "update"
   ru: "обновление"
   uk: "оновлення"
+hs.update_held:
+  en: "updates off"
+  ru: "без обновлений"
+  uk: "без оновлень"
 hs.launch:
   en: "Launch"
   ru: "Запустить"
@@ -879,6 +883,14 @@ lib.updates:
   en: "Updates"
   ru: "Обновления"
   uk: "Оновлення"
+lib.adult_hidden:
+  en: "Games the mirror marks 18+ are hidden, except ones installed on the headset. Click to show them."
+  ru: "Игры с пометкой 18+ скрыты, кроме установленных на шлеме. Нажмите, чтобы показать."
+  uk: "Ігри з позначкою 18+ приховано, крім установлених на шоломі. Натисніть, щоб показати."
+lib.adult_shown:
+  en: "Games the mirror marks 18+ are shown. Click to hide them."
+  ru: "Игры с пометкой 18+ показаны. Нажмите, чтобы скрыть."
+  uk: "Ігри з позначкою 18+ показано. Натисніть, щоб приховати."
 lib.connect_compare:
   en: "Connect a headset to compare with its apps"
   ru: "Подключите шлем, чтобы сравнить с его приложениями"
@@ -999,6 +1011,26 @@ lib.download_only:
   en: "Download only"
   ru: "Только скачать"
   uk: "Лише завантажити"
+lib.hold_updates:
+  en: "Don't offer updates"
+  ru: "Не предлагать обновления"
+  uk: "Не пропонувати оновлення"
+lib.hold_updates_tip:
+  en: "Keep the installed version: newer versions of this game won't count as updates. Useful for mods that need an older version."
+  ru: "Оставить установленную версию: новые версии этой игры не будут считаться обновлениями. Пригодится для модов, которым нужна старая версия."
+  uk: "Залишити встановлену версію: нові версії цієї гри не вважатимуться оновленнями. Знадобиться для модів, яким потрібна стара версія."
+lib.resume_updates:
+  en: "Offer updates again"
+  ru: "Снова предлагать обновления"
+  uk: "Знову пропонувати оновлення"
+lib.resume_updates_tip:
+  en: "Newer versions of this game will show up as updates again."
+  ru: "Новые версии этой игры снова будут показываться как обновления."
+  uk: "Нові версії цієї гри знову показуватимуться як оновлення."
+lib.update_held_value:
+  en: "%{have} -> %{latest}, not offered"
+  ru: "%{have} -> %{latest}, не предлагается"
+  uk: "%{have} -> %{latest}, не пропонується"
 lib.release:
   en: "Release"
   ru: "Релиз"
@@ -2279,6 +2311,22 @@ set.backup_before_update:
   en: "Back up the saves of the installed version"
   ru: "Делать резервную копию сохранений установленной версии"
   uk: "Робити резервну копію збережень встановленої версії"
+set.held_updates:
+  en: "No updates for"
+  ru: "Без обновлений"
+  uk: "Без оновлень"
+set.held_intro:
+  en: "The catalog doesn't offer updates for these packages."
+  ru: "Каталог не предлагает обновления для этих пакетов."
+  uk: "Каталог не пропонує оновлення для цих пакетів."
+set.held_none:
+  en: "No packages. Pick \"Don't offer updates\" in a game's details in the catalog to add one."
+  ru: "Пакетов нет. Чтобы добавить, нажмите \"Не предлагать обновления\" в карточке игры в каталоге."
+  uk: "Пакетів немає. Щоб додати, натисніть \"Не пропонувати оновлення\" в картці гри в каталозі."
+set.held_remove:
+  en: "Offer updates again"
+  ru: "Снова предлагать обновления"
+  uk: "Знову пропонувати оновлення"
 hs.leftovers:
   en: "Leftovers of uninstalled apps"
   ru: "Остатки удалённых приложений"
@@ -2325,5 +2373,5 @@ hs.app_log:
   uk: "Показати журнал"
 console.app_log:
   en: "Log of %{name}. If it isn't running, start it on the headset. Stop ends the log."
-  ru: "Журнал %{name}. Если приложение не запущено, запустите его на шлеме. «Стоп» завершает журнал."
-  uk: "Журнал %{name}. Якщо застосунок не запущено, запустіть його на шоломі. «Стоп» завершує журнал."
+  ru: "Журнал %{name}. Если приложение не запущено, запустите его на шлеме. \"Стоп\" завершает журнал."
+  uk: "Журнал %{name}. Якщо застосунок не запущено, запустіть його на шоломі. \"Стоп\" завершує журнал."

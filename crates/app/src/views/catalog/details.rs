@@ -60,16 +60,20 @@ impl CatalogView {
 				text.push_str(&format!(", {}", format_date(*at)));
 			}
 			facts.push((t!("lib.col_installed").into(), text, true));
-			if status == Some(GameStatus::UpdateAvailable)
-				&& let Some(latest) = game.version_code
-			{
-				facts.push((
-					t!("lib.update").into(),
-					format!("{version} -> {latest}"),
-					true,
-				));
+			if let Some(latest) = game.version_code.filter(|&latest| latest > *version) {
+				let text = if apps.held.contains(&game.package) {
+					t!("lib.update_held_value", have = version, latest = latest).into_owned()
+				} else {
+					format!("{version} -> {latest}")
+				};
+				facts.push((t!("lib.update").into(), text, true));
 			}
 		}
+		let held = self
+			.installed
+			.as_ref()
+			.filter(|apps| apps.versions.contains_key(&game.package))
+			.map(|apps| apps.held.contains(&game.package));
 
 		let install_tip = match &self.installed {
 			Some(apps) => t!("lib.installs_on", name = apps.device_name),
@@ -128,7 +132,26 @@ impl CatalogView {
 											.on_click(cx.listener(move |this, _, _, _| {
 												this.download(index, false)
 											})),
-									),
+									)
+									.children(held.map(|held| {
+										let package = game.package.clone();
+										let (label, tip) = if held {
+											(t!("lib.resume_updates"), t!("lib.resume_updates_tip"))
+										} else {
+											(t!("lib.hold_updates"), t!("lib.hold_updates_tip"))
+										};
+										Button::new("hold-updates")
+											.label(label)
+											.ghost()
+											.small()
+											.tooltip(tip)
+											.on_click(cx.listener(move |this, _, _, _| {
+												this.engine.send(Command::HoldUpdates {
+													package: package.clone(),
+													hold: !held,
+												});
+											}))
+									})),
 							)
 							.children(
 								warnings.into_iter().map(|text| {

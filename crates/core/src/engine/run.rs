@@ -517,6 +517,17 @@ pub(super) async fn run(
 					state.save_settings(settings).await;
 				}
 			}
+			Command::HoldUpdates { package, hold } => {
+				let mut settings = state.settings.clone();
+				let held = settings.update_ignored.contains(&package);
+				if hold && !held {
+					settings.update_ignored.push(package);
+					state.save_settings(settings).await;
+				} else if !hold && held {
+					settings.update_ignored.retain(|p| p != &package);
+					state.save_settings(settings).await;
+				}
+			}
 			Command::Contribute {
 				serial,
 				package,
