@@ -7,6 +7,7 @@ use tokio::task::JoinHandle;
 
 use super::{Event, EventSink};
 use crate::catalog::{self, Catalog, CatalogError, Fetcher, Mirror, SyncStage};
+use crate::mirror_key::MirrorKeys;
 
 /// A synced catalog older than this is refreshed automatically.
 const STALE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
@@ -51,8 +52,15 @@ pub(super) struct Library {
 const SYNC_COOLDOWN: Duration = Duration::from_secs(10 * 60);
 
 impl Library {
-	pub fn new(rclone_path: Option<PathBuf>, root: PathBuf, sink: EventSink) -> Self {
-		let fetcher = Fetcher::new(rclone_path).expect("HTTP client with default TLS settings");
+	pub fn new(
+		rclone_path: Option<PathBuf>,
+		root: PathBuf,
+		keys: MirrorKeys,
+		sink: EventSink,
+	) -> Self {
+		let fetcher = Fetcher::new(rclone_path)
+			.expect("HTTP client with default TLS settings")
+			.with_keys(keys);
 		let sink = LibrarySink {
 			sink,
 			current: Arc::new(Mutex::new(None)),
@@ -88,6 +96,7 @@ impl Library {
 	pub fn set_rclone_path(&mut self, path: Option<PathBuf>) {
 		match Fetcher::new(path) {
 			Ok(fetcher) => {
+				let fetcher = fetcher.with_keys(self.fetcher.keys().clone());
 				fetcher.set_bandwidth_limit(self.limit.0, self.limit.1);
 				self.fetcher = fetcher;
 			}
@@ -214,7 +223,7 @@ async fn run_sync(fetcher: &Fetcher, mirror: &Mirror, root: &std::path::Path, si
 	tracing::info!(
 		mirror = %mirror.name,
 		kind,
-		api_key = fetcher.has_api_key(),
+		api_key = fetcher.keys().sends_to(mirror),
 		"sync started"
 	);
 	let started = Instant::now();
@@ -235,7 +244,8 @@ async fn run_sync(fetcher: &Fetcher, mirror: &Mirror, root: &std::path::Path, si
 			tracing::error!("sync with {} failed: {e}", mirror.name);
 			sink.emit(Event::CatalogStatus(CatalogStatus::Failed(describe(
 				&e,
-				fetcher.has_api_key(),
+				fetcher.keys(),
+				mirror,
 			))));
 			if matches!(e, CatalogError::RcloneNotFound(_)) {
 				sink.emit(Event::RcloneMissing);
@@ -244,14 +254,19 @@ async fn run_sync(fetcher: &Fetcher, mirror: &Mirror, root: &std::path::Path, si
 	}
 }
 
-fn describe(e: &CatalogError, has_key: bool) -> String {
-	match e {
+fn describe(e: &CatalogError, keys: &MirrorKeys, mirror: &Mirror) -> String {
+	let refused = matches!(
+		e,
 		CatalogError::Status {
-			status: 401 | 403, ..
-		} if has_key => t!("lib.refused", error = e).into_owned(),
-		CatalogError::Status {
-			status: 401 | 403, ..
-		} => t!("lib.refused_no_key", error = e).into_owned(),
-		other => other.to_string(),
+			status: 401 | 403,
+			..
+		}
+	);
+	if refused && keys.sends_to(mirror) {
+		t!("lib.refused", error = e).into_owned()
+	} else if refused && keys.is_key_mirror(mirror) {
+		t!("lib.refused_no_key", error = e).into_owned()
+	} else {
+		e.to_string()
 	}
 }

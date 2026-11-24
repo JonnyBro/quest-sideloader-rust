@@ -48,8 +48,9 @@ tab offers to upload it through the mirror's upload config. Nothing is sent
 until you press Upload. An upload holds the APK, its OBB files, the headset
 model and a SHA-256 of the serial.
 
-Official builds send an API key to mirrors. It isn't in the repository, so
-your own builds go without it and mirrors that require one refuse them.
+Official builds get a short-lived API key from vrSrc and send it only to
+vrSrc's own mirror (`https://go.srcdl1.xyz`). Other mirrors you add never see
+it. Your own builds can't get a key, so that mirror refuses them.
 
 ## Running
 
@@ -95,8 +96,9 @@ cargo build --release
 cargo test
 ```
 
-For a local build with the API key, put it in `api_key.txt` in the repository
-root (git ignores it) and run `touch crates/core/build.rs`.
+CI builds official releases with the `QSR_CLIENT_ID` and `QSR_BUILD_SECRET`
+environment variables, taken from repository secrets. Never commit them. A
+fork needs its own application at vrSrc.
 
 `crates/core` is everything but the UI: settings, the engine, the ADB client,
 the catalog, downloads and installs. `crates/app` is the gpui application.

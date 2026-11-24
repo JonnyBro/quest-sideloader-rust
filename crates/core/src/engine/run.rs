@@ -30,6 +30,7 @@ pub(super) async fn run(
 	let mut library = library::Library::new(
 		settings.rclone_path.clone(),
 		paths.catalog_dir(),
+		crate::mirror_key::MirrorKeys::official(Some(paths.mirror_key_file())),
 		sink.clone(),
 	);
 	library.set_bandwidth_limit(

@@ -40,13 +40,14 @@ jobs:
             exit 1
           fi
 
-      - name: Check API key secret
+      - name: Check mirror key secrets
         shell: bash
         env:
-          API_KEY: ${{ secrets.API_KEY }}
+          QSR_CLIENT_ID: ${{ secrets.QSR_CLIENT_ID }}
+          QSR_BUILD_SECRET: ${{ secrets.QSR_BUILD_SECRET }}
         run: |
-          if [ -z "$API_KEY" ]; then
-            echo "::warning::The API_KEY secret isn't set; a release without it can't use the mirror"
+          if [ -z "$QSR_CLIENT_ID" ] || [ -z "$QSR_BUILD_SECRET" ]; then
+            echo "::warning::QSR_CLIENT_ID or QSR_BUILD_SECRET isn't set; a release without them can't get a mirror key"
           fi
 
       - name: Install Rust
@@ -78,7 +79,8 @@ jobs:
       - name: Build
         shell: bash
         env:
-          API_KEY: ${{ secrets.API_KEY }}
+          QSR_CLIENT_ID: ${{ secrets.QSR_CLIENT_ID }}
+          QSR_BUILD_SECRET: ${{ secrets.QSR_BUILD_SECRET }}
         run: |
           for target in ${{ matrix.targets }}; do
             cargo build --release --locked --target "$target" -p quest-sideloader

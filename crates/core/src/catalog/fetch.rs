@@ -11,6 +11,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 
 use super::CatalogError;
 use super::mirror::{Mirror, MirrorKind, release_hash};
+use crate::mirror_key::MirrorKeys;
 
 /// Receives `(bytes so far, total if known)`.
 pub type FetchProgress<'a> = &'a (dyn Fn(u64, Option<u64>) + Send + Sync);
@@ -26,8 +27,8 @@ pub struct Fetcher {
 	/// Total bytes per second for all downloads; `0` is unlimited.
 	limit: Arc<AtomicU64>,
 	parallel: Arc<AtomicU8>,
-	/// Sent to mirrors as [`crate::api_key::HEADER`]; never logged.
-	api_key: Option<String>,
+	/// Sent as [`crate::mirror_key::HEADER`] to vrSrc's mirror only; never logged.
+	keys: MirrorKeys,
 }
 
 /// How rclone reaches one mirror.
@@ -79,19 +80,17 @@ impl Fetcher {
 			rclone: rclone_path.unwrap_or_else(|| crate::paths::default_tool("rclone")),
 			limit: Arc::new(AtomicU64::new(0)),
 			parallel: Arc::new(AtomicU8::new(1)),
-			api_key: crate::api_key::embedded(),
+			keys: MirrorKeys::default(),
 		})
 	}
 
-	/// Whether this build sends an API key to mirrors.
-	pub fn has_api_key(&self) -> bool {
-		self.api_key.is_some()
+	pub fn with_keys(mut self, keys: MirrorKeys) -> Self {
+		self.keys = keys;
+		self
 	}
 
-	#[cfg(test)]
-	pub(crate) fn with_api_key(mut self, key: Option<&str>) -> Self {
-		self.api_key = key.map(str::to_owned);
-		self
+	pub fn keys(&self) -> &MirrorKeys {
+		&self.keys
 	}
 
 	/// Caps the combined speed of all downloads; `0` is unlimited. Clones of
@@ -119,20 +118,48 @@ impl Fetcher {
 				.map_err(super::io_err(parent))?;
 		}
 		let at = location(mirror);
-		let mut command = self.rclone_command(at.config_file, true);
-		command
-			.arg("copyto")
-			.arg(at.path(remote_path))
-			.arg(dest)
-			.args(&at.flags)
-			// One connection per file: rclone splits files over 256M into
-			// parallel streams otherwise.
-			.args(["--multi-thread-streams", "0"])
-			.args(["--retries", "3", "--low-level-retries", "10"])
-			.args(self.rclone_bwlimit(concurrent));
-		self.run_rclone(command, progress)
+		let copy = |key: Option<&str>| {
+			let mut command = self.rclone_command(at.config_file, key);
+			command
+				.arg("copyto")
+				.arg(at.path(remote_path))
+				.arg(dest)
+				.args(&at.flags)
+				// One connection per file: rclone splits files over 256M into
+				// parallel streams otherwise.
+				.args(["--multi-thread-streams", "0"])
+				.args(["--retries", "3", "--low-level-retries", "10"])
+				.args(self.rclone_bwlimit(concurrent));
+			command
+		};
+		let key = self.keys.key_for(mirror).await;
+		let result = self
+			.run_rclone(copy(key.as_deref()), progress)
 			.await
-			.map_err(|e| with_status(e, &at.shown))
+			.map_err(|e| with_status(e, &at.shown));
+		match self.renewed_key(mirror, key, &result).await {
+			Some(fresh) => self
+				.run_rclone(copy(Some(&fresh)), progress)
+				.await
+				.map_err(|e| with_status(e, &at.shown)),
+			None => result,
+		}
+	}
+
+	/// After a 403 to a key: a different key to try once, if there is one.
+	async fn renewed_key<T>(
+		&self,
+		mirror: &Mirror,
+		sent: Option<String>,
+		result: &Result<T, CatalogError>,
+	) -> Option<String> {
+		let sent = sent?;
+		if !matches!(result, Err(CatalogError::Status { status: 403, .. })) {
+			return None;
+		}
+		self.keys.refused(&sent).await;
+		let fresh = self.keys.key_for(mirror).await?;
+		(fresh != sent).then_some(fresh)
 	}
 
 	/// Uploads one file into `dir` (empty for the root) of `remote`. The upload
@@ -145,7 +172,7 @@ impl Fetcher {
 		file: &Path,
 		progress: FetchProgress<'_>,
 	) -> Result<(), CatalogError> {
-		let mut command = self.rclone_command(access.config_file, false);
+		let mut command = self.rclone_command(access.config_file, None);
 		command
 			.arg("copy")
 			.arg(file)
@@ -166,7 +193,21 @@ impl Fetcher {
 			MirrorKind::Http { .. } => release_hash(release_name),
 			MirrorKind::Rclone { .. } => release_name.to_owned(),
 		};
-		let mut command = self.rclone_command(at.config_file, true);
+		let key = self.keys.key_for(mirror).await;
+		let result = self.lsjson(&at, &folder, key.as_deref()).await;
+		match self.renewed_key(mirror, key, &result).await {
+			Some(fresh) => self.lsjson(&at, &folder, Some(&fresh)).await,
+			None => result,
+		}
+	}
+
+	async fn lsjson(
+		&self,
+		at: &Location<'_>,
+		folder: &str,
+		key: Option<&str>,
+	) -> Result<Vec<RemoteFile>, CatalogError> {
+		let mut command = self.rclone_command(at.config_file, key);
 		command
 			.arg("lsjson")
 			.arg("--files-only")
@@ -256,18 +297,14 @@ impl Fetcher {
 		}
 	}
 
-	pub(crate) fn rclone_command(
-		&self,
-		config_file: &Path,
-		send_key: bool,
-	) -> tokio::process::Command {
+	fn rclone_command(&self, config_file: &Path, key: Option<&str>) -> tokio::process::Command {
 		let mut command = tokio::process::Command::new(&self.rclone);
 		// Through the environment rather than `--header`, so the key doesn't
 		// show up in other users' process lists.
-		if send_key && let Some(key) = &self.api_key {
+		if let Some(key) = key {
 			command.env(
 				"RCLONE_HEADER",
-				rclone_header_env(crate::api_key::HEADER, key),
+				rclone_header_env(crate::mirror_key::HEADER, key),
 			);
 		}
 		command
@@ -591,9 +628,10 @@ pub(crate) mod tests {
 		format!("http://{addr}/")
 	}
 
-	/// Real rclone with an `http` remote; skipped when rclone isn't installed.
+	/// Where an rclone remote points isn't known, so it never gets the key;
+	/// skipped when rclone isn't installed.
 	#[tokio::test]
-	async fn rclone_sends_the_key() {
+	async fn rclone_remote_never_gets_the_key() {
 		if std::process::Command::new("rclone")
 			.arg("version")
 			.output()
@@ -617,23 +655,13 @@ pub(crate) mod tests {
 		};
 		let dest = dir.path().join("meta.7z");
 
+		let origin = url.trim_end_matches('/');
 		let denied = Fetcher::new(None)
 			.unwrap()
-			.with_api_key(None)
+			.with_keys(MirrorKeys::fixed("secret", origin))
 			.download_file(&mirror, "meta.7z", &dest, &|_, _| {}, 1)
 			.await;
-		assert!(
-			denied.is_err(),
-			"the server must refuse requests without the key"
-		);
-
-		Fetcher::new(None)
-			.unwrap()
-			.with_api_key(Some("secret"))
-			.download_file(&mirror, "meta.7z", &dest, &|_, _| {}, 1)
-			.await
-			.unwrap();
-		assert_eq!(std::fs::read(&dest).unwrap(), b"meta archive bytes");
+		assert!(denied.is_err(), "the key must not go to rclone remotes");
 	}
 
 	#[test]
@@ -788,28 +816,41 @@ pub(crate) mod tests {
 		format!("http://{addr}/files/")
 	}
 
-	/// HTTP mirrors go through rclone's http backend with the key in
-	/// `RCLONE_HEADER`; skipped when rclone isn't installed.
+	/// HTTP mirrors go through rclone's http backend, with the key in
+	/// `RCLONE_HEADER` for the key's own mirror only; skipped when rclone
+	/// isn't installed.
 	#[tokio::test]
 	async fn http_mirror_goes_through_rclone() {
 		if !have_rclone() {
 			return;
 		}
-		let mirror = http_mirror(http_mirror_server().await);
+		let base = http_mirror_server().await;
+		let origin = reqwest::Url::parse(&base)
+			.unwrap()
+			.origin()
+			.ascii_serialization();
+		let mirror = http_mirror(base);
 		let dir = tempfile::tempdir().unwrap();
 		let dest = dir.path().join("meta.7z");
 
-		let refused = Fetcher::new(None)
-			.unwrap()
-			.with_api_key(None)
-			.download_file(&mirror, "meta.7z", &dest, &|_, _| {}, 1)
-			.await;
-		assert!(
-			matches!(refused, Err(CatalogError::Status { status: 403, .. })),
-			"{refused:?}"
-		);
+		for keys in [
+			MirrorKeys::default(),
+			MirrorKeys::fixed("secret", "https://go.srcdl1.xyz"),
+		] {
+			let refused = Fetcher::new(None)
+				.unwrap()
+				.with_keys(keys)
+				.download_file(&mirror, "meta.7z", &dest, &|_, _| {}, 1)
+				.await;
+			assert!(
+				matches!(refused, Err(CatalogError::Status { status: 403, .. })),
+				"{refused:?}"
+			);
+		}
 
-		let fetcher = Fetcher::new(None).unwrap().with_api_key(Some("secret"));
+		let fetcher = Fetcher::new(None)
+			.unwrap()
+			.with_keys(MirrorKeys::fixed("secret", &origin));
 		fetcher
 			.download_file(&mirror, "meta.7z", &dest, &|_, _| {}, 1)
 			.await

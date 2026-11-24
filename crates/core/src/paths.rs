@@ -115,6 +115,11 @@ impl AppPaths {
 		self.data_dir.join("signing")
 	}
 
+	/// The install's random ID and the cached mirror key.
+	pub fn mirror_key_file(&self) -> PathBuf {
+		self.data_dir.join("mirror-key.json")
+	}
+
 	pub fn backups_dir(&self) -> PathBuf {
 		self.data_dir.join("backups")
 	}

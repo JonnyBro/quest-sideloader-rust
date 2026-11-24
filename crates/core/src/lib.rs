@@ -1,7 +1,6 @@
 rust_i18n::i18n!("locales", fallback = "en");
 
 pub mod adb;
-pub mod api_key;
 pub mod app_update;
 pub mod archive;
 pub mod catalog;
@@ -10,6 +9,7 @@ pub mod downloaded;
 pub mod engine;
 pub mod error;
 mod format;
+pub mod mirror_key;
 pub mod paths;
 pub mod platform_tools;
 pub mod rclone_tool;
