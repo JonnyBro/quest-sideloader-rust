@@ -3,6 +3,8 @@
 
 rust_i18n::i18n!("locales", fallback = "en");
 
+#[cfg(target_os = "linux")]
+mod desktop;
 mod dialogs;
 mod icons;
 mod logbuf;
@@ -38,6 +40,8 @@ fn main() {
 		}
 	};
 	apply_language(settings.language);
+	#[cfg(target_os = "linux")]
+	desktop::refresh_if_installed();
 
 	gpui_kit::application()
 		.with_assets(icons::AppAssets)

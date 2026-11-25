@@ -5263,6 +5263,7 @@ name = "quest-sideloader"
 version = "2.3.2"
 dependencies = [
  "chrono",
+ "directories",
  "gpui-kit",
  "notify-rust",
  "quest-sideloader-core",

@@ -2343,6 +2343,34 @@ set.check_app_updates:
   en: "Check GitHub for a new version at start"
   ru: "Проверять новую версию на GitHub при запуске"
   uk: "Перевіряти нову версію на GitHub під час запуску"
+set.desktop:
+  en: "Application menu"
+  ru: "Меню приложений"
+  uk: "Меню застосунків"
+set.desktop_add:
+  en: "Add to Menu"
+  ru: "Добавить в меню"
+  uk: "Додати в меню"
+set.desktop_update:
+  en: "Update Entry"
+  ru: "Обновить ярлык"
+  uk: "Оновити ярлик"
+set.desktop_remove:
+  en: "Remove"
+  ru: "Убрать"
+  uk: "Прибрати"
+set.desktop_hint:
+  en: "Adds Quest Sideloader with its icon to the application menu. The entry starts this copy of the app, wherever it is."
+  ru: "Добавляет Quest Sideloader с иконкой в меню приложений. Ярлык запускает именно эту копию, где бы она ни лежала."
+  uk: "Додає Quest Sideloader з іконкою в меню застосунків. Ярлик запускає саме цю копію, де б вона не лежала."
+set.desktop_added:
+  en: "Quest Sideloader is in the application menu."
+  ru: "Quest Sideloader добавлен в меню приложений."
+  uk: "Quest Sideloader додано в меню застосунків."
+set.desktop_removed:
+  en: "Quest Sideloader was removed from the application menu."
+  ru: "Quest Sideloader убран из меню приложений."
+  uk: "Quest Sideloader прибрано з меню застосунків."
 lib.updates_badge:
   en: "Updates available for installed games: %{n}"
   ru: "Обновлений для установленных игр: %{n}"

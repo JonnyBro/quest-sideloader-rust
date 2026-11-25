@@ -6,6 +6,7 @@ use std::rc::Rc;
 use gpui_kit::component::button::{Button, ButtonVariant, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::notification::Notification;
 use gpui_kit::component::{
 	ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, WindowExt, h_flex, v_flex,
 };
@@ -531,6 +532,57 @@ impl SettingsView {
 			))
 	}
 
+	#[cfg(target_os = "linux")]
+	fn desktop_buttons(&self, cx: &mut Context<Self>) -> AnyElement {
+		let installed = crate::desktop::is_installed();
+		let run = |install: bool| {
+			move |_: &mut Self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>| {
+				let result = if install {
+					crate::desktop::install()
+				} else {
+					crate::desktop::uninstall()
+				};
+				let note = match result {
+					Ok(()) if install => {
+						Notification::success(t!("set.desktop_added").into_owned())
+					}
+					Ok(()) => Notification::info(t!("set.desktop_removed").into_owned()),
+					Err(e) => Notification::error(e),
+				};
+				window.push_notification(note, cx);
+				cx.notify();
+			}
+		};
+		h_flex()
+			.gap_2()
+			.child(
+				Button::new("desktop-install")
+					.small()
+					.outline()
+					.label(if installed {
+						t!("set.desktop_update")
+					} else {
+						t!("set.desktop_add")
+					})
+					.on_click(cx.listener(run(true))),
+			)
+			.when(installed, |this| {
+				this.child(
+					Button::new("desktop-remove")
+						.small()
+						.ghost()
+						.label(t!("set.desktop_remove"))
+						.on_click(cx.listener(run(false))),
+				)
+			})
+			.into_any_element()
+	}
+
+	#[cfg(not(target_os = "linux"))]
+	fn desktop_buttons(&self, _cx: &mut Context<Self>) -> AnyElement {
+		div().into_any_element()
+	}
+
 	fn downloads(&self, cx: &mut Context<Self>) -> impl IntoElement {
 		let parallel = self.draft.max_concurrent_downloads;
 		let unit = self.draft.download_limit.unit;
@@ -618,6 +670,16 @@ impl SettingsView {
 					})),
 				cx,
 			))
+			.when(cfg!(target_os = "linux"), |this| {
+				this.child(field(
+					t!("set.desktop").into(),
+					v_flex()
+						.gap_1()
+						.child(self.desktop_buttons(cx))
+						.child(hint(t!("set.desktop_hint").into(), cx)),
+					cx,
+				))
+			})
 			.child(field(
 				t!("set.parallel").into(),
 				h_flex()
