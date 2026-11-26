@@ -6,6 +6,7 @@ use std::rc::Rc;
 use gpui_kit::component::button::{Button, ButtonVariant, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+#[cfg(target_os = "linux")]
 use gpui_kit::component::notification::Notification;
 use gpui_kit::component::{
 	ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, WindowExt, h_flex, v_flex,
