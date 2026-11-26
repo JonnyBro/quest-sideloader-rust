@@ -511,8 +511,9 @@ mod tests {
 
 	#[test]
 	fn broken_stream_can_be_retried_without_streaming() {
-		let s = setup("adb install game.apk\n");
-		std::fs::write(s.release.join("game.apk"), b"apk bytes here").unwrap();
+		let s = setup("adb install game.pkg\n");
+		// Not named .apk, so planning doesn't try to parse it as one.
+		std::fs::write(s.release.join("game.pkg"), b"apk bytes here").unwrap();
 		s.fake.recorded.lock().unwrap().break_streams = true;
 		s.engine.send(Command::Install {
 			serial: "SER1".into(),
