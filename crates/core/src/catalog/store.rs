@@ -44,7 +44,7 @@ impl Catalog {
 		})
 	}
 
-	/// The release's note from `.meta/notes/<release>.txt`, if the mirror has one.
+	/// From `.meta/notes/<release>.txt`.
 	pub fn note(&self, release_name: &str) -> Option<String> {
 		if release_name.contains(['/', '\\']) || release_name.starts_with('.') {
 			return None;
@@ -58,7 +58,6 @@ impl Catalog {
 		(!text.is_empty()).then_some(text)
 	}
 
-	/// Where the mirror accepts new app versions, if it does.
 	pub fn upload_target(&self) -> Option<UploadTarget> {
 		let config_file = self.meta_dir.join(".meta/upload.config");
 		let text = std::fs::read_to_string(&config_file).ok()?;
@@ -79,12 +78,11 @@ impl Catalog {
 		})
 	}
 
-	/// Packages the mirror doesn't want offered for upload.
 	pub fn is_blacklisted(&self, package: &str) -> bool {
 		self.blacklist.contains(package)
 	}
 
-	/// Loads a previously synced catalog; `None` if this mirror was never synced.
+	/// `None` if this mirror was never synced.
 	pub fn load(root: &Path, mirror_id: &str) -> Result<Option<Self>, CatalogError> {
 		let dir = root.join(mirror_id).join("current");
 		if !dir.is_dir() {
@@ -147,8 +145,7 @@ pub enum SyncStage {
 	Extracting { done: u64, total: u64 },
 }
 
-/// Downloads and unpacks the mirror's `meta.7z`, then swaps it in for the
-/// previous copy. The old catalog stays usable if anything fails.
+/// The old catalog stays usable if anything fails.
 pub async fn sync(
 	fetcher: &Fetcher,
 	mirror: &Mirror,
@@ -185,7 +182,6 @@ pub async fn sync(
 	tokio::task::block_in_place(unpack)
 }
 
-/// Checks `<mirror>/staging` and swaps it in for `<mirror>/current`.
 fn replace_current(root: &Path, mirror_id: &str) -> Result<Catalog, CatalogError> {
 	let mirror_dir = root.join(mirror_id);
 	let staging = mirror_dir.join("staging");

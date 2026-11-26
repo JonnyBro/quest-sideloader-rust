@@ -18,11 +18,9 @@ use crate::theme::Mono;
 pub enum DevicesEvent {
 	/// Work with this headset: the Headset tab, installs, the console.
 	Select(String),
-	/// Open the dialog that installs adb.
 	SetUpAdb,
 }
 
-/// Every device adb sees, with its state and what to do about it.
 pub struct DevicesView {
 	engine: Rc<Engine>,
 	adb: Option<AdbStatus>,
@@ -112,8 +110,7 @@ impl DevicesView {
 			)
 	}
 
-	/// What to do when there is no headset to work with yet. The Headset tab
-	/// shows this too.
+	/// The Headset tab shows this too.
 	pub fn help(&self, cx: &mut Context<Self>) -> AnyElement {
 		let theme = cx.theme().clone();
 		let title = |text: String| div().text_xl().child(text);

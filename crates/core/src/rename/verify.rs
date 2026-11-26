@@ -14,14 +14,12 @@ struct SigningBlock {
 	start: u64,
 	central_offset: u64,
 	end_offset: u64,
-	/// The zip end record.
 	end: Vec<u8>,
 	/// `(id, value)` of each entry: v2, v3 and so on.
 	pairs: Vec<(u32, Vec<u8>)>,
 }
 
-/// Finds the APK signing block before the central directory. `Ok(None)`
-/// when the APK has none (signed with v1 only, or not at all).
+/// `Ok(None)` when the APK has none: signed with v1 only, or not at all.
 fn read_signing_block(file: &mut std::fs::File) -> Result<Option<SigningBlock>, String> {
 	let len = file.metadata().map_err(|e| e.to_string())?.len();
 
@@ -169,14 +167,12 @@ fn raw_len(data: &[u8], at: usize) -> Result<usize, String> {
 	Ok(Reader::new(data).u32(at).map_err(|e| e.to_string())? as usize)
 }
 
-/// The length-prefixed field at `at`.
 fn prefixed_at(data: &[u8], at: usize) -> Result<&[u8], String> {
 	let len = raw_len(data, at)?;
 	data.get(at + 4..at + 4 + len)
 		.ok_or_else(|| "field runs past its parent".to_owned())
 }
 
-/// The length-prefixed fields that fill `data`.
 fn items(data: &[u8]) -> Result<Vec<&[u8]>, String> {
 	let mut out = Vec::new();
 	let mut at = 0;

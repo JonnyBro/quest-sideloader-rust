@@ -43,6 +43,7 @@ pub(super) fn spawn(upload: Upload) -> TaskEntry {
 			warnings: Vec::new(),
 			output: None,
 			conflict: None,
+			broken_stream: None,
 		},
 		upload.sink.clone(),
 	);

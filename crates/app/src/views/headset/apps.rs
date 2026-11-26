@@ -333,7 +333,7 @@ pub(super) fn initial(name: &str) -> String {
 		.unwrap_or_default()
 }
 
-/// Uninstall with the two choices the old dialog had: back up saves first, delete OBB files.
+/// With the old dialog's two choices: back up saves first, delete OBB files.
 pub(super) fn open_uninstall(
 	engine: Rc<Engine>,
 	serial: String,

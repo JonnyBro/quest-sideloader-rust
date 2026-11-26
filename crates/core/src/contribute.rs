@@ -1,5 +1,4 @@
-//! Contributing app versions the mirror doesn't have yet: finding them among
-//! the headset's apps and packing them the way the mirror's uploads expect.
+//! Apps the mirror lacks: finding them on the headset and packing them for upload.
 
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
@@ -9,7 +8,6 @@ use sha2::{Digest, Sha256};
 
 use crate::catalog::Catalog;
 
-/// The headset's own software, never worth offering.
 const SYSTEM_PREFIXES: [&str; 6] = [
 	"com.oculus.",
 	"com.meta.",
@@ -28,7 +26,7 @@ pub enum Reason {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candidate {
 	pub package: String,
-	/// Name from the library, or the package name when the library doesn't know it.
+	/// The package name when the library doesn't know the app.
 	pub name: String,
 	pub version_code: u64,
 	pub reason: Reason,
@@ -80,7 +78,7 @@ pub fn find_candidates(
 	candidates
 }
 
-/// Stable anonymous id of a headset: SHA-256 of its serial, in hex.
+/// SHA-256 of the serial, in hex.
 pub fn hwid(serial: &str) -> String {
 	Sha256::digest(serial.as_bytes())
 		.iter()
@@ -118,8 +116,7 @@ pub fn archive_name(
 	)
 }
 
-/// Zips everything under `dir` (paths relative to it). APKs and OBBs are
-/// already compressed, so entries are stored as-is.
+/// APKs and OBBs are already compressed, so entries are stored.
 pub fn pack(dir: &Path, zip_path: &Path, progress: &dyn Fn(u64, u64)) -> std::io::Result<()> {
 	let files = crate::adb::list_files(dir)?;
 	let total: u64 = files.iter().map(|f| f.size).sum();

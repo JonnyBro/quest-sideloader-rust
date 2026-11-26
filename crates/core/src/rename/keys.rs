@@ -36,8 +36,7 @@ const HEADER: &str = "Quest Sideloader signing key for ";
 const CERT_END: &str = "-----END CERTIFICATE-----";
 
 impl SigningKey {
-	/// A new key with a self-signed certificate naming `package`. Takes a
-	/// second or two.
+	/// Takes a second or two.
 	pub fn generate(package: &str) -> Result<Self, KeyError> {
 		Self::with_key(PrivateKey::generate(), package)
 	}
@@ -292,14 +291,13 @@ impl KeyStore {
 			.map_err(|source| KeyError::Io { path: from, source })
 	}
 
-	/// Deletes the key file for good.
 	pub fn remove(&self, package: &str) -> Result<(), KeyError> {
 		let path = self.path(package);
 		std::fs::remove_file(&path).map_err(|source| KeyError::Io { path, source })
 	}
 
-	/// Takes a key exported earlier, for the package named in its first
-	/// line; refuses to replace a different key. Returns the package.
+	/// The package comes from the key's first line; a different key already
+	/// stored is never replaced. Returns the package.
 	pub fn import(&self, file: &Path) -> Result<String, KeyError> {
 		let text = std::fs::read_to_string(file).map_err(|source| KeyError::Io {
 			path: file.to_path_buf(),

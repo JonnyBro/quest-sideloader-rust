@@ -60,8 +60,8 @@ impl AdbServer {
 		}
 	}
 
-	/// Starts the server through the `adb` binary if nothing listens on the port.
-	/// Returns the server's protocol version.
+	/// Starts the server through the `adb` binary if nothing listens; returns
+	/// its protocol version.
 	pub async fn ensure_running(&self) -> Result<u32, AdbError> {
 		if let Ok(version) = self.version().await {
 			return Ok(version);
@@ -143,8 +143,7 @@ impl AdbServer {
 		self.host_query(&format!("host:disconnect:{address}")).await
 	}
 
-	/// Headsets announcing wireless adb on the local network. The server
-	/// keeps listening in the background, so a fresh headset can take a few
+	/// The server listens in the background, so a fresh headset can take a few
 	/// seconds to show up.
 	pub async fn mdns_services(&self) -> Result<Vec<MdnsService>, AdbError> {
 		Ok(parse_mdns(&self.host_query("host:mdns:services").await?))
@@ -159,7 +158,6 @@ impl AdbServer {
 pub struct MdnsService {
 	/// Instance name, e.g. `adb-1WMHH000000000`.
 	pub name: String,
-	/// `ip:port` to connect to.
 	pub address: String,
 	/// Announced by Android's Wireless debugging, which needs pairing first;
 	/// the rest come from `adb tcpip`.

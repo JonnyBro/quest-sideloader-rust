@@ -1,5 +1,3 @@
-//! 7z extraction for mirror metadata and game releases.
-
 mod volumes;
 
 use std::io::{BufWriter, Write};
@@ -55,8 +53,7 @@ fn safe_join(dest: &Path, name: &str) -> Result<PathBuf, ArchiveError> {
 	Ok(dest.join(relative))
 }
 
-/// Extracts all volumes of one archive into `dest`. `progress` receives
-/// `(unpacked bytes written, total unpacked size)`. Setting `cancel` stops at
+/// `progress` gets `(bytes written, total unpacked size)`; `cancel` stops at
 /// the next chunk.
 pub fn extract_7z(
 	volumes: &[PathBuf],

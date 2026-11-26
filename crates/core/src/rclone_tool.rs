@@ -9,7 +9,6 @@ use sha2::{Digest, Sha256};
 const BASE: &str = "https://downloads.rclone.org";
 pub const INFO_URL: &str = "https://rclone.org/downloads/";
 
-/// rclone's name for this platform in its release file names.
 pub fn platform() -> Option<&'static str> {
 	Some(match (std::env::consts::OS, std::env::consts::ARCH) {
 		("windows", "x86_64") => "windows-amd64",
@@ -31,8 +30,8 @@ pub fn binary_path(dir: &Path) -> PathBuf {
 	})
 }
 
-/// Downloads the current release, checks it against the published SHA-256
-/// sums and puts the binary into `dir`. Returns the binary's path.
+/// Checks the download against the published SHA-256 sums; returns the
+/// binary's path.
 pub async fn install(
 	dir: &Path,
 	progress: &(dyn Fn(u64, Option<u64>) + Send + Sync),

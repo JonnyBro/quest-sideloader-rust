@@ -1,6 +1,3 @@
-//! Things done to a headset beyond installing: managing apps, rebooting,
-//! wireless ADB, screenshots, and reading what takes up space.
-
 use rust_i18n::t;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -19,7 +16,6 @@ pub enum RebootMode {
 	Bootloader,
 }
 
-/// Space an app takes, in bytes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct AppUsage {
 	/// `base.apk` only: split APKs and unpacked native libraries aren't
@@ -93,7 +89,6 @@ pub enum BatteryHealth {
 	Other,
 }
 
-/// From `dumpsys battery`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Power {
 	/// `None` when running on battery.
@@ -104,7 +99,6 @@ pub struct Power {
 	pub health: Option<BatteryHealth>,
 }
 
-/// The connected network, from `dumpsys wifi`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WifiLink {
 	pub ssid: String,
@@ -131,8 +125,6 @@ pub struct Controller {
 	pub firmware: Option<String>,
 }
 
-/// Performance overrides Quest headsets read from system properties. They
-/// last until the next reboot.
 /// OBB and data folders of an app that isn't installed any more.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Leftover {
@@ -211,12 +203,10 @@ const APP_SAFETY_FLAGS: &[(&str, &str)] = &[
 ];
 const APP_SAFETY_OPS: &[&str] = &["RUN_IN_BACKGROUND", "START_FOREGROUND"];
 
-/// What a check was left at after [`Device::set_app_safety`].
 #[derive(Debug, Clone)]
 pub struct SafetyCheck {
 	pub name: String,
 	pub value: String,
-	/// The value is the one that was asked for.
 	pub applied: bool,
 }
 
@@ -225,8 +215,7 @@ fn quote(s: &str) -> String {
 }
 
 impl Device {
-	/// Folders in `Android/obb` and `Android/data` whose app isn't installed,
-	/// largest first.
+	/// Largest first.
 	pub async fn leftovers(&self) -> Result<Vec<Leftover>, AdbError> {
 		let installed: std::collections::HashSet<String> =
 			super::parse::parse_packages(&self.shell_ok("pm list packages").await?)
@@ -296,8 +285,7 @@ impl Device {
 		Ok(found)
 	}
 
-	/// Deletes the OBB and data folders of `packages`, refusing any that are
-	/// installed or belong to the system.
+	/// Refuses packages that are installed or belong to the system.
 	pub async fn remove_leftovers(&self, packages: &[String]) -> Result<(), AdbError> {
 		let installed: std::collections::HashSet<String> =
 			super::parse::parse_packages(&self.shell_ok("pm list packages").await?)
@@ -360,7 +348,6 @@ impl Device {
 		}
 	}
 
-	/// Deletes a folder on shared storage, e.g. an app's OBB folder.
 	pub async fn remove_dir(&self, path: &str) -> Result<(), AdbError> {
 		self.shell_ok(&format!("rm -rf {}", quote(path)))
 			.await
@@ -390,13 +377,11 @@ impl Device {
 		Ok(message.trim().to_owned())
 	}
 
-	/// The headset's address on Wi-Fi, if it's connected to one.
 	pub async fn wifi_ip(&self) -> Result<Option<String>, AdbError> {
 		let out = self.shell("ip -f inet addr show wlan0").await?;
 		Ok(parse_inet(&out.stdout))
 	}
 
-	/// A PNG of what the headset shows.
 	pub async fn screenshot(&self) -> Result<Vec<u8>, AdbError> {
 		let mut stream = self.open("exec:screencap -p").await?;
 		let mut png = Vec::new();
@@ -487,7 +472,6 @@ impl Device {
 		Ok(checks)
 	}
 
-	/// Space each app's APK, OBB and `Android/data` folders take, by package.
 	pub async fn app_usage(&self) -> Result<HashMap<String, AppUsage>, AdbError> {
 		let (shared, apks) = tokio::join!(
 			self.shell("du -sk /sdcard/Android/obb/* /sdcard/Android/data/* 2>/dev/null"),
@@ -563,7 +547,6 @@ impl Device {
 		})
 	}
 
-	/// Width and height of the display, as `wm size` reports it.
 	pub async fn display_size(&self) -> Result<(u32, u32), AdbError> {
 		let out = self.shell_ok("wm size").await?;
 		parse_wm_size(&out)

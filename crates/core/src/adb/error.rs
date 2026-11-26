@@ -38,9 +38,11 @@ pub enum AdbError {
 
 	#[error("{}", install_message(.0))]
 	InstallFailed(String),
+
+	#[error("{}", rust_i18n::t!("err.adb_stream_broken", error = .0))]
+	StreamBroken(String),
 }
 
-/// Package manager failure codes and what they mean for the user.
 const INSTALL_REASONS: &[(&str, &str)] = &[
 	("INSTALL_FAILED_INSUFFICIENT_STORAGE", "err.inst_storage"),
 	("INSTALL_FAILED_UPDATE_INCOMPATIBLE", "err.inst_signature"),
@@ -53,8 +55,7 @@ const INSTALL_REASONS: &[(&str, &str)] = &[
 	("INSTALL_PARSE_FAILED", "err.inst_broken"),
 ];
 
-/// A plain explanation in front of the package manager's own words, which
-/// stay for searching and bug reports.
+/// The package manager's own words stay, for searching and bug reports.
 fn install_message(raw: &str) -> String {
 	let raw = raw.trim();
 	match INSTALL_REASONS.iter().find(|(code, _)| raw.contains(code)) {

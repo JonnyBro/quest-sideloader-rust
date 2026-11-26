@@ -54,7 +54,6 @@ pub struct ScriptAnalysis {
 }
 
 impl ScriptAnalysis {
-	/// The user has to look at the script before it runs.
 	pub fn needs_review(&self) -> bool {
 		self.lines.iter().any(|l| {
 			matches!(
@@ -64,7 +63,7 @@ impl ScriptAnalysis {
 		})
 	}
 
-	/// Actions to run, in order. Suspicious lines are included only when allowed.
+	/// Suspicious lines are included only when allowed.
 	pub fn actions(&self, allow_suspicious: bool) -> Vec<(usize, Action)> {
 		self.lines
 			.iter()

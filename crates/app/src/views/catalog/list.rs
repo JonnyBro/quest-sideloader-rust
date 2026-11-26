@@ -287,7 +287,6 @@ impl CatalogView {
 			.collect()
 	}
 
-	/// The right-click menu of a game.
 	pub(super) fn menu(
 		&self,
 		index: usize,
@@ -327,12 +326,16 @@ impl CatalogView {
 			if let Some(status) = status {
 				menu = menu.item(item(
 					install_label(Some(status)),
-					Rc::new(move |this, _| this.download(index, true)),
+					Rc::new(move |this, _| this.download(index, true, true)),
+				));
+				menu = menu.item(item(
+					t!("lib.install_no_stream").into(),
+					Rc::new(move |this, _| this.download(index, true, false)),
 				));
 			}
 			menu.item(item(
 				t!("lib.download_only").into(),
-				Rc::new(move |this, _| this.download(index, false)),
+				Rc::new(move |this, _| this.download(index, false, true)),
 			))
 			.separator()
 			.item(copy(t!("lib.copy_name").into(), game.name.clone()))
@@ -377,7 +380,6 @@ pub(super) fn cover(catalog: &Catalog, game: &Game, size: (f32, f32), theme: &Th
 	}
 }
 
-/// The status tag, saying which versions an update is about on hover.
 pub(super) fn status_badge(
 	id: impl Into<ElementId>,
 	status: GameStatus,

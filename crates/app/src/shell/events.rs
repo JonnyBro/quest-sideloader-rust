@@ -196,6 +196,18 @@ impl Shell {
 		if finished {
 			self.forget_review(task.id, window, cx);
 			self.notify_finished(&task, window);
+			if let (TaskState::Failed(_), Some(broken), Some(serial)) =
+				(&task.state, &task.broken_stream, &task.serial)
+			{
+				crate::dialogs::stream::open(
+					self.engine.clone(),
+					serial.clone(),
+					task.title.clone(),
+					broken.clone(),
+					window,
+					cx,
+				);
+			}
 		}
 		let for_downloads = task.clone();
 		self.downloads
@@ -221,7 +233,6 @@ impl Shell {
 		self.update_title(window);
 	}
 
-	/// A system notification when a task ends while the window is in the background.
 	/// Copies are the packages with a key, so this follows the key folder.
 	pub(super) fn reload_copies(&mut self, cx: &mut Context<Self>) {
 		self.copies = KeyStore::new(self.paths.signing_dir())

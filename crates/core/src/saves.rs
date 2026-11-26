@@ -39,14 +39,12 @@ fn io_err(path: impl Into<PathBuf>) -> impl FnOnce(std::io::Error) -> SaveError 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BackupMeta {
 	pub package: String,
-	/// What the user saw when backing up: the game's name or the package.
 	pub name: String,
 	pub version_code: Option<u64>,
 	/// Unix seconds.
 	pub created: u64,
 	pub files: u64,
 	pub bytes: u64,
-	/// How many of the files came from the app's private data.
 	#[serde(default)]
 	pub private_files: u64,
 	/// Files the headset wouldn't let us read, so they aren't in the backup.
@@ -64,7 +62,6 @@ fn device_data_dir(package: &str) -> String {
 	format!("/sdcard/Android/data/{package}")
 }
 
-/// Every backup, newest first.
 pub fn list(root: &Path) -> Vec<Backup> {
 	let mut backups = Vec::new();
 	let Ok(packages) = std::fs::read_dir(root) else {
@@ -118,7 +115,6 @@ fn is_rebuilt(relative: &str) -> bool {
 const BACKUP_TMP: &str = "/sdcard/backup_tmp";
 const RESTORE_TMP: &str = "/sdcard/restore_tmp";
 
-/// `(remote, relative)` for files under `remote_root`, minus caches and odd paths.
 fn relative_files(files: &[(String, u64)], remote_root: &str) -> Vec<(String, String, u64)> {
 	files
 		.iter()
@@ -136,8 +132,7 @@ fn relative_files(files: &[(String, u64)], remote_root: &str) -> Vec<(String, St
 		.collect()
 }
 
-/// Copies `/data/data/<package>` to a scratch folder with `run-as`. Only
-/// debuggable apps allow that; for the rest this finds nothing, which is fine.
+/// Only debuggable apps allow `run-as`; for the rest this finds nothing.
 /// The flag says whether `run-as` worked.
 async fn stage_private_data(
 	device: &Device,
@@ -173,9 +168,7 @@ pub fn looks_like_save(path: &str) -> bool {
 	inside.contains("save") || inside.ends_with(".sav")
 }
 
-/// Copies the app's saves from the headset: its `Android/data` folder, and
-/// its private data when the app allows `run-as`. Only a scratch folder on
-/// the headset is written, and removed again.
+/// Writes only a scratch folder on the headset and removes it afterwards.
 pub async fn back_up(
 	device: &Device,
 	root: &Path,
@@ -283,10 +276,9 @@ pub async fn back_up(
 	Ok(Backup { dir, meta })
 }
 
-/// Puts a backup back into `package`, which is the backed-up app itself or
-/// another one, such as its renamed copy. The app has to be installed first,
-/// or Android hands the restored folders to the wrong owner. Files in the
-/// backup replace those on the headset; others are left alone.
+/// `package` may be another app, such as a renamed copy. It must be installed
+/// first, or Android gives the restored folders the wrong owner. Backup files
+/// replace those on the headset; the rest stay.
 pub async fn restore(
 	device: &Device,
 	backup: &Backup,
@@ -333,11 +325,9 @@ pub async fn restore(
 	Ok(())
 }
 
-/// Backup files as another package expects them. Some names carry the
-/// package, like Unity's `shared_prefs/<package>.v2.playerprefs.xml`, and
-/// the other app would never look at them. Those get the new package in a
-/// temporary folder of links. Caches that older backups still carry are left
-/// out of it; with nothing to rename or leave out the backup is used as it is.
+/// Some file names carry the package, like Unity's
+/// `shared_prefs/<package>.v2.playerprefs.xml`. Those get the new package in a
+/// temporary folder of links, which also leaves out caches older backups carry.
 struct Staged {
 	original: PathBuf,
 	temp: Option<PathBuf>,

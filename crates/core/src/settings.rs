@@ -79,20 +79,15 @@ pub struct Settings {
 	pub max_concurrent_downloads: u8,
 	pub download_limit: SpeedLimit,
 	pub theme: Theme,
-	/// Color scheme names the UI shows for the dark and light theme; empty
-	/// means its default one. The core doesn't know the schemes.
+	/// Empty means the default scheme; the core doesn't know the schemes.
 	#[serde(skip_serializing_if = "String::is_empty")]
 	pub dark_scheme: String,
 	#[serde(skip_serializing_if = "String::is_empty")]
 	pub light_scheme: String,
 	pub language: Language,
-	/// Keep unpacked releases after installing them, for reinstalling later.
 	pub keep_downloads: bool,
-	/// Desktop notifications when tasks end while the window isn't focused.
 	pub notifications: bool,
-	/// Look for a newer release of the app on GitHub at start.
 	pub check_app_updates: bool,
-	/// Back up an installed app's saves before installing over it.
 	pub backup_before_update: bool,
 	/// `None` means `adb` from `PATH`.
 	#[serde(skip_serializing_if = "Option::is_none")]
@@ -107,11 +102,9 @@ pub struct Settings {
 		deserialize_with = "skip_unknown_mirrors"
 	)]
 	pub mirrors: Vec<Mirror>,
-	/// Packages the user doesn't want to be asked to upload again.
 	#[serde(skip_serializing_if = "Vec::is_empty")]
 	pub contribute_ignored: Vec<String>,
-	/// Installed packages whose catalog updates aren't offered, for example
-	/// to keep mods that need an older version.
+	/// For example to keep mods that need an older version.
 	#[serde(skip_serializing_if = "Vec::is_empty")]
 	pub update_ignored: Vec<String>,
 }
@@ -193,7 +186,6 @@ impl Settings {
 		}
 	}
 
-	/// Every file path the settings hold.
 	fn map_paths(&mut self, f: impl Fn(&Path) -> PathBuf) {
 		self.downloads_dir = f(&self.downloads_dir);
 		for path in [&mut self.adb_path, &mut self.rclone_path]
@@ -268,7 +260,7 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
 	std::fs::rename(&tmp, path).at(path)
 }
 
-/// Writes a file only this user can read (on Unix), for credentials.
+/// Readable only by this user on Unix.
 pub fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 	let mut options = std::fs::OpenOptions::new();
 	options.write(true).create(true).truncate(true);

@@ -5,7 +5,6 @@ use tokio::task::AbortHandle;
 use super::{Event, EventSink};
 use crate::adb::{Device, OutputStream};
 
-/// Output of a console command, sent as [`Event::Shell`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShellEvent {
 	Stdout(String),

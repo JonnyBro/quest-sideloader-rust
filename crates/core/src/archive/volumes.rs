@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 /// volumes are plain byte slices of a single archive.
 pub struct MultiVolumeReader {
 	volumes: Vec<(PathBuf, u64)>,
-	/// Start offset of each volume within the joined stream.
 	starts: Vec<u64>,
 	total: u64,
 	pos: u64,

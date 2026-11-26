@@ -1,5 +1,3 @@
-//! Browsing shared storage for the file manager.
-
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -61,7 +59,7 @@ fn parse_listing(text: &str) -> Vec<RemoteEntry> {
 }
 
 impl Device {
-	/// What's in `dir`, folders first, then by name.
+	/// Folders first, then by name.
 	pub async fn list_dir(&self, dir: &str) -> Result<Vec<RemoteEntry>, AdbError> {
 		let quoted = shell_words::quote(dir);
 		// -H: /sdcard itself is a symlink. -L: show linked folders as folders.
@@ -120,7 +118,6 @@ impl Device {
 		Ok((plan, total))
 	}
 
-	/// Creates folder `name` in `dir`.
 	pub async fn make_dir(&self, dir: &str, name: &str) -> Result<(), AdbError> {
 		let path = checked_target(dir, name)?;
 		self.shell_ok(&format!("mkdir {}", shell_words::quote(&path)))
@@ -128,8 +125,7 @@ impl Device {
 			.map(drop)
 	}
 
-	/// Renames `from` to `to`, both names in `dir`. An existing `to` is
-	/// never replaced.
+	/// An existing `to` is never replaced.
 	pub async fn rename_in(&self, dir: &str, from: &str, to: &str) -> Result<(), AdbError> {
 		let source = checked_target(dir, from)?;
 		let target = checked_target(dir, to)?;
@@ -156,8 +152,8 @@ impl Device {
 		}
 	}
 
-	/// Copies (or moves) files and folders into `dir`. Nothing starts if a
-	/// name is already taken there or `dir` is inside one of `paths`.
+	/// Copies or moves into `dir`. Nothing starts if a name is taken there or
+	/// `dir` is inside one of `paths`.
 	pub async fn paste_into(
 		&self,
 		paths: &[String],
@@ -215,7 +211,6 @@ impl Device {
 		}
 	}
 
-	/// Deletes files and folders inside [`STORAGE_ROOT`].
 	pub async fn remove_paths(&self, paths: &[String]) -> Result<(), AdbError> {
 		if let Some(bad) = paths
 			.iter()

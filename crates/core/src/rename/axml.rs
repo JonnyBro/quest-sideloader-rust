@@ -32,7 +32,6 @@ pub struct Element {
 	/// Names of the enclosing elements, outermost first.
 	pub ancestors: Vec<String>,
 	pub attributes: Vec<Attribute>,
-	/// Where the element's chunk starts in `body`.
 	offset: usize,
 }
 
@@ -47,7 +46,6 @@ pub struct Attribute {
 	/// The typed value: numbers, booleans, references.
 	pub data_type: u8,
 	pub data: u32,
-	/// Where the attribute is in `body`.
 	offset: usize,
 }
 
@@ -219,8 +217,7 @@ impl Axml {
 		self.body[at + 16..at + 20].copy_from_slice(&index);
 	}
 
-	/// Sets an `android:` boolean on the first `element`, adding the attribute
-	/// when it isn't there.
+	/// Adds the attribute when it isn't there.
 	pub fn set_android_bool(
 		&mut self,
 		element: &str,

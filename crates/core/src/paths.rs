@@ -4,9 +4,8 @@ use directories::ProjectDirs;
 
 use crate::error::{Error, IoContext, Result};
 
-/// The program to run for a tool the settings leave unset. Apps started from
-/// Finder get a PATH without Homebrew's folders, so on macOS those are tried
-/// when PATH has no such program.
+/// Apps started from Finder get a PATH without Homebrew's folders, so macOS
+/// tries those too.
 pub fn default_tool(name: &str) -> PathBuf {
 	#[cfg(target_os = "macos")]
 	{
@@ -26,7 +25,6 @@ pub fn default_tool(name: &str) -> PathBuf {
 
 /// A file with this name next to the executable turns on portable mode.
 pub const PORTABLE_MARKER: &str = "portable.txt";
-/// Where portable mode keeps everything, next to the executable.
 pub const PORTABLE_DIR: &str = "userdata";
 
 #[derive(Debug, Clone)]
@@ -38,8 +36,6 @@ pub struct AppPaths {
 }
 
 impl AppPaths {
-	/// Portable mode when [`PORTABLE_MARKER`] sits next to the executable,
-	/// the platform's user folders otherwise.
 	pub fn detect() -> Result<Self> {
 		let exe_dir = std::env::current_exe()
 			.ok()
@@ -62,7 +58,7 @@ impl AppPaths {
 		})
 	}
 
-	/// Puts everything under one root; used by tests.
+	/// For tests.
 	pub fn under(root: impl AsRef<Path>) -> Self {
 		let root = root.as_ref();
 		Self {
@@ -73,8 +69,7 @@ impl AppPaths {
 		}
 	}
 
-	/// Everything under `root`, and paths in the settings stored relative to
-	/// it so the folder can move (another drive letter, another computer).
+	/// Settings store paths relative to `root`, so the folder can move.
 	pub fn portable(root: impl AsRef<Path>) -> Self {
 		Self {
 			portable_root: Some(root.as_ref().to_path_buf()),
@@ -97,7 +92,6 @@ impl AppPaths {
 		self.config_dir.join("settings.toml")
 	}
 
-	/// Window size and view choices kept by the GUI between runs.
 	pub fn ui_state_file(&self) -> PathBuf {
 		self.config_dir.join("ui.json")
 	}
@@ -124,8 +118,7 @@ impl AppPaths {
 		self.data_dir.join("backups")
 	}
 
-	/// The user's Pictures folder, or the data folder when there is none or
-	/// the app runs portable.
+	/// Pictures, or the data folder when there is none or the app runs portable.
 	pub fn screenshots_dir(&self) -> PathBuf {
 		if self.portable_root.is_some() {
 			return self.data_dir.join("screenshots");
@@ -135,12 +128,10 @@ impl AppPaths {
 			.unwrap_or_else(|| self.data_dir.join("screenshots"))
 	}
 
-	/// adb downloaded by the app.
 	pub fn platform_tools_dir(&self) -> PathBuf {
 		self.data_dir.join("platform-tools")
 	}
 
-	/// rclone downloaded by the app.
 	pub fn rclone_bin_dir(&self) -> PathBuf {
 		self.data_dir.join("rclone-bin")
 	}

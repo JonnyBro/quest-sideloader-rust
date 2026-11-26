@@ -68,7 +68,6 @@ fn io_failed(path: &Path) -> impl FnOnce(std::io::Error) -> JobError + '_ {
 	move |e| JobError::Failed(format!("{}: {e}", path.display()))
 }
 
-/// What the job needs from the engine at start time.
 #[derive(Clone)]
 pub(super) struct Deps {
 	pub fetcher: Fetcher,
@@ -86,6 +85,7 @@ pub(super) struct Job {
 	pub game: Game,
 	pub mirror: Mirror,
 	pub serial: Option<String>,
+	pub streaming: bool,
 }
 
 /// Sets the flag when dropped, which stops a blocking extraction of an aborted job.
@@ -231,26 +231,20 @@ async fn run(
 		sink: deps.sink.clone(),
 		title_from_files: false,
 		backups: deps.backups.clone(),
+		streaming: job.streaming,
 	};
 	check_headset_space(&ctx, &files_dir).await?;
 	let installed = install::install_from(&ctx, &files_dir, tracker, review).await;
 	if installed.is_err() && !deps.keep_downloads {
-		tracker.update(
-			|s| {
-				if let Some(conflict) = &mut s.conflict {
-					conflict.remove_after = true;
-				}
-			},
-			true,
-		);
+		tracker.update(|s| s.keep_removing_source(), true);
 	}
 	installed?;
 
 	if deps.keep_downloads {
 		return Ok(Some(files_dir));
 	}
-	// Removed before the task reports done, so a failure (on Windows, often a scanner holding a file open)
-	// is visible instead of silently leaving gigabytes behind.
+	// Removed before the task reports done, so a failure (often a scanner on
+	// Windows holding a file open) shows instead of leaving gigabytes behind.
 	let dir = files_dir.clone();
 	let removed = tokio::task::spawn_blocking(move || remove_if_exists(&dir))
 		.await
@@ -363,8 +357,6 @@ fn finalize(staging: &Path, files_dir: &Path, work_dir: &Path) -> Result<(), Job
 	Ok(())
 }
 
-/// Pauses between attempts after a network hiccup; downloads resume from
-/// the partial file, so a retry only fetches what's missing.
 /// Release parts fetched at the same time, like other clients of these mirrors.
 const PARTS_AT_ONCE: usize = 4;
 
@@ -439,8 +431,8 @@ async fn unpack(
 	})
 }
 
-/// Some releases ship extra `.7z` archives next to install.txt (for example
-/// `_data.7z`) that must be unpacked in place before the script runs.
+/// Extra `.7z` archives next to install.txt (like `_data.7z`) are unpacked in
+/// place before the script runs.
 fn extract_nested(root: &Path, password: &str, cancel: &AtomicBool) -> Result<(), JobError> {
 	let mut dirs = vec![root.to_path_buf()];
 	if let Ok(entries) = std::fs::read_dir(root) {

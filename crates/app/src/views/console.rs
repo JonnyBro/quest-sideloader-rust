@@ -36,7 +36,6 @@ struct Line {
 	text: String,
 }
 
-/// Colors of the line kinds, shared with the output's highlighter.
 #[derive(Clone, Copy, Default)]
 struct Palette {
 	command: Hsla,
@@ -45,25 +44,20 @@ struct Palette {
 	error: Hsla,
 }
 
-/// The kind of every line in the output editor, in order.
 type Kinds = Rc<RefCell<Vec<Kind>>>;
 
-/// `adb shell` on the selected headset, line by line.
 pub struct ConsoleView {
 	engine: Rc<Engine>,
-	/// Serial and name of the headset commands run on.
 	target: Option<(String, String)>,
 	input: Entity<InputState>,
 	output: Entity<EditorState>,
 	kinds: Kinds,
 	palette: Rc<RefCell<Palette>>,
 	history: Vec<String>,
-	/// Position while walking the history with the arrow keys.
 	browsing: Option<usize>,
 	lines: VecDeque<Line>,
 	/// The last line hasn't ended with a newline yet.
 	open_line: bool,
-	/// Lines changed since the editor last showed them.
 	dirty: bool,
 	running: Option<u64>,
 	/// A command started from elsewhere while another ran; it runs once
@@ -233,8 +227,7 @@ impl ConsoleView {
 		}
 	}
 
-	/// Runs `command` as if typed, with `note` shown above its output; a
-	/// command already running is stopped first.
+	/// `note` shows above the output; a running command is stopped first.
 	pub fn run_command(&mut self, command: String, note: Option<String>, cx: &mut Context<Self>) {
 		match self.running {
 			Some(id) => {
@@ -332,7 +325,6 @@ impl ConsoleView {
 	}
 }
 
-/// Colors each line of the output by its kind.
 struct KindHighlighter {
 	kinds: Kinds,
 	palette: Rc<RefCell<Palette>>,
@@ -414,8 +406,7 @@ impl InputHighlighter for KindHighlighter {
 	}
 }
 
-/// What to run in `adb shell`; `adb shell` typed in front is dropped, and
-/// other adb commands aren't supported.
+/// `adb shell` typed in front is dropped; other adb commands aren't supported.
 fn shell_command(typed: &str) -> Option<&str> {
 	let Some(rest) = typed.strip_prefix("adb ") else {
 		return Some(typed);

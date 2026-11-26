@@ -60,7 +60,6 @@ pub async fn send_request_checked<S: AsyncRead + AsyncWrite + Unpin>(
 	read_status(stream).await
 }
 
-/// Shell protocol v2 packet ids.
 pub mod shell_v2 {
 	pub const STDOUT: u8 = 1;
 	pub const STDERR: u8 = 2;

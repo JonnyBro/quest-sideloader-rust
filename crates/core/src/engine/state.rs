@@ -8,7 +8,13 @@ impl State {
 		self.next_task
 	}
 
-	pub(super) fn start_install(&mut self, serial: String, path: PathBuf) {
+	pub(super) fn start_install(
+		&mut self,
+		serial: String,
+		path: PathBuf,
+		streaming: bool,
+		remove_source: bool,
+	) {
 		let id = self.new_task_id();
 		let ctx = install::InstallContext {
 			id,
@@ -18,8 +24,10 @@ impl State {
 			sink: self.sink.clone(),
 			title_from_files: true,
 			backups: self.update_backups(),
+			streaming,
 		};
-		self.tasks.insert(id, install::spawn(ctx, path));
+		self.tasks
+			.insert(id, install::spawn(ctx, path, remove_source));
 	}
 
 	pub(super) fn update_backups(&self) -> Option<PathBuf> {
@@ -41,7 +49,7 @@ impl State {
 		}
 	}
 
-	pub(super) fn enqueue_download(&mut self, game: Game, serial: Option<String>) {
+	pub(super) fn enqueue_download(&mut self, game: Game, serial: Option<String>, streaming: bool) {
 		let Some(mirror) = self.settings.active_mirror().cloned() else {
 			self.sink
 				.emit(Event::Error(t!("lib.no_mirror").into_owned()));
@@ -74,6 +82,7 @@ impl State {
 			game,
 			mirror,
 			serial,
+			streaming,
 		};
 		let (review, tracker) = self.queue.push(job, self.sink.clone());
 		self.tasks
@@ -168,6 +177,7 @@ impl State {
 				warnings: Vec::new(),
 				output: None,
 				conflict: None,
+				broken_stream: None,
 			},
 			self.sink.clone(),
 		);

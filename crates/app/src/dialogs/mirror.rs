@@ -21,8 +21,8 @@ enum Kind {
 
 type OnAdd = Rc<dyn Fn(Mirror, &mut Window, &mut App)>;
 
-/// The "add a mirror" form. `on_add` gets the mirror; it goes into the
-/// settings draft like any other change.
+/// `on_add` gets the mirror; it goes into the settings draft like any other
+/// change.
 pub struct MirrorForm {
 	kind: Kind,
 	rclone_dir: PathBuf,
@@ -396,7 +396,6 @@ fn copy_private(from: &Path, to: &Path) -> std::io::Result<()> {
 	std::io::Write::write_all(&mut options.open(to)?, &bytes)
 }
 
-/// Deletes copied rclone configs that no saved mirror uses any more.
 pub fn remove_unused_rclone_configs(mirrors: &[Mirror], rclone_dir: &Path) {
 	let Ok(entries) = std::fs::read_dir(rclone_dir) else {
 		return;

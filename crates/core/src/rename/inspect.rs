@@ -88,8 +88,8 @@ fn find<'a>(element: &'a Element, name: &str, id: u32) -> Option<&'a Attribute> 
 	element.attributes.iter().find(|a| a.is_android(name, id))
 }
 
-/// Reads an APK, or the first APK of a release folder. `keys` tells our own
-/// copies apart.
+/// An APK, or the first APK of a release folder. `keys` tells our own copies
+/// apart.
 pub fn inspect(path: &Path, keys: &KeyStore) -> Result<Inspection, SideloadError> {
 	let apk = match Source::classify(path)? {
 		Source::Apk(apk) => apk,

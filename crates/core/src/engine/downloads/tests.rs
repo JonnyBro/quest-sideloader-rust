@@ -29,6 +29,7 @@ async fn retries_then_gives_up() {
 			warnings: Vec::new(),
 			output: None,
 			conflict: None,
+			broken_stream: None,
 		},
 		EventSink {
 			tx: sink_tx,
@@ -295,6 +296,7 @@ mod end_to_end {
 		s.engine.send(Command::Download {
 			game: game(RELEASE),
 			serial: Some("SER1".into()),
+			streaming: true,
 		});
 		let done = wait_finished(&s.engine, None);
 		assert_eq!(done.state, TaskState::Done, "{:?}", done);
@@ -330,6 +332,7 @@ mod end_to_end {
 		s.engine.send(Command::Download {
 			game: game(RELEASE),
 			serial: None,
+			streaming: true,
 		});
 		let done = wait_finished(&s.engine, None);
 		assert_eq!(done.state, TaskState::Done, "{:?}", done);
@@ -369,10 +372,12 @@ mod end_to_end {
 		s.engine.send(Command::Download {
 			game: game("Not On Mirror v1"),
 			serial: None,
+			streaming: true,
 		});
 		s.engine.send(Command::Download {
 			game: game(RELEASE),
 			serial: None,
+			streaming: true,
 		});
 		// With one slot the second job waits; cancel it before it starts.
 		s.engine.send(Command::CancelTask(2));

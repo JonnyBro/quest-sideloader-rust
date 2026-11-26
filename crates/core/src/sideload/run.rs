@@ -40,10 +40,10 @@ fn file_name(path: &Path) -> String {
 	)
 }
 
-/// Installs every APK, then copies every OBB folder.
 pub async fn run_default(
 	device: &Device,
 	plan: &InstallPlan,
+	streaming: bool,
 	report: Reporter<'_>,
 ) -> Result<(), SideloadError> {
 	let counter = ByteCounter {
@@ -56,7 +56,7 @@ pub async fn run_default(
 		report(Update::Stage(
 			t!("run.installing", name = file_name(&apk.path)).into_owned(),
 		));
-		device.install_apk(&apk.path, &progress).await?;
+		device.install_apk(&apk.path, streaming, &progress).await?;
 	}
 	for obb in &plan.obbs {
 		report(Update::Stage(
@@ -102,6 +102,7 @@ async fn push_target(device: &Device, local: &Path, remote: &str) -> Result<Stri
 pub async fn run_script(
 	device: &Device,
 	actions: &[(usize, Action)],
+	streaming: bool,
 	report: Reporter<'_>,
 ) -> Result<(), SideloadError> {
 	let mut total = 0;
@@ -131,7 +132,7 @@ pub async fn run_script(
 				report(Update::Stage(
 					t!("run.step_installing", step = prefix, name = file_name(apk)).into_owned(),
 				));
-				device.install_apk(apk, &progress).await?;
+				device.install_apk(apk, streaming, &progress).await?;
 			}
 			Action::Push { local, remote } => {
 				report(Update::Stage(

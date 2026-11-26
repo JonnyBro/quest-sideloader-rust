@@ -25,7 +25,6 @@ const NO_CONFIG: &str = if cfg!(windows) { "NUL" } else { "/dev/null" };
 #[derive(Clone)]
 pub struct Fetcher {
 	rclone: PathBuf,
-	/// Total bytes per second for all downloads; `0` is unlimited.
 	limit: Arc<AtomicU64>,
 	parallel: Arc<AtomicU8>,
 	/// Sent as [`crate::mirror_key::HEADER`] to vrSrc's mirror only; never logged.
@@ -33,7 +32,6 @@ pub struct Fetcher {
 	health: HealthTracker,
 }
 
-/// How rclone reaches one mirror.
 struct Location<'a> {
 	config_file: &'a Path,
 	/// `remote:path` that relative paths are appended to.
@@ -87,7 +85,6 @@ impl Fetcher {
 		})
 	}
 
-	/// Calls `listener` whenever a request to a mirror succeeds or fails.
 	pub fn on_health(mut self, listener: impl Fn(MirrorHealth) + Send + Sync + 'static) -> Self {
 		self.health = self.health.with_listener(listener);
 		self
@@ -100,13 +97,12 @@ impl Fetcher {
 		self
 	}
 
-	/// What is known about `mirror` so far; sends no request to it.
+	/// Sends no request.
 	pub async fn mirror_health(&self, mirror: &Mirror) -> MirrorHealth {
 		let key = self.keys.status_for(mirror).await;
 		self.health.snapshot(&mirror.id, key)
 	}
 
-	/// Tells the listener what is known about `mirror` so far.
 	pub async fn announce_health(&self, mirror: &Mirror) {
 		let key = self.keys.status_for(mirror).await;
 		self.health.announce(&mirror.id, key);
@@ -132,17 +128,14 @@ impl Fetcher {
 		&self.keys
 	}
 
-	/// Caps the combined speed of all downloads; `0` is unlimited. Clones of
-	/// this fetcher share the limit. `parallel` is how many downloads may run
-	/// at once, which rclone needs to split the limit.
+	/// Clones share the limit; rclone needs `parallel` to split it.
 	pub fn set_bandwidth_limit(&self, bytes_per_sec: u64, parallel: u8) {
 		self.limit.store(bytes_per_sec, Ordering::Relaxed);
 		self.parallel.store(parallel.max(1), Ordering::Relaxed);
 	}
 
-	/// Downloads `remote_path` (relative to the mirror root) to `dest`.
-	/// `concurrent` is how many files this download fetches at once, for
-	/// splitting the bandwidth limit.
+	/// `remote_path` is relative to the mirror root. `concurrent` is the number of
+	/// files fetched at once, for splitting the bandwidth limit.
 	pub async fn download_file(
 		&self,
 		mirror: &Mirror,
@@ -203,8 +196,8 @@ impl Fetcher {
 		(fresh != sent).then_some(fresh)
 	}
 
-	/// Uploads one file into `dir` (empty for the root) of `remote`. The upload
-	/// config points at the mirror's own upload server, which doesn't get the key.
+	/// The upload config points at the mirror's upload server, which doesn't get
+	/// the key.
 	pub async fn rclone_upload(
 		&self,
 		access: &RcloneAccess<'_>,
@@ -223,7 +216,6 @@ impl Fetcher {
 		self.run_rclone(command, progress).await
 	}
 
-	/// Files in a release's folder on the mirror.
 	pub async fn list_release(
 		&self,
 		mirror: &Mirror,
@@ -276,7 +268,6 @@ impl Fetcher {
 		parse_lsjson(&output.stdout)
 	}
 
-	/// Runs rclone with JSON logs, reporting its transfer stats as progress.
 	async fn run_rclone(
 		&self,
 		mut command: tokio::process::Command,
@@ -367,10 +358,9 @@ impl Fetcher {
 		command
 	}
 
-	/// rclone can't share a limit between processes, so each one gets the full
-	/// limit divided by the most that may run at once: `concurrent` files per
-	/// download, times the downloads. The `B` suffix keeps it in plain bytes,
-	/// whatever unit the user picked.
+	/// rclone can't share a limit between processes, so each gets the limit
+	/// divided by `concurrent` times the downloads. The `B` suffix keeps it in
+	/// bytes whatever unit the user picked.
 	fn rclone_bwlimit(&self, concurrent: usize) -> Vec<String> {
 		let parallel =
 			u64::from(self.parallel.load(Ordering::Relaxed).max(1)) * (concurrent.max(1) as u64);
@@ -464,7 +454,6 @@ fn rclone_header_env(name: &str, value: &str) -> String {
 	}
 }
 
-/// Path of a release file relative to the mirror root, as `download_file` wants it.
 pub fn release_file_path(mirror: &Mirror, release_name: &str, file: &str) -> String {
 	match mirror.kind {
 		MirrorKind::Http { .. } => format!("{}/{file}", release_hash(release_name)),
@@ -472,7 +461,6 @@ pub fn release_file_path(mirror: &Mirror, release_name: &str, file: &str) -> Str
 	}
 }
 
-/// How to run rclone for an upload config.
 #[derive(Debug, Clone, Copy)]
 pub struct RcloneAccess<'a> {
 	pub config_file: &'a Path,
@@ -501,7 +489,6 @@ enum RcloneLog {
 	Error(String),
 }
 
-/// The level and message of a JSON log line, or the line as it is.
 fn rclone_log_text(line: &str) -> String {
 	let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
 		return line.trim().to_owned();
@@ -519,8 +506,7 @@ fn rclone_log_text(line: &str) -> String {
 	}
 }
 
-/// Program and arguments for the log. The key travels in the environment and
-/// is only mentioned, never shown.
+/// The key travels in the environment and is never shown.
 fn describe_command(command: &tokio::process::Command) -> String {
 	let std = command.as_std();
 	let mut text = std.get_program().to_string_lossy().into_owned();
@@ -859,9 +845,8 @@ pub(crate) mod tests {
 		format!("http://{addr}/files/")
 	}
 
-	/// HTTP mirrors go through rclone's http backend, with the key in
-	/// `RCLONE_HEADER` for the key's own mirror only; skipped when rclone
-	/// isn't installed.
+	/// HTTP mirrors go through rclone, with the key for its own mirror only;
+	/// skipped without rclone.
 	#[tokio::test]
 	async fn http_mirror_goes_through_rclone() {
 		if !have_rclone() {

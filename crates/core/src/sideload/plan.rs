@@ -263,7 +263,7 @@ pub fn is_package_name(name: &str) -> bool {
 	segments >= 2
 }
 
-/// Extracts a ZIP into `dest`; entries with paths escaping `dest` are rejected by the zip crate.
+/// Entries escaping `dest` are rejected by the zip crate.
 pub fn extract_zip(zip: &Path, dest: &Path) -> Result<(), SideloadError> {
 	let zip_err = |message: String| SideloadError::Zip {
 		path: zip.to_path_buf(),

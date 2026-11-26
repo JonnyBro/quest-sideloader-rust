@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::{Mutex, oneshot};
 
 use super::task::{
-	SignatureConflict, TaskEntry, TaskKind, TaskSnapshot, TaskState, TempDir, Tracker,
+	BrokenStream, SignatureConflict, TaskEntry, TaskKind, TaskSnapshot, TaskState, TempDir, Tracker,
 };
 use super::{Event, EventSink};
 use crate::adb::Device;
@@ -35,7 +35,6 @@ impl DeviceLocks {
 	}
 }
 
-/// Everything an installation needs besides the files themselves.
 #[derive(Clone)]
 pub(super) struct InstallContext {
 	pub id: TaskId,
@@ -46,9 +45,9 @@ pub(super) struct InstallContext {
 	pub sink: EventSink,
 	/// Name the task after the APK's label; downloads keep the catalog name.
 	pub title_from_files: bool,
-	/// Where to back up the saves of an app this install replaces; `None`
-	/// skips that (turned off, or the caller backed them up already).
+	/// `None` skips that: turned off, or the caller backed them up already.
 	pub backups: Option<PathBuf>,
+	pub streaming: bool,
 }
 
 fn file_title(path: &Path) -> String {
@@ -58,8 +57,7 @@ fn file_title(path: &Path) -> String {
 	)
 }
 
-/// Installs an APK, folder or ZIP the user picked.
-pub(super) fn spawn(ctx: InstallContext, source: PathBuf) -> TaskEntry {
+pub(super) fn spawn(ctx: InstallContext, source: PathBuf, remove_source: bool) -> TaskEntry {
 	let (review_tx, review_rx) = oneshot::channel();
 	let tracker = Tracker::new(
 		TaskSnapshot {
@@ -74,12 +72,19 @@ pub(super) fn spawn(ctx: InstallContext, source: PathBuf) -> TaskEntry {
 			warnings: Vec::new(),
 			output: None,
 			conflict: None,
+			broken_stream: None,
 		},
 		ctx.sink.clone(),
 	);
 	let task_tracker = tracker.clone();
 	let handle = tokio::spawn(async move {
 		let result = install_from(&ctx, &source, &task_tracker, review_rx).await;
+		if result.is_ok() && remove_source {
+			remove_release(&source, &task_tracker).await;
+		}
+		if result.is_err() && remove_source {
+			task_tracker.update(|s| s.keep_removing_source(), true);
+		}
 		finish_install(&ctx, &task_tracker, result);
 	});
 	TaskEntry {
@@ -88,6 +93,26 @@ pub(super) fn spawn(ctx: InstallContext, source: PathBuf) -> TaskEntry {
 		tracker,
 		release: None,
 	}
+}
+
+pub(super) async fn remove_release(source: &Path, tracker: &Tracker) {
+	let dir = source.to_path_buf();
+	let removed = tokio::task::spawn_blocking(move || {
+		if dir.is_dir() {
+			std::fs::remove_dir_all(&dir)
+		} else {
+			std::fs::remove_file(&dir)
+		}
+	})
+	.await;
+	let error = match removed {
+		Ok(Ok(())) => return,
+		Ok(Err(e)) => e.to_string(),
+		Err(e) => e.to_string(),
+	};
+	tracker.report(run::Update::Warning(
+		t!("dl.remove_failed", error = error).into_owned(),
+	));
 }
 
 pub(super) fn finish_install(
@@ -127,8 +152,7 @@ pub(super) async fn blocking<T: Send + 'static>(
 		})?
 }
 
-/// Plans and runs an installation from `source`, asking for an install.txt
-/// review through `review` when the script needs one.
+/// Asks for an install.txt review through `review` when the script needs one.
 pub(super) async fn install_from(
 	ctx: &InstallContext,
 	source: &Path,
@@ -212,8 +236,8 @@ pub(super) async fn install_from(
 
 	let report = |u| tracker.report(u);
 	let result = match actions {
-		Some(actions) => run::run_script(&ctx.device, &actions, &report).await,
-		None => run::run_default(&ctx.device, &plan, &report).await,
+		Some(actions) => run::run_script(&ctx.device, &actions, ctx.streaming, &report).await,
+		None => run::run_default(&ctx.device, &plan, ctx.streaming, &report).await,
 	};
 	match result {
 		Err(SideloadError::Adb(crate::adb::AdbError::InstallFailed(message)))
@@ -223,6 +247,7 @@ pub(super) async fn install_from(
 			let conflict = SignatureConflict {
 				package: package.clone(),
 				source: source_path,
+				streaming: ctx.streaming,
 				remove_after: false,
 			};
 			tracker.update(|s| s.conflict = Some(conflict), true);
@@ -230,12 +255,19 @@ pub(super) async fn install_from(
 				t!("inst.signature", package = package).into_owned(),
 			)))
 		}
+		Err(e @ SideloadError::Adb(crate::adb::AdbError::StreamBroken(_))) => {
+			let broken = BrokenStream {
+				source: source_path,
+				remove_after: false,
+			};
+			tracker.update(|s| s.broken_stream = Some(broken), true);
+			Err(e)
+		}
 		other => other,
 	}
 }
 
-/// Saves of the installed version, in case the new one breaks them. Not
-/// being able to back up doesn't stop the install; it leaves a warning.
+/// A failed backup only leaves a warning.
 async fn back_up_before_update(
 	ctx: &InstallContext,
 	tracker: &Tracker,
@@ -271,9 +303,8 @@ async fn back_up_before_update(
 }
 
 /// Releases with an install.txt may keep their payload in a `.7z` next to it
-/// (`_data.7z`); the script expects it unpacked. Downloads from a mirror are
-/// unpacked already; this covers folders installed by hand. The archives
-/// stay, so the folder can be installed again.
+/// (`_data.7z`). Mirror downloads are unpacked already; this covers folders
+/// installed by hand. The archives stay.
 async fn unpack_side_archives(root: &Path, tracker: &Tracker) -> Result<(), SideloadError> {
 	let root = root.to_path_buf();
 	let archives = {
@@ -399,6 +430,7 @@ mod tests {
 		s.engine.send(Command::Install {
 			serial: "SER1".into(),
 			path: s.release.clone(),
+			streaming: true,
 		});
 		let (id, analysis) = wait_for(&s.engine, |e| match e {
 			Event::ScriptReview { task, analysis, .. } => Some((task, analysis)),
@@ -432,6 +464,7 @@ mod tests {
 		s.engine.send(Command::Install {
 			serial: "SER1".into(),
 			path: s.release.clone(),
+			streaming: true,
 		});
 		let id = wait_for(&s.engine, |e| match e {
 			Event::ScriptReview { task, .. } => Some(task),
@@ -457,6 +490,7 @@ mod tests {
 		s.engine.send(Command::Install {
 			serial: "SER1".into(),
 			path: s.release.clone(),
+			streaming: true,
 		});
 		let id = wait_for(&s.engine, |e| match e {
 			Event::TaskUpdated(t) => Some(t.id),
@@ -476,11 +510,56 @@ mod tests {
 	}
 
 	#[test]
+	fn broken_stream_can_be_retried_without_streaming() {
+		let s = setup("adb install game.apk\n");
+		std::fs::write(s.release.join("game.apk"), b"apk bytes here").unwrap();
+		s.fake.recorded.lock().unwrap().break_streams = true;
+		s.engine.send(Command::Install {
+			serial: "SER1".into(),
+			path: s.release.clone(),
+			streaming: true,
+		});
+		let failed = wait_for(&s.engine, |e| match e {
+			Event::TaskUpdated(t) if t.state.is_finished() => Some(t),
+			_ => None,
+		});
+		assert!(matches!(failed.state, TaskState::Failed(_)), "{failed:?}");
+		let broken = failed.broken_stream.expect("broken stream is reported");
+		assert_eq!(broken.source, s.release);
+
+		s.engine.send(Command::RetryWithoutStreaming {
+			serial: "SER1".into(),
+			source: broken.source,
+			remove_source: false,
+		});
+		let id = wait_for(&s.engine, |e| match e {
+			Event::TaskUpdated(t) if t.id != failed.id => Some(t.id),
+			_ => None,
+		});
+		assert_eq!(finished_state(&s.engine, id), TaskState::Done);
+		let rec = s.fake.recorded.lock().unwrap();
+		assert_eq!(rec.installs, [b"apk bytes here".len()]);
+		let install = rec
+			.shell
+			.iter()
+			.find(|c| c.starts_with("pm install -r -g /data/local/tmp/"))
+			.expect("installed from the copy");
+		let copy = install.trim_start_matches("pm install -r -g ");
+		assert!(
+			rec.shell.contains(&format!("rm -f {copy}")),
+			"{:?}",
+			rec.shell
+		);
+		assert!(s.release.is_dir(), "the user's folder stays");
+	}
+
+	#[test]
 	fn cancel_during_review_runs_nothing() {
 		let s = setup(SCRIPT);
 		s.engine.send(Command::Install {
 			serial: "SER1".into(),
 			path: s.release.clone(),
+			streaming: true,
 		});
 		let id = wait_for(&s.engine, |e| match e {
 			Event::ScriptReview { task, .. } => Some(task),
@@ -500,6 +579,7 @@ mod tests {
 		s.engine.send(Command::Install {
 			serial: "SER1".into(),
 			path: s.release.clone(),
+			streaming: true,
 		});
 		let id = wait_for(&s.engine, |e| match e {
 			Event::ScriptReview { .. } => panic!("safe script must not ask for review"),
@@ -521,6 +601,7 @@ mod tests {
 		s.engine.send(Command::Install {
 			serial: "SER1".into(),
 			path: s.release.clone(),
+			streaming: true,
 		});
 		let id = wait_for(&s.engine, |e| match e {
 			Event::TaskUpdated(t) => Some(t.id),

@@ -33,8 +33,7 @@ pub enum Command {
 	RestoreBackup {
 		serial: String,
 		backup: crate::saves::Backup,
-		/// Where the saves go: the backed-up app, or another one such as its
-		/// renamed copy.
+		/// The backed-up app, or another one such as its renamed copy.
 		package: String,
 	},
 	DeleteBackup(crate::saves::Backup),
@@ -43,8 +42,7 @@ pub enum Command {
 	CheckAppUpdate,
 	/// Answered with [`Event::Downloads`].
 	ListDownloads,
-	/// Delete a release folder from the downloads folder by name, or what an
-	/// unfinished download of it left.
+	/// Or what an unfinished download of it left.
 	DeleteDownload {
 		name: String,
 		incomplete: bool,
@@ -57,12 +55,17 @@ pub enum Command {
 		/// Delete `source` once the new build is installed; see
 		/// [`SignatureConflict::remove_after`](task::SignatureConflict).
 		remove_source: bool,
+		streaming: bool,
+	},
+	RetryWithoutStreaming {
+		serial: String,
+		source: PathBuf,
+		remove_source: bool,
 	},
 	Reboot {
 		serial: String,
 		mode: crate::adb::RebootMode,
 	},
-	/// Turn on wireless ADB and connect to the headset over Wi-Fi.
 	EnableWireless(String),
 	Screenshot(String),
 	/// Answered with [`Event::DirListing`].
@@ -70,51 +73,46 @@ pub enum Command {
 		serial: String,
 		path: String,
 	},
-	/// Copy headset files or folders into the local folder `dest`.
 	PullFiles {
 		serial: String,
 		paths: Vec<String>,
 		dest: PathBuf,
 	},
-	/// Copy local files or folders into the headset folder `dir`.
 	PushFiles {
 		serial: String,
 		local: Vec<PathBuf>,
 		dir: String,
 	},
-	/// Create folder `name` in the headset folder `dir`, then list `dir` again.
+	/// Then lists `dir` again.
 	MakeDir {
 		serial: String,
 		dir: String,
 		name: String,
 	},
-	/// Rename `from` to `to` inside the headset folder `dir`, then list it again.
+	/// Then lists `dir` again.
 	RenameFile {
 		serial: String,
 		dir: String,
 		from: String,
 		to: String,
 	},
-	/// Copy (or move) headset files or folders into the headset folder `dir`.
 	PasteFiles {
 		serial: String,
 		paths: Vec<String>,
 		dir: String,
 		copy: bool,
 	},
-	/// Delete headset files or folders, then list `dir` again.
+	/// Then lists `dir` again.
 	DeleteFiles {
 		serial: String,
 		paths: Vec<String>,
 		dir: String,
 	},
-	/// Show the headset's screen in a scrcpy window.
 	MirrorScreen {
 		serial: String,
 		eye: crate::scrcpy::Eye,
 	},
-	/// USB file transfer (MTP) on or off, so the headset shows up in the
-	/// computer's file manager.
+	/// So the headset shows up in the computer's file manager.
 	SetMtp {
 		serial: String,
 		enabled: bool,
@@ -133,74 +131,64 @@ pub enum Command {
 	ConnectWireless(String),
 	/// Answered with [`Event::MdnsServices`].
 	DiscoverWireless,
-	/// Like [`Command::ConnectWireless`], for the headset of the last run: the
-	/// headset may be off or have another address, so failing isn't an error.
+	/// Failing isn't an error: the headset may be off or have another address.
 	Reconnect(String),
 	DisconnectWireless(String),
-	/// Install an APK, a release folder or a ZIP on the headset.
 	Install {
 		serial: String,
 		path: PathBuf,
+		streaming: bool,
 	},
 	ReviewScript {
 		task: TaskId,
 		decision: ReviewDecision,
 	},
 	CancelTask(TaskId),
-	/// Download a release from the active mirror; with `serial`, install it
-	/// on that headset afterwards.
+	/// With `serial`, installs it on that headset afterwards.
 	Download {
 		game: Game,
 		serial: Option<String>,
+		streaming: bool,
 	},
-	/// Upload an app from the headset to the active mirror. Only send this
-	/// after the user agreed to share that app.
+	/// Only send this after the user agreed to share the app.
 	Contribute {
 		serial: String,
 		package: String,
 		name: String,
 	},
-	/// Stop offering this package for upload.
 	IgnoreContribution(String),
-	/// Stop (`hold`) or resume offering catalog updates for this package.
 	HoldUpdates {
 		package: String,
 		hold: bool,
 	},
-	/// Moves a queued download by `delta` places (negative is earlier).
+	/// Negative is earlier.
 	MoveDownload {
 		task: TaskId,
 		delta: isize,
 	},
-	/// Download the active mirror's metadata again.
 	SyncCatalog,
-	/// Download adb from Google into the data folder and use it. Only send
-	/// this after the user agreed to the Android SDK terms.
+	/// Only send this after the user agreed to the Android SDK terms.
 	InstallAdb,
-	/// Download rclone from rclone.org into the data folder and use it.
 	InstallRclone,
-	/// Run a command typed in the console; output comes back as
-	/// [`Event::Shell`] with the same `id`.
+	/// Output comes back as [`Event::Shell`] with the same `id`.
 	Shell {
 		id: u64,
 		serial: String,
 		command: String,
 	},
-	/// Stop a console command; the headset ends it when the connection closes.
+	/// The headset ends it when the connection closes.
 	StopShell(u64),
-	/// Work out what renaming a release would change; answered with
-	/// [`Event::RenameAnalysis`] carrying the same `id`.
+	/// Answered with [`Event::RenameAnalysis`] carrying the same `id`.
 	AnalyzeRename {
 		id: u64,
 		path: PathBuf,
 	},
-	/// Read everything the Inspector tab shows about an APK or a release
-	/// folder; answered with [`Event::Inspection`] carrying the same `id`.
+	/// Answered with [`Event::Inspection`] carrying the same `id`.
 	Inspect {
 		id: u64,
 		path: PathBuf,
 	},
-	/// Build a renamed copy of a release into the downloads folder.
+	/// Into the downloads folder.
 	BuildCopy {
 		source: PathBuf,
 		new_package: String,
@@ -211,7 +199,6 @@ pub enum Command {
 	},
 }
 
-/// An app on the headset, as the UI knows it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppInfo {
 	pub package: String,
@@ -251,13 +238,12 @@ pub enum Event {
 		info: std::result::Result<DeviceInfo, String>,
 	},
 	TaskUpdated(TaskSnapshot),
-	/// The active mirror's catalog; `None` when there is no mirror or it was never synced.
+	/// `None` when there is no mirror or it was never synced.
 	CatalogLoaded(Option<Arc<Catalog>>),
 	CatalogStatus(CatalogStatus),
-	/// How a mirror has been answering; sent whenever that changes.
+	/// Sent whenever it changes.
 	MirrorHealth(crate::catalog::MirrorHealth),
-	/// install.txt has lines that need the user's decision; answer with
-	/// [`Command::ReviewScript`].
+	/// Answer with [`Command::ReviewScript`].
 	ScriptReview {
 		task: TaskId,
 		title: String,
@@ -279,19 +265,17 @@ pub enum Event {
 		serial: String,
 		result: std::result::Result<Vec<crate::adb::Leftover>, String>,
 	},
-	/// Headsets announci0ng wireless adb on the network.
+	/// Headsets announcing wireless adb on the network.
 	MdnsServices(std::result::Result<Vec<crate::adb::MdnsService>, String>),
 	DirListing {
 		serial: String,
 		path: String,
 		result: std::result::Result<Vec<crate::adb::RemoteEntry>, String>,
 	},
-	/// Something changed the stored backups; ask again with [`Command::ListBackups`].
+	/// Ask again with [`Command::ListBackups`].
 	BackupsChanged,
-	/// A sync failed because there is no rclone; it can be installed with
-	/// [`Command::InstallRclone`].
+	/// rclone can be installed with [`Command::InstallRclone`].
 	RcloneMissing,
-	/// Release folders in the downloads folder.
 	Downloads(Vec<crate::downloaded::DownloadedRelease>),
 	Shell {
 		id: u64,

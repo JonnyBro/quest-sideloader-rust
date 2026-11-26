@@ -30,9 +30,7 @@ pub struct FilesView {
 	/// `None` while the folder loads.
 	entries: Option<Result<Vec<RemoteEntry>, String>>,
 	requested: Option<(String, String)>,
-	/// Names in the current folder.
 	selected: HashSet<String>,
-	/// Paths picked with Copy or Cut, waiting for Paste.
 	clipboard: Option<Clipboard>,
 }
 
@@ -67,7 +65,6 @@ impl FilesView {
 		cx.notify();
 	}
 
-	/// Lists the folder the first time the tab shows.
 	pub fn ensure_loaded(&mut self) {
 		let current = self.serial.clone().map(|s| (s, self.path.clone()));
 		if self.entries.is_none() && self.requested != current {

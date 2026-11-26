@@ -6,7 +6,6 @@ struct Pending {
 	review: oneshot::Receiver<ReviewDecision>,
 }
 
-/// Queue of jobs that haven't started transferring yet.
 pub(in crate::engine) struct Queue {
 	pending: VecDeque<Pending>,
 	transferring: HashSet<TaskId>,
@@ -22,7 +21,6 @@ impl Queue {
 		}
 	}
 
-	/// Adds a job and returns the handle the engine tracks it by.
 	pub fn push(
 		&mut self,
 		job: Job,
@@ -42,6 +40,7 @@ impl Queue {
 				warnings: Vec::new(),
 				output: None,
 				conflict: None,
+				broken_stream: None,
 			},
 			sink,
 		);
@@ -53,8 +52,7 @@ impl Queue {
 		(review_tx, tracker)
 	}
 
-	/// Starts queued jobs while there are free slots. Returns the started
-	/// jobs' abort handles so the engine can cancel them.
+	/// Returns the started jobs' abort handles.
 	pub fn start_ready(
 		&mut self,
 		limit: usize,
@@ -88,19 +86,18 @@ impl Queue {
 		started
 	}
 
-	/// A job finished transferring (or died); its slot is free again.
 	pub fn slot_freed(&mut self, id: TaskId) {
 		self.transferring.remove(&id);
 	}
 
-	/// Removes a job that hasn't started yet. Returns whether it was queued.
+	/// Returns whether it was queued.
 	pub fn remove_pending(&mut self, id: TaskId) -> bool {
 		let before = self.pending.len();
 		self.pending.retain(|p| p.job.id != id);
 		self.pending.len() != before
 	}
 
-	/// Moves a queued job by `delta` places (negative is towards the front).
+	/// Negative is towards the front.
 	pub fn move_by(&mut self, id: TaskId, delta: isize) {
 		let Some(from) = self.pending.iter().position(|p| p.job.id == id) else {
 			return;
@@ -124,7 +121,7 @@ impl Queue {
 	}
 }
 
-/// A transfer slot; tells the engine when it's free, even if the job is aborted.
+/// Tells the engine it's free, even if the job is aborted.
 pub(super) struct Slot {
 	id: TaskId,
 	tx: mpsc::UnboundedSender<TaskId>,
@@ -182,6 +179,7 @@ mod tests {
 					game,
 					mirror,
 					serial: None,
+					streaming: true,
 				},
 				sink.clone(),
 			);

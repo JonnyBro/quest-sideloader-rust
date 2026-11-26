@@ -13,8 +13,8 @@ pub(super) fn spawn_tracker(server: AdbServer, sink: EventSink) -> JoinHandle<()
 	tokio::spawn(track(server, sink))
 }
 
-/// Keeps a `track-devices` connection open and re-establishes it (restarting the
-/// adb server if needed) whenever it drops.
+/// Reconnects, restarting the adb server if needed, whenever the connection
+/// drops.
 async fn track(server: AdbServer, sink: EventSink) {
 	let mut backoff = Duration::from_secs(1);
 	loop {

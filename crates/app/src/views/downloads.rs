@@ -33,9 +33,7 @@ const DATE_W: f32 = 150.;
 const ACTIONS_W: f32 = 270.;
 
 pub enum DownloadsEvent {
-	/// "Make a copy" of a release on disk.
 	Rename(PathBuf),
-	/// Open a release on disk in the Inspector.
 	Inspect(PathBuf),
 }
 
@@ -44,13 +42,11 @@ pub struct DownloadsView {
 	folder: PathBuf,
 	/// Running, queued and finished tasks, active first.
 	tasks: Vec<TaskSnapshot>,
-	/// Tasks whose warnings are unfolded.
 	open_warnings: Vec<TaskId>,
 	releases: Option<Vec<DownloadedRelease>>,
 	/// Ask the engine for the release list next time the tab is shown.
 	stale: bool,
 	search: Entity<InputState>,
-	/// Serial and name of the headset installs go to.
 	target: Option<(String, String)>,
 	catalog: Option<Arc<Catalog>>,
 	/// Which release columns fit: size, date.
@@ -103,7 +99,6 @@ impl DownloadsView {
 		cx.notify();
 	}
 
-	/// Something changed the downloads folder; read it again when shown.
 	pub fn invalidate(&mut self, cx: &mut Context<Self>) {
 		self.stale = true;
 		cx.notify();
@@ -327,6 +322,7 @@ impl DownloadsView {
 							this.engine.send(Command::Install {
 								serial: serial.clone(),
 								path: path.clone(),
+								streaming: true,
 							})
 						})),
 				);
@@ -352,6 +348,26 @@ impl DownloadsView {
 								},
 								source: conflict.source.clone(),
 								remove_source: conflict.remove_after,
+								streaming: conflict.streaming,
+							})
+						})),
+				);
+			}
+			if let (TaskState::Failed(_), Some(broken), Some(serial)) =
+				(&task.state, &task.broken_stream, &task.serial)
+			{
+				let (broken, serial) = (broken.clone(), serial.clone());
+				buttons = buttons.child(
+					Button::new(("no-stream", ix))
+						.label(t!("lib.install_no_stream"))
+						.primary()
+						.xsmall()
+						.tooltip(t!("lib.install_no_stream_tip"))
+						.on_click(cx.listener(move |this, _, _, _| {
+							this.engine.send(Command::RetryWithoutStreaming {
+								serial: serial.clone(),
+								source: broken.source.clone(),
+								remove_source: broken.remove_after,
 							})
 						})),
 				);
@@ -558,6 +574,7 @@ impl DownloadsView {
 								this.engine.send(Command::Download {
 									game: game.clone(),
 									serial: None,
+									streaming: true,
 								});
 							}
 						}))
@@ -579,6 +596,7 @@ impl DownloadsView {
 								this.engine.send(Command::Install {
 									serial: serial.clone(),
 									path: path.clone(),
+									streaming: true,
 								});
 							}
 						}))

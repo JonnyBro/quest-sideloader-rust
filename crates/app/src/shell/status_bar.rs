@@ -23,7 +23,6 @@ impl Shell {
 	pub(super) fn poll_logs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
 		let generation = self.logs.generation();
 		if !self.logs_open {
-			// The badge on the logs button counts new errors.
 			if self.logs.errors() != self.errors_seen {
 				cx.notify();
 			}

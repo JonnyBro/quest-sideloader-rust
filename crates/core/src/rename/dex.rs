@@ -4,7 +4,6 @@
 
 use super::chunk::{FormatError, Reader};
 
-/// Calls `visit` with every string in the file.
 pub fn for_each_string(data: &[u8], mut visit: impl FnMut(&str)) -> Result<(), FormatError> {
 	let r = Reader::new(data);
 	if r.slice(0, 4)? != b"dex\n" {

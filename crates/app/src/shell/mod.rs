@@ -102,7 +102,6 @@ pub struct Shell {
 	paths: AppPaths,
 	settings: Settings,
 	ui_path: PathBuf,
-	/// The Wi-Fi headset to reconnect to once adb runs.
 	last_wireless: Option<String>,
 	reconnect: bool,
 	/// The adb dialog opens by itself once per run; the status bar reopens it.
@@ -111,14 +110,11 @@ pub struct Shell {
 	review_open: Option<TaskId>,
 	/// Renamed copies made here; they get a badge and lead the restore list.
 	copies: HashSet<String>,
-	/// A newer release of the app, found at start.
 	app_update: Option<AppRelease>,
 	title: String,
 	tab: Tab,
 	adb: Option<AdbStatus>,
 	devices: Vec<DeviceEntry>,
-	/// The open "Connect over Wi-Fi" dialog, which shows headsets found on
-	/// the network.
 	wifi: Option<WeakEntity<WifiDialog>>,
 	infos: HashMap<String, DeviceInfo>,
 	details: HashMap<String, DeviceDetails>,
@@ -132,17 +128,13 @@ pub struct Shell {
 	devices_view: Entity<DevicesView>,
 	inspector: Entity<InspectorView>,
 	console: Entity<ConsoleView>,
-	/// When free space in the downloads folder was last read.
 	pc_free_checked: Option<std::time::Instant>,
 	logs: LogBuffer,
 	logs_open: bool,
 	logs_seen: u64,
 	log_lines: usize,
-	/// The lowest level the logs panel shows.
 	log_level: LogLevel,
-	/// Error lines already seen in the logs panel.
 	errors_seen: u64,
-	/// The Advanced group in the sidebar is folded.
 	advanced_folded: bool,
 	/// Read-only editor, so the log can be selected, searched and copied.
 	log_view: Entity<EditorState>,
@@ -155,14 +147,11 @@ pub struct Shell {
 	_devices_events: Subscription,
 }
 
-/// What `main` read before the window opened.
 pub struct Startup {
 	pub paths: AppPaths,
 	pub settings: Settings,
-	/// Why the settings file couldn't be read, when it couldn't.
 	pub load_error: Option<String>,
 	pub ui: UiState,
-	/// There was no settings file yet.
 	pub first_run: bool,
 	pub logs: LogBuffer,
 }
@@ -416,7 +405,6 @@ impl Shell {
 		);
 	}
 
-	/// Everything that has to be right to install games, for "Check everything".
 	fn checks(&self, cx: &App) -> Vec<Check> {
 		const GB: u64 = 1024 * 1024 * 1024;
 		let mut checks = Vec::new();
@@ -559,6 +547,7 @@ impl Shell {
 			self.engine.send(Command::Install {
 				serial: serial.clone(),
 				path: path.clone(),
+				streaming: true,
 			});
 		}
 	}
@@ -586,7 +575,6 @@ impl Shell {
 		cx.notify();
 	}
 
-	/// What the catalog compares its games against.
 	fn update_installed(&mut self, cx: &mut Context<Self>) {
 		let installed = self.selected_device().and_then(|device| {
 			let info = self.infos.get(&device.serial)?;
@@ -672,9 +660,8 @@ impl Shell {
 	}
 }
 
-/// Game name by package. A package can have several entries, such as a game
-/// and a save patch for it; the list is sorted by name, so the first one is
-/// usually the game itself.
+/// A package can have several entries, such as a game and its save patch; the
+/// list is sorted by name, so the first is usually the game.
 pub fn game_names(catalog: &quest_sideloader_core::catalog::Catalog) -> HashMap<String, String> {
 	let mut names = HashMap::new();
 	for game in &catalog.games {

@@ -16,8 +16,7 @@ pub struct PendingReview {
 	pub analysis: ScriptAnalysis,
 }
 
-/// Shows an install.txt that needs a decision. The dialog can't be dismissed
-/// without one; `on_answer` runs after the decision is sent.
+/// Can't be dismissed without a decision; `on_answer` runs after it is sent.
 pub fn open(
 	engine: Rc<Engine>,
 	review: PendingReview,

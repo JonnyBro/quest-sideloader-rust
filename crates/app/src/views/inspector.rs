@@ -23,7 +23,6 @@ enum State {
 	Failed(String),
 }
 
-/// What an APK is: manifest values, signature, contents, hashes.
 pub struct InspectorView {
 	engine: Rc<Engine>,
 	path: Option<PathBuf>,
@@ -41,7 +40,6 @@ impl InspectorView {
 		}
 	}
 
-	/// Reads `path` (an APK or a release folder) and shows it.
 	pub fn open(&mut self, path: PathBuf, cx: &mut Context<Self>) {
 		self.id += 1;
 		self.engine.send(Command::Inspect {

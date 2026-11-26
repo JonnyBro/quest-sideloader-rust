@@ -9,7 +9,6 @@ const LATEST_RELEASE_API: &str =
 pub struct AppRelease {
 	/// Without the leading `v`, like `2.1.0`.
 	pub version: String,
-	/// The release page.
 	pub url: String,
 }
 
@@ -19,8 +18,7 @@ struct LatestRelease {
 	html_url: String,
 }
 
-/// The latest release if it's newer than this build, `None` if it isn't or
-/// the repository has no releases yet.
+/// `None` also when the repository has no releases yet.
 pub async fn check() -> Result<Option<AppRelease>, String> {
 	let client = crate::platform_tools::http_client()?;
 	let response = client

@@ -1,5 +1,3 @@
-//! Building renamed copies as tasks.
-
 use rust_i18n::t;
 
 use super::EventSink;
@@ -26,6 +24,7 @@ pub(super) fn spawn(
 			warnings: Vec::new(),
 			output: None,
 			conflict: None,
+			broken_stream: None,
 		},
 		sink,
 	);

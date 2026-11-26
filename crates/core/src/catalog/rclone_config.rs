@@ -40,8 +40,7 @@ fn referenced_remote(target: &str) -> Option<&str> {
 	(!name.is_empty() && !windows_drive).then_some(name)
 }
 
-/// Rejects mirror-supplied rclone configs that could touch local files or run
-/// programs on this computer.
+/// Rejects configs that could touch local files or run programs.
 pub fn check_mirror_rclone_config(text: &str) -> Result<(), CatalogError> {
 	let sections = sections(text);
 	let names: Vec<&str> = sections.iter().map(|(n, _)| n.as_str()).collect();

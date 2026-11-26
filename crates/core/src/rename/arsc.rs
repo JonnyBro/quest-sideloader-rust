@@ -115,8 +115,7 @@ impl ResourceTable {
 		out
 	}
 
-	/// Gives packages named `old` the name `new`. False when none is named
-	/// `old`, or `new` doesn't fit the fixed 128-unit field.
+	/// False when none is named `old`, or `new` doesn't fit the fixed 128-unit field.
 	pub fn rename_package(&mut self, old: &str, new: &str) -> bool {
 		let units: Vec<u16> = new.encode_utf16().collect();
 		if units.len() >= PACKAGE_NAME_UNITS {

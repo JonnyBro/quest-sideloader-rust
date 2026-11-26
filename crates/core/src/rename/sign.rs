@@ -51,9 +51,8 @@ fn is_signature_file(name: &str) -> bool {
 		|| upper.starts_with("SIG-")
 }
 
-/// Writes `dest` from `source`, with the entries in `replace` (stored
-/// uncompressed) instead of the source's, and signs it. `progress` gets
-/// `(done, total)` in bytes.
+/// Entries in `replace` are stored uncompressed instead of the source's.
+/// `progress` gets `(done, total)` in bytes.
 pub fn write_signed_apk(
 	source: &Path,
 	dest: &Path,

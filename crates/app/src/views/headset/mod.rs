@@ -86,14 +86,12 @@ struct Row {
 	/// `None` until the headset reports per-app storage.
 	usage: Option<AppUsage>,
 	cover: Option<PathBuf>,
-	/// The newest version the catalog has.
 	latest: Option<u64>,
 	/// Unix seconds of the last install or update.
 	installed: Option<u64>,
 }
 
 pub enum HeadsetEvent {
-	/// Show the log of an app in the Console.
 	AppLog { package: String, name: String },
 }
 
@@ -111,11 +109,8 @@ pub struct HeadsetView {
 	descending: bool,
 	show_system: bool,
 	rows: Vec<Row>,
-	/// Rows hidden because they are system apps.
 	hidden: usize,
-	/// Renamed copies made here.
 	copies: HashSet<String>,
-	/// Packages whose updates the user doesn't want offered.
 	held: HashSet<String>,
 	/// Which app columns fit: package, version, size, badge.
 	app_cols: [bool; 4],
@@ -300,6 +295,7 @@ impl HeadsetView {
 					engine.send(Command::Install {
 						serial: serial.clone(),
 						path,
+						streaming: true,
 					});
 				}
 			}

@@ -106,7 +106,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> SyncSession<S> {
 		}
 	}
 
-	/// Copies a device file to `local` (written to `local.part`, then renamed).
+	/// Written to `local.part`, then renamed.
 	pub async fn recv_file(
 		&mut self,
 		remote: &str,
@@ -173,8 +173,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> SyncSession<S> {
 	}
 }
 
-/// A local file to transfer and its path relative to the pushed directory,
-/// always with `/` separators.
+/// The relative path always uses `/`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalFile {
 	pub path: PathBuf,
@@ -182,8 +181,8 @@ pub struct LocalFile {
 	pub size: u64,
 }
 
-/// Lists regular files under `root`, sorted by relative path. Symlinks are
-/// skipped so a release can't point the transfer outside its own folder.
+/// Sorted by relative path. Symlinks are skipped so a release can't point the
+/// transfer outside its folder.
 pub fn list_files(root: &Path) -> std::io::Result<Vec<LocalFile>> {
 	let mut files = Vec::new();
 	let mut stack = vec![root.to_path_buf()];

@@ -26,10 +26,8 @@ pub struct BuildRequest {
 	/// A release folder or an APK.
 	pub source: PathBuf,
 	pub new_package: String,
-	/// A replacement for the Platform SDK loader, chosen by the user.
 	pub loader: Option<PathBuf>,
-	/// Mark the copy debuggable, so `run-as` works and backups get all of
-	/// its files.
+	/// So `run-as` works and backups get all of its files.
 	pub debuggable: bool,
 	pub dest_dir: PathBuf,
 }
@@ -70,8 +68,8 @@ pub fn output_dir(source: &Path, dest_dir: &Path, new_package: &str) -> PathBuf 
 	dest_dir.join(format!("{name} ({new_package})"))
 }
 
-/// Builds the copy and returns its folder. Work happens in a hidden folder
-/// that only gets its real name once everything is written and checked.
+/// Returns the copy's folder. Work happens in a hidden folder that gets its
+/// real name once everything is written and checked.
 pub fn build(
 	request: &BuildRequest,
 	keys: &KeyStore,

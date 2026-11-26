@@ -35,7 +35,7 @@ pub use console::ShellEvent;
 pub use install::ReviewDecision;
 pub use library::CatalogStatus;
 pub use messages::{AdbStatus, AppInfo, Command, Event};
-pub use task::{SignatureConflict, TaskId, TaskKind, TaskSnapshot, TaskState};
+pub use task::{BrokenStream, SignatureConflict, TaskId, TaskKind, TaskSnapshot, TaskState};
 
 /// Called after every event so the UI can wake up and repaint.
 pub type Notifier = Arc<dyn Fn() + Send + Sync>;
@@ -137,14 +137,12 @@ struct State {
 	library: library::Library,
 	queue: downloads::Queue,
 	upload_lock: Arc<tokio::sync::Mutex<()>>,
-	/// Reports a tool that finished downloading.
 	tool_installed: mpsc::UnboundedSender<Tool>,
 	shells: HashMap<u64, tokio::task::AbortHandle>,
 }
 
 impl State {}
 
-/// A program the app can download for the user.
 #[derive(Debug)]
 enum Tool {
 	Adb(PathBuf),

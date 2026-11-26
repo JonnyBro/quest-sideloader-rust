@@ -121,7 +121,18 @@ impl CatalogView {
 											.disabled(self.installed.is_none())
 											.tooltip(install_tip)
 											.on_click(cx.listener(move |this, _, _, _| {
-												this.download(index, true)
+												this.download(index, true, true)
+											})),
+									)
+									.child(
+										Button::new("install-no-stream")
+											.label(t!("lib.install_no_stream"))
+											.outline()
+											.small()
+											.disabled(self.installed.is_none())
+											.tooltip(t!("lib.install_no_stream_tip"))
+											.on_click(cx.listener(move |this, _, _, _| {
+												this.download(index, true, false)
 											})),
 									)
 									.child(
@@ -130,7 +141,7 @@ impl CatalogView {
 											.outline()
 											.small()
 											.on_click(cx.listener(move |this, _, _, _| {
-												this.download(index, false)
+												this.download(index, false, true)
 											})),
 									)
 									.children(held.map(|held| {

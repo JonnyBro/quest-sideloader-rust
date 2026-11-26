@@ -7,7 +7,6 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use quest_sideloader_core::{Command, Engine, platform_tools, rclone_tool};
 
-/// Offers to download adb when the engine can't find it.
 pub fn open_adb(engine: Rc<Engine>, window: &mut Window, cx: &mut App) {
 	let can_install = platform_tools::download_url().is_some();
 	window.open_dialog(cx, move |dialog, _, cx| {
@@ -62,7 +61,6 @@ pub fn open_adb(engine: Rc<Engine>, window: &mut Window, cx: &mut App) {
 	});
 }
 
-/// Shown when a sync fails because rclone is missing.
 pub fn open_rclone(engine: Rc<Engine>, window: &mut Window, cx: &mut App) {
 	let can_install = rclone_tool::platform().is_some();
 	window.open_dialog(cx, move |dialog, _, cx| {

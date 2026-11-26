@@ -67,10 +67,8 @@ it. Your own builds can't get a key, so that mirror refuses them.
   adb and rclone from Homebrew are found even though apps started from
   Finder don't see Homebrew on `PATH`.
 - Linux: Wayland or X11, Vulkan or OpenGL, `xdg-desktop-portal` and udev rules
-  for the headset (for example `android-udev`). For the window icon, copy
-  `quest-sideloader.desktop` from the release archive to
-  `~/.local/share/applications` and `quest-sideloader.png` to
-  `~/.local/share/icons/hicolor/256x256/apps`.
+  for the headset (for example `android-udev`). Settings, Downloads,
+  Application menu adds the app with its icon to the application menu.
 
 Settings and data live in the platform's user folders, logs in `logs` inside
 the data folder (one file a day, kept a week). For a portable copy, put an

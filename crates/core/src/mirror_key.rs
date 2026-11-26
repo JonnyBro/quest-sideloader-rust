@@ -1,7 +1,6 @@
-//! Short-lived mirror API keys from vrSrc's `/app-key` endpoint. Only official
-//! builds can ask for one: the client ID and build secret come from the
-//! `QSR_CLIENT_ID` and `QSR_BUILD_SECRET` environment variables at build time.
-//! The key goes to vrSrc's own mirror only, never to other mirrors.
+//! Short-lived mirror keys from vrSrc's `/app-key`. Only official builds get
+//! one: `QSR_CLIENT_ID` and `QSR_BUILD_SECRET` are read at build time. The
+//! key goes to vrSrc's mirror only.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -14,35 +13,33 @@ use crate::catalog::{Mirror, MirrorKind};
 pub const HEADER: &str = "X-API-Key";
 
 const ENDPOINT: &str = "https://vrsrc.fyi/api/mirror/app-key";
-/// The only scheme, host and port the key is sent to.
+/// The key is sent to this origin only.
 const KEY_ORIGIN: &str = "https://go.srcdl1.xyz";
 
 const CLIENT_ID: Option<&str> = option_env!("QSR_CLIENT_ID");
 const BUILD_SECRET: Option<&str> = option_env!("QSR_BUILD_SECRET");
 
-/// The endpoint limits requests per address, so no two go out closer than this.
+/// The endpoint rate-limits requests per address.
 const MIN_INTERVAL: Duration = Duration::from_secs(60);
 const RETRY_PENDING: Duration = Duration::from_secs(60);
 const RETRY_REFUSED: Duration = Duration::from_secs(60 * 60);
 const RETRY_FAILED: Duration = Duration::from_secs(5 * 60);
 
-/// Whether a mirror gets a key and how getting one went, for showing the user.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KeyStatus {
 	/// The mirror isn't the one the key is for.
 	NotUsed,
 	/// The key's mirror, but this build can't get a key.
 	NotInBuild,
-	/// Not asked for one yet.
 	NotFetched,
-	/// Unix seconds when the key stops working, if known.
+	/// Unix seconds, if known.
 	Ready {
 		expires_at: Option<u64>,
 	},
 	Failed(String),
 }
 
-/// Hands out the mirror key; clones share one cache. The default has no key.
+/// Clones share one cache. The default has no key.
 #[derive(Clone, Default)]
 pub struct MirrorKeys(Option<Arc<Inner>>);
 
@@ -69,7 +66,7 @@ struct State {
 	/// The mirror refused the cached key.
 	stale: bool,
 	next_try: Option<Instant>,
-	/// Why the last request for a key failed; cleared by a success.
+	/// Cleared by a success.
 	last_error: Option<String>,
 }
 
@@ -90,8 +87,7 @@ struct CacheFile {
 }
 
 impl MirrorKeys {
-	/// Keys for an official build, cached in `cache_file`; no keys for builds
-	/// made without the client ID and build secret.
+	/// No keys for builds made without the client ID and build secret.
 	pub fn official(cache_file: Option<PathBuf>) -> Self {
 		let (Some(client_id), Some(build_secret)) = (
 			CLIENT_ID.map(str::trim).filter(|s| !s.is_empty()),
@@ -121,12 +117,10 @@ impl MirrorKeys {
 		})))
 	}
 
-	/// Whether this build can get a key at all.
 	pub fn available(&self) -> bool {
 		self.0.is_some()
 	}
 
-	/// Whether `mirror` is the one mirror the key is for.
 	pub fn is_key_mirror(&self, mirror: &Mirror) -> bool {
 		let origin = match self.0.as_deref().map(|inner| &inner.source) {
 			#[cfg(test)]
@@ -136,12 +130,10 @@ impl MirrorKeys {
 		mirror_origin(mirror).is_some_and(|o| o == origin)
 	}
 
-	/// Whether requests to `mirror` carry the key.
 	pub fn sends_to(&self, mirror: &Mirror) -> bool {
 		self.available() && self.is_key_mirror(mirror)
 	}
 
-	/// The key to send to `mirror`, or `None` when it gets none.
 	pub async fn key_for(&self, mirror: &Mirror) -> Option<String> {
 		if !self.sends_to(mirror) {
 			return None;

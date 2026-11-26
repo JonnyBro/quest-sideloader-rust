@@ -39,7 +39,6 @@ struct Item {
 	debuggable: bool,
 	/// A build was started; its progress is on the Downloads tab.
 	started: bool,
-	/// Sections folded away by the user.
 	folded: Vec<&'static str>,
 	_changes: Subscription,
 }
@@ -57,15 +56,12 @@ impl Item {
 	}
 }
 
-/// Builds copies of a release under another package name, so they install
-/// next to the original.
 pub struct RenameView {
 	engine: Rc<Engine>,
 	downloads_dir: PathBuf,
 	items: Vec<Item>,
 	selected: Option<u64>,
 	next_id: u64,
-	/// The patched Platform SDK loader the user picked, kept between runs.
 	loader: Option<PathBuf>,
 }
 
@@ -90,7 +86,7 @@ impl RenameView {
 		cx.notify();
 	}
 
-	/// Adds a release to the list and selects it; one already there is only selected.
+	/// One already in the list is only selected.
 	pub fn add(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
 		if let Some(item) = self.items.iter().find(|i| i.path == path) {
 			self.selected = Some(item.id);
@@ -693,7 +689,6 @@ impl RenameView {
 			.into_any_element()
 	}
 
-	/// A titled block the user can fold away.
 	fn section(
 		&self,
 		item: &Item,
@@ -742,10 +737,8 @@ struct Change {
 	note: Option<String>,
 }
 
-/// Rows of before and after; unchanged rows are dimmed.
-/// Rows of before and after; unchanged rows are dimmed. Long values are cut
-/// short, so hovering a cell shows it whole. `key` keeps element ids apart
-/// between the tables of one release.
+/// Unchanged rows are dimmed; long values are cut short and shown whole on
+/// hover. `key` keeps element ids apart between the tables of one release.
 fn changes(key: &str, rows: &[Change], theme: &Theme, cx: &App) -> AnyElement {
 	let with_place = rows.iter().any(|r| !r.place.is_empty());
 	let cell = |id: String, text: String, full: String| {

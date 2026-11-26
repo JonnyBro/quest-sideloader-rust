@@ -77,7 +77,6 @@ impl Library {
 		}
 	}
 
-	/// The catalog the UI was last given.
 	pub fn current(&self) -> Option<Arc<Catalog>> {
 		self.sink
 			.current
@@ -110,8 +109,7 @@ impl Library {
 		self.job.as_ref().is_some_and(|j| !j.is_finished())
 	}
 
-	/// Shows the cached catalog of `mirror` right away and syncs it if it's
-	/// missing or stale. Cancels whatever the previous mirror was doing.
+	/// Cancels whatever the previous mirror was doing.
 	pub fn activate(&mut self, mirror: Option<Mirror>) {
 		if let Some(job) = self.job.take() {
 			job.abort();

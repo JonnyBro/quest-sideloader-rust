@@ -11,7 +11,6 @@ const THEMES: &str = include_str!("../assets/themes.json");
 pub const DEFAULT_DARK: &str = "Quest Dark";
 pub const DEFAULT_LIGHT: &str = "Quest Light";
 
-/// A color scheme as the scheme picker shows it.
 pub struct Scheme {
 	pub name: String,
 	pub dark: bool,
@@ -21,7 +20,7 @@ pub struct Scheme {
 	pub accent: Hsla,
 }
 
-/// Every bundled scheme, in the order of the themes file.
+/// In the order of the themes file.
 pub fn schemes() -> &'static [Scheme] {
 	static SCHEMES: OnceLock<Vec<Scheme>> = OnceLock::new();
 	SCHEMES.get_or_init(|| {
@@ -52,8 +51,7 @@ pub fn schemes() -> &'static [Scheme] {
 	})
 }
 
-/// Tried in order for engineering text (logs, packages, versions). Fira Code is
-/// bundled; the rest only matter if loading it failed.
+/// Fira Code is bundled; the rest only matter if loading it failed.
 const MONO_FONTS: &[&str] = &[
 	"Fira Code",
 	"JetBrains Mono",
@@ -86,7 +84,6 @@ pub fn install(cx: &mut App) {
 	}
 }
 
-/// The theme mode and the dark and light schemes from the settings.
 pub fn apply(settings: &Settings, window: &mut Window, cx: &mut App) {
 	let pick = |name: &str, fallback: &str| {
 		let themes = ThemeRegistry::global(cx).themes();

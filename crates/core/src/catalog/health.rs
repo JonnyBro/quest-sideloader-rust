@@ -9,15 +9,12 @@ use crate::mirror_key::KeyStatus;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MirrorHealth {
 	pub mirror_id: String,
-	/// The last request the mirror answered.
 	pub last_ok: Option<SystemTime>,
-	/// The last failed request and why.
 	pub last_error: Option<(SystemTime, String)>,
 	pub key: KeyStatus,
 }
 
 impl MirrorHealth {
-	/// Whether the latest request failed.
 	pub fn failing(&self) -> bool {
 		match (&self.last_error, self.last_ok) {
 			(Some((failed, _)), Some(ok)) => *failed > ok,

@@ -1,5 +1,3 @@
-//! Parsers for text that the ADB server and device tools print.
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeviceState {
 	Online,
@@ -91,7 +89,6 @@ pub struct Battery {
 	pub charging: bool,
 }
 
-/// Parses `dumpsys battery`.
 pub fn parse_battery(text: &str) -> Option<Battery> {
 	const STATUS_CHARGING: u8 = 2;
 	let mut level = None;

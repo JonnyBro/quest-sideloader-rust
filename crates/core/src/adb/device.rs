@@ -33,7 +33,6 @@ pub struct ShellOutput {
 	pub exit_code: Option<u8>,
 }
 
-/// Which output of a streamed shell command a piece of text came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputStream {
 	Stdout,
@@ -62,8 +61,7 @@ impl Device {
 		Ok(stream)
 	}
 
-	/// Runs `command` through `sh -c` on the device using shell protocol v2,
-	/// which keeps stdout and stderr apart and reports the exit code.
+	/// Shell protocol v2 keeps stdout and stderr apart and reports the exit code.
 	pub async fn shell(&self, command: &str) -> Result<ShellOutput, AdbError> {
 		self.shell_with_timeout(command, REQUEST_TIMEOUT).await
 	}
@@ -100,9 +98,8 @@ impl Device {
 			.map_err(|_| AdbError::Timeout)?
 	}
 
-	/// Runs `command` with no time limit and hands its output to `on_output`
-	/// as it arrives; returns the exit code. Dropping the future closes the
-	/// connection, which ends the command on the device.
+	/// No time limit; output goes to `on_output` as it arrives. Dropping the
+	/// future ends the command on the device.
 	pub async fn shell_streaming(
 		&self,
 		command: &str,
@@ -149,8 +146,7 @@ impl Device {
 			.to_owned())
 	}
 
-	/// Third-party apps with their version and, when `stat` can read the
-	/// APK, when they were installed or last updated.
+	/// The install or update time comes from `stat` on the APK, when it can read it.
 	pub async fn third_party_packages(&self) -> Result<Vec<Package>, AdbError> {
 		let mut packages = parse_packages(
 			&self
@@ -175,7 +171,6 @@ impl Device {
 		Ok(packages)
 	}
 
-	/// Free bytes on the filesystem holding `path`.
 	pub async fn free_space(&self, path: &str) -> Result<u64, AdbError> {
 		let out = self
 			.shell_ok(&format!("df -k {}", shell_words::quote(path)))
@@ -192,7 +187,7 @@ impl Device {
 		Ok(out.success())
 	}
 
-	/// Copies device files to the computer: `(remote path, local path)` pairs.
+	/// `(remote path, local path)` pairs.
 	pub async fn pull(
 		&self,
 		files: &[(String, std::path::PathBuf)],
@@ -206,8 +201,7 @@ impl Device {
 		session.quit().await
 	}
 
-	/// Runs `command` and writes its standard output into `local`, bytes as
-	/// they come. Returns the exit code and standard error.
+	/// Writes stdout into `local` as it comes; returns the exit code and stderr.
 	pub async fn shell_to_file(
 		&self,
 		command: &str,
@@ -239,8 +233,8 @@ impl Device {
 		Ok((exit_code, String::from_utf8_lossy(&stderr).into_owned()))
 	}
 
-	/// Like [`Self::pull`], but files the device won't let the shell read are
-	/// skipped instead of ending the transfer. Returns the skipped ones.
+	/// Files the shell can't read are skipped and returned instead of ending the
+	/// transfer.
 	pub async fn pull_readable(
 		&self,
 		files: &[(String, std::path::PathBuf)],
@@ -272,7 +266,7 @@ impl Device {
 		}
 	}
 
-	/// Regular files under `dir` with their sizes; empty if it doesn't exist.
+	/// Empty if `dir` doesn't exist.
 	pub async fn list_files(&self, dir: &str) -> Result<Vec<(String, u64)>, AdbError> {
 		let quoted = shell_words::quote(dir);
 		let out = self
@@ -290,7 +284,6 @@ impl Device {
 			.collect())
 	}
 
-	/// Path of the installed base APK of `package`.
 	pub async fn apk_path(&self, package: &str) -> Result<String, AdbError> {
 		let out = self
 			.shell_ok(&format!("pm path {}", shell_words::quote(package)))
@@ -305,9 +298,8 @@ impl Device {
 			})
 	}
 
-	/// Pushes a file, or every file of a directory, to `remote`. Missing remote
-	/// directories are created by adbd, except inside another app's
-	/// `Android/data` or `Android/obb`, which go through a temporary folder.
+	/// Inside another app's `Android/data` or `Android/obb` this goes through a
+	/// temporary folder.
 	pub async fn push(
 		&self,
 		local: &Path,
@@ -416,10 +408,22 @@ impl Device {
 		result
 	}
 
-	/// Streams the APK straight into the package manager (`-S <size>`), so no
-	/// temporary copy is left on the device. Replaces an existing install and
-	/// grants runtime permissions, as sideloaded games expect.
-	pub async fn install_apk(&self, apk: &Path, progress: Progress<'_>) -> Result<(), AdbError> {
+	/// Replaces an existing install and grants runtime permissions.
+	/// Without streaming the APK is copied to the headset first.
+	pub async fn install_apk(
+		&self,
+		apk: &Path,
+		streaming: bool,
+		progress: Progress<'_>,
+	) -> Result<(), AdbError> {
+		if streaming {
+			self.install_streamed(apk, progress).await
+		} else {
+			self.install_pushed(apk, progress).await
+		}
+	}
+
+	async fn install_streamed(&self, apk: &Path, progress: Progress<'_>) -> Result<(), AdbError> {
 		let local_err = |source| AdbError::LocalIo {
 			path: apk.to_path_buf(),
 			source,
@@ -438,25 +442,49 @@ impl Device {
 			let chunk = &buf[..n];
 			tokio::time::timeout(IO_TIMEOUT, stream.write_all(chunk))
 				.await
-				.map_err(|_| AdbError::Timeout)??;
+				.map_err(|_| AdbError::StreamBroken(AdbError::Timeout.to_string()))?
+				.map_err(broken)?;
 			progress(n as u64);
 		}
-		stream.flush().await?;
+		stream.flush().await.map_err(broken)?;
 
 		let mut output = String::new();
 		tokio::time::timeout(INSTALL_RESULT_TIMEOUT, stream.read_to_string(&mut output))
 			.await
-			.map_err(|_| AdbError::Timeout)??;
+			.map_err(|_| AdbError::Timeout)?
+			.map_err(broken)?;
 		let output = output.trim();
-		if output.lines().any(|l| l.trim() == "Success") {
-			Ok(())
-		} else if output.is_empty() {
-			Err(AdbError::InstallFailed(
+		if output.is_empty() {
+			return Err(AdbError::StreamBroken(
 				"no response from package manager".into(),
-			))
-		} else {
-			Err(AdbError::InstallFailed(output.to_owned()))
+			));
 		}
+		install_result(output)
+	}
+
+	async fn install_pushed(&self, apk: &Path, progress: Progress<'_>) -> Result<(), AdbError> {
+		static NEXT: AtomicU64 = AtomicU64::new(0);
+		// pm can't read /sdcard on newer Android; adb uses this folder too.
+		let tmp = format!(
+			"/data/local/tmp/quest-sideloader-{}-{}.apk",
+			std::process::id(),
+			NEXT.fetch_add(1, Ordering::Relaxed)
+		);
+		let quoted = shell_words::quote(&tmp).into_owned();
+		let result = async {
+			self.send(apk, false, &tmp, progress).await?;
+			let out = self
+				.shell_with_timeout(
+					&format!("pm install -r -g {quoted}"),
+					INSTALL_RESULT_TIMEOUT,
+				)
+				.await?;
+			let output = format!("{}\n{}", out.stdout.trim(), out.stderr.trim());
+			install_result(output.trim())
+		}
+		.await;
+		let _ = self.shell(&format!("rm -f {quoted}")).await;
+		result
 	}
 
 	pub async fn info(&self) -> Result<DeviceInfo, AdbError> {
@@ -497,6 +525,18 @@ fn decode_utf8(pending: &mut Vec<u8>, data: &[u8]) -> String {
 	text
 }
 
+fn broken(e: std::io::Error) -> AdbError {
+	AdbError::StreamBroken(e.to_string())
+}
+
+fn install_result(output: &str) -> Result<(), AdbError> {
+	if output.lines().any(|l| l.trim() == "Success") {
+		Ok(())
+	} else {
+		Err(AdbError::InstallFailed(output.to_owned()))
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use std::net::SocketAddr;
@@ -507,7 +547,6 @@ mod tests {
 	use super::*;
 	use crate::adb::testing::*;
 
-	/// Fake adb server that answers one shell request.
 	async fn fake_server(
 		expect_serial: &'static str,
 		reply: Vec<u8>,
@@ -755,7 +794,7 @@ mod tests {
 		let (addr, received) = fake_install(content.len(), "Success\n").await;
 		AdbServer::with_addr(addr)
 			.device("SER1")
-			.install_apk(&apk, &|_| {})
+			.install_apk(&apk, true, &|_| {})
 			.await
 			.unwrap();
 		assert_eq!(received.await.unwrap(), content);
@@ -774,7 +813,7 @@ mod tests {
 		.await;
 		let err = AdbServer::with_addr(addr)
 			.device("SER1")
-			.install_apk(&apk, &|_| {})
+			.install_apk(&apk, true, &|_| {})
 			.await
 			.unwrap_err();
 		assert!(

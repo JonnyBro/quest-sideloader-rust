@@ -32,6 +32,7 @@ fn tracker(
 			warnings: Vec::new(),
 			output: None,
 			conflict: None,
+			broken_stream: None,
 		},
 		sink.clone(),
 	)
@@ -58,7 +59,6 @@ fn finish(tracker: &Tracker, result: Result<String, String>, sink: &EventSink, d
 	super::devices::spawn_fetch_info(device.clone(), sink.clone());
 }
 
-/// Byte progress for a pull or push whose total is known.
 fn byte_progress(tracker: &Tracker, total: u64) -> impl Fn(u64) + Send + Sync + '_ {
 	let done = std::sync::atomic::AtomicU64::new(0);
 	move |n| {
@@ -154,7 +154,7 @@ pub(super) fn spawn_restore(
 	entry(handle, tracker)
 }
 
-/// Backs up the app's saves, keeping going if it has none.
+/// Keeps going if the app has no saves.
 async fn backup_if_any(
 	tracker: &Tracker,
 	device: &Device,
@@ -231,9 +231,8 @@ pub(super) fn spawn_uninstall(
 	entry(handle, tracker)
 }
 
-/// For a signature mismatch: back up the saves, uninstall, install `source`
-/// again and put the saves back. With `remove_source` the release goes once
-/// it is installed, as it would have after a plain download and install.
+/// With `remove_source` the release goes once installed, as after a plain
+/// download and install.
 pub(super) fn spawn_reinstall(
 	ctx: InstallContext,
 	root: PathBuf,
@@ -268,21 +267,7 @@ pub(super) fn spawn_reinstall(
 				.await
 				.map_err(|e| t!("hs.new_not_installed", error = e, kept = kept).into_owned())?;
 			if remove_source {
-				let dir = source.clone();
-				let removed = tokio::task::spawn_blocking(move || {
-					if dir.is_dir() {
-						std::fs::remove_dir_all(&dir)
-					} else {
-						std::fs::remove_file(&dir)
-					}
-				})
-				.await
-				.map_err(|e| e.to_string())?;
-				if let Err(e) = removed {
-					t.report(crate::sideload::run::Update::Warning(
-						t!("dl.remove_failed", error = e).into_owned(),
-					));
-				}
+				install::remove_release(&source, &t).await;
 			}
 			if let Some(backup) = &backup {
 				t.stage(t!("hs.restoring"));
@@ -369,6 +354,7 @@ mod tests {
 		engine.send(Command::Install {
 			serial: "SER1".into(),
 			path: release,
+			streaming: true,
 		});
 		let done = wait_finished(&engine, None);
 		assert_eq!(done.state, TaskState::Done, "{done:?}");
@@ -418,6 +404,7 @@ mod tests {
 		engine.send(Command::Install {
 			serial: "SER1".into(),
 			path: release.clone(),
+			streaming: true,
 		});
 		let failed = wait_finished(&engine, None);
 		assert!(matches!(failed.state, TaskState::Failed(_)), "{failed:?}");
@@ -438,6 +425,7 @@ mod tests {
 			},
 			source: conflict.source.clone(),
 			remove_source: conflict.remove_after,
+			streaming: true,
 		});
 		let done = wait_finished(&engine, Some(failed.id + 1));
 		assert_eq!(done.state, TaskState::Done, "{done:?}");
@@ -476,6 +464,7 @@ mod tests {
 			},
 			source: conflict.source,
 			remove_source: true,
+			streaming: true,
 		});
 		let done = wait_finished(&engine, Some(failed.id + 2));
 		assert_eq!(done.state, TaskState::Done, "{done:?}");

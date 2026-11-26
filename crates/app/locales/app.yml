@@ -416,9 +416,9 @@ hs.app_safety:
   ru: "App Safety"
   uk: "App Safety"
 hs.app_safety_hint:
-  en: "App Safety is the Horizon OS check that flags sideloaded apps as harmful and blocks them."
-  ru: "App Safety - проверка в Horizon OS, которая помечает установленные вручную приложения как вредоносные и блокирует их."
-  uk: "App Safety - перевірка в Horizon OS, яка позначає встановлені вручну застосунки як шкідливі та блокує їх."
+  en: "App Safety in Horizon OS flags sideloaded apps as harmful and blocks them."
+  ru: "App Safety в Horizon OS помечает установленные вручную приложения как вредоносные и блокирует их."
+  uk: "App Safety в Horizon OS позначає встановлені вручну застосунки як шкідливі та блокує їх."
 hs.app_safety_off:
   en: "Turn off"
   ru: "Отключить"
@@ -1055,6 +1055,26 @@ lib.download_only:
   en: "Download only"
   ru: "Только скачать"
   uk: "Лише завантажити"
+lib.install_no_stream:
+  en: "Install without streaming"
+  ru: "Установить без стриминга"
+  uk: "Встановити без стрімінгу"
+lib.install_no_stream_tip:
+  en: "Copies the APK to the headset, then installs it. Slower, and the copy needs about as much free space as the APK. Try it if a normal install of a big APK breaks off."
+  ru: "Копирует APK на шлем, потом устанавливает. Медленнее, и копии нужно столько же свободного места, сколько весит APK. Попробуйте, если обычная установка большого APK обрывается."
+  uk: "Копіює APK на шолом, потім встановлює. Повільніше, і копії потрібно стільки ж вільного місця, скільки важить APK. Спробуйте, якщо звичайне встановлення великого APK обривається."
+stream.title:
+  en: "Installing %{name} broke off"
+  ru: "Установка %{name} оборвалась"
+  uk: "Встановлення %{name} обірвалося"
+stream.text:
+  en: "The connection to adb broke off while the APK was being sent. On some PCs this happens with big APKs, for example when another program closes adb or the USB connection drops. Installing without streaming copies the APK to the headset first and may get through."
+  ru: "Соединение с adb оборвалось, пока передавался APK. На некоторых компьютерах так бывает с большими APK, например когда adb закрывает другая программа или пропадает USB-соединение. Установка без стриминга сначала копирует APK на шлем, так она может пройти."
+  uk: "З'єднання з adb обірвалося, поки передавався APK. На деяких комп'ютерах так буває з великими APK, наприклад коли adb закриває інша програма або зникає USB-з'єднання. Встановлення без стрімінгу спершу копіює APK на шолом, так воно може пройти."
+stream.space:
+  en: "While it installs, the headset needs about as much extra free space as the APK takes."
+  ru: "Пока идёт установка, на шлеме нужно примерно на размер APK больше свободного места."
+  uk: "Поки триває встановлення, на шоломі потрібно приблизно на розмір APK більше вільного місця."
 lib.hold_updates:
   en: "Don't offer updates"
   ru: "Не предлагать обновления"
@@ -2348,11 +2368,11 @@ set.desktop:
   ru: "Меню приложений"
   uk: "Меню застосунків"
 set.desktop_add:
-  en: "Add to Menu"
+  en: "Add to menu"
   ru: "Добавить в меню"
   uk: "Додати в меню"
 set.desktop_update:
-  en: "Update Entry"
+  en: "Update entry"
   ru: "Обновить ярлык"
   uk: "Оновити ярлик"
 set.desktop_remove:
@@ -2381,7 +2401,7 @@ set.before_updating:
   uk: "Перед оновленням"
 set.backup_before_update:
   en: "Back up the saves of the installed version"
-  ru: "Делать резервную копию сохранений установленной версии"
+  ru: "Делать бэкап сохранений установленной версии"
   uk: "Робити резервну копію збережень встановленої версії"
 set.held_updates:
   en: "No updates for"
@@ -2433,11 +2453,11 @@ hs.leftovers_remove_title:
   uk: "Видалити залишки?"
 hs.leftovers_remove_one:
   en: "The OBB and data folders of %{name} (%{size}) will be deleted from the headset. Saves in them are lost unless you have a backup."
-  ru: "Папки OBB и данных %{name} (%{size}) будут удалены со шлема. Сохранения в них пропадут, если нет резервной копии."
+  ru: "Папки OBB и данных %{name} (%{size}) будут удалены со шлема. Сохранения в них пропадут, если нет бэкапа."
   uk: "Теки OBB і даних %{name} (%{size}) буде видалено з шолома. Збереження в них зникнуть, якщо немає резервної копії."
 hs.leftovers_remove_text:
   en: "The OBB and data folders of %{n} uninstalled app(s), %{size} in all, will be deleted from the headset. Saves in them are lost unless you have a backup."
-  ru: "Папки OBB и данных удалённых приложений (%{n}, всего %{size}) будут удалены со шлема. Сохранения в них пропадут, если нет резервной копии."
+  ru: "Папки OBB и данных удалённых приложений (%{n}, всего %{size}) будут удалены со шлема. Сохранения в них пропадут, если нет бэкапа."
   uk: "Теки OBB і даних видалених застосунків (%{n}, разом %{size}) буде видалено з шолома. Збереження в них зникнуть, якщо немає резервної копії."
 hs.app_log:
   en: "Show log"

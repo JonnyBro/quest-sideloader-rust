@@ -1,5 +1,3 @@
-//! Helpers for tests that stand up a fake adb server.
-
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -65,7 +63,6 @@ pub async fn write_hex(stream: &mut TcpStream, payload: &str) {
 	stream.write_all(framed.as_bytes()).await.unwrap();
 }
 
-/// What a [`FakeAdb`] received from the client.
 #[derive(Default)]
 pub struct Recorded {
 	pub pushed: Vec<(String, Vec<u8>)>,
@@ -74,6 +71,8 @@ pub struct Recorded {
 	pub device_files: Vec<(String, Vec<u8>)>,
 	/// Sizes of APKs streamed to `cmd package install`.
 	pub installs: Vec<usize>,
+	/// Streamed installs drop the connection halfway.
+	pub break_streams: bool,
 	/// Failure messages the next installs answer with, in order.
 	pub install_failures: Vec<String>,
 	/// Device files that are listed but can't be pulled.
@@ -159,6 +158,11 @@ async fn try_serve(s: &mut TcpStream, rec: &Shared) -> std::io::Result<()> {
 					.next()
 					.and_then(|n| n.parse().ok())
 					.unwrap_or(0);
+				if rec.lock().unwrap().break_streams {
+					let mut half = vec![0u8; size / 2];
+					s.read_exact(&mut half).await?;
+					return Ok(());
+				}
 				let mut apk = vec![0u8; size];
 				s.read_exact(&mut apk).await?;
 				let reply = {
@@ -217,6 +221,21 @@ async fn try_serve(s: &mut TcpStream, rec: &Shared) -> std::io::Result<()> {
 				if command.starts_with("pm path ") {
 					s.write_all(&packet(1, b"package:/data/app/~~x/pkg-1/base.apk\n"))
 						.await?;
+					s.write_all(&packet(3, &[0])).await?;
+					return Ok(());
+				}
+				if let Some(path) = command.strip_prefix("pm install -r -g ") {
+					let path = path.trim_matches('\'');
+					{
+						let mut rec = rec.lock().unwrap();
+						let size = rec
+							.pushed
+							.iter()
+							.find(|(p, _)| p == path)
+							.map_or(0, |(_, d)| d.len());
+						rec.installs.push(size);
+					}
+					s.write_all(&packet(1, b"Success\n")).await?;
 					s.write_all(&packet(3, &[0])).await?;
 					return Ok(());
 				}

@@ -487,6 +487,10 @@ err.adb_io:
   en: "adb connection error: %{error}"
   ru: "ошибка соединения с adb: %{error}"
   uk: "помилка з'єднання з adb: %{error}"
+err.adb_stream_broken:
+  en: "the connection to adb broke off while the APK was being sent: %{error}"
+  ru: "соединение с adb оборвалось во время передачи APK: %{error}"
+  uk: "з'єднання з adb обірвалося під час передавання APK: %{error}"
 err.adb_timeout:
   en: "adb request timed out"
   ru: "adb не ответил вовремя"
@@ -949,11 +953,11 @@ dev.connected:
   uk: "Підключено до %{address} через Wi-Fi"
 inst.backing_up:
   en: "Backing up the saves of the installed version"
-  ru: "Резервная копия сохранений установленной версии"
+  ru: "Бэкап сохранений установленной версии"
   uk: "Резервна копія збережень встановленої версії"
 inst.backup_failed:
   en: "Couldn't back up the saves before updating, installing anyway: %{error}"
-  ru: "Не удалось сделать резервную копию сохранений перед обновлением, установка продолжена: %{error}"
+  ru: "Не удалось сделать бэкап сохранений перед обновлением, установка продолжена: %{error}"
   uk: "Не вдалося зробити резервну копію збережень перед оновленням, встановлення продовжено: %{error}"
 eng.leftovers_removed:
   en: "Removed the leftovers of %{n} app(s)"

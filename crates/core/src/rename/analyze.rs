@@ -156,8 +156,7 @@ fn is_class(attribute: &Attribute, is_component: bool, parent_activity: bool) ->
 		|| CLASS_ATTRIBUTES.contains(&attribute.name.as_str())
 }
 
-/// Reads the release (a folder or an APK) and works out what renaming it
-/// would change. Slow for big games: every native library is read.
+/// Slow for big games: every native library is read.
 pub fn analyze(path: &Path) -> Result<Analysis, SideloadError> {
 	let plan = match Source::classify(path)? {
 		Source::Apk(apk) => InstallPlan::from_apk(&apk)?,

@@ -161,10 +161,23 @@ pub(super) async fn run(
 			Command::DisconnectWireless(address) => {
 				devices::spawn_disconnect(state.adb.clone(), address, state.sink.clone());
 			}
-			Command::Install { serial, path } => state.start_install(serial, path),
+			Command::Install {
+				serial,
+				path,
+				streaming,
+			} => state.start_install(serial, path, streaming, false),
+			Command::RetryWithoutStreaming {
+				serial,
+				source,
+				remove_source,
+			} => state.start_install(serial, source, false, remove_source),
 			Command::ReviewScript { task, decision } => state.review(task, decision),
 			Command::CancelTask(task) => state.cancel(task),
-			Command::Download { game, serial } => state.enqueue_download(game, serial),
+			Command::Download {
+				game,
+				serial,
+				streaming,
+			} => state.enqueue_download(game, serial, streaming),
 			Command::MoveDownload { task, delta } => state.queue.move_by(task, delta),
 			Command::FindLeftovers(serial) => {
 				let (device, sink) = (state.adb.device(serial.clone()), state.sink.clone());
@@ -363,6 +376,7 @@ pub(super) async fn run(
 				app,
 				source,
 				remove_source,
+				streaming,
 			} => {
 				let id = state.new_task_id();
 				let ctx = install::InstallContext {
@@ -373,6 +387,7 @@ pub(super) async fn run(
 					sink: state.sink.clone(),
 					title_from_files: false,
 					backups: None,
+					streaming,
 				};
 				let entry = headset::spawn_reinstall(
 					ctx,

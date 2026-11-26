@@ -22,8 +22,7 @@ pub struct Confirm {
 	pub danger: bool,
 }
 
-/// Asks first, then sends `command`. Dialog callbacks are `Fn`, so the command
-/// waits in a cell until OK takes it.
+/// Dialog callbacks are `Fn`, so the command waits in a cell until OK takes it.
 pub fn confirm(
 	engine: &Rc<Engine>,
 	confirm: Confirm,
@@ -52,8 +51,8 @@ pub fn confirm(
 	});
 }
 
-/// Asks for a file or folder name. `on_ok` gets it trimmed; it isn't called
-/// while the name is empty or one `valid` rejects.
+/// `on_ok` gets the name trimmed and isn't called while it's empty or `valid`
+/// rejects it.
 pub fn prompt_name(
 	title: String,
 	initial: &str,
@@ -117,7 +116,6 @@ pub fn prompt_name(
 	});
 }
 
-/// A menu item that sends one command.
 pub fn send_item(engine: &Rc<Engine>, label: String, command: Command) -> PopupMenuItem {
 	let engine = engine.clone();
 	let command = RefCell::new(Some(command));
@@ -184,7 +182,6 @@ pub fn centered(text: String, cx: &App) -> AnyElement {
 		.into_any_element()
 }
 
-/// `element` with `tip` shown on hover.
 pub fn with_tip(id: impl Into<ElementId>, element: impl IntoElement, tip: String) -> AnyElement {
 	div()
 		.id(id)
@@ -193,8 +190,8 @@ pub fn with_tip(id: impl Into<ElementId>, element: impl IntoElement, tip: String
 		.into_any_element()
 }
 
-/// What "update available" is about: the version on the headset, when it was
-/// installed, and the version it would update to.
+/// The version on the headset, when it was installed, and the one it would
+/// update to.
 pub fn update_tip(have: Option<u64>, latest: Option<u64>, installed: Option<u64>) -> String {
 	let version = |v: Option<u64>| v.map_or_else(|| "?".to_owned(), |v| v.to_string());
 	let mut tip = t!(
@@ -235,19 +232,16 @@ pub fn open_folder(path: &Path) {
 
 /// The sidebar's width; views measure what's left of the window from it.
 pub const SIDEBAR_WIDTH: f32 = 240.;
-/// The gap `table_row` and `column_header` put between columns.
 const COLUMN_GAP: f32 = 16.;
 
-/// Width a view's content has: the window minus the sidebar and `beside`, a
-/// side panel. gpui knows element sizes only after layout, so this goes by the
-/// window.
+/// gpui knows element sizes only after layout, so this goes by the window minus
+/// the sidebar and `beside`.
 pub fn content_width(window: &Window, beside: f32) -> f32 {
 	window.viewport_size().width.as_f32() - SIDEBAR_WIDTH - beside
 }
 
-/// Which optional columns fit in `width`. `fixed` is what always shows (row
-/// padding, cover, the name column's minimum); each column is (width,
-/// priority), and the lowest priorities are hidden first.
+/// `fixed` always shows (row padding, cover, the name column's minimum).
+/// Columns are (width, priority); the lowest priorities go first.
 pub fn fit_columns(width: f32, fixed: f32, columns: &[(f32, u8)]) -> Vec<bool> {
 	let mut shown = vec![true; columns.len()];
 	let mut used = fixed + columns.iter().map(|(w, _)| w + COLUMN_GAP).sum::<f32>();

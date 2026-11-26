@@ -1,5 +1,3 @@
-//! Screen mirroring through scrcpy, when it's installed.
-
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -37,8 +35,7 @@ pub enum Eye {
 	Right,
 }
 
-/// scrcpy's `--crop` value (`width:height:x:y`) for one eye of a `width` x
-/// `height` display.
+/// The `--crop` value (`width:height:x:y`) for one eye.
 fn crop(eye: Eye, width: u32, height: u32) -> Option<String> {
 	let half = width / 2;
 	match eye {
@@ -48,8 +45,8 @@ fn crop(eye: Eye, width: u32, height: u32) -> Option<String> {
 	}
 }
 
-/// Runs scrcpy for `serial` until its window closes. Everything it prints
-/// goes to the log; on failure returns its last error line.
+/// Runs until the window closes. Output goes to the log; a failure returns
+/// the last error line.
 pub(crate) async fn run(
 	adb: &AdbServer,
 	serial: &str,

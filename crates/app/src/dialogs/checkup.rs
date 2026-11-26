@@ -33,7 +33,6 @@ impl Check {
 	}
 }
 
-/// "Check everything": what's ready and what to do about what isn't.
 pub fn open(checks: Vec<Check>, window: &mut Window, cx: &mut App) {
 	window.open_dialog(cx, move |dialog, _, cx| {
 		let theme = cx.theme();

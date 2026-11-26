@@ -18,7 +18,6 @@ enum Step {
 	Headset,
 }
 
-/// Where to go once the wizard is closed.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
 	Closed,
@@ -27,8 +26,8 @@ pub enum Outcome {
 
 type OnClose = Rc<dyn Fn(Outcome, &mut Window, &mut App)>;
 
-/// The first-run setup, shown while there is no settings file yet. Closing it
-/// any way saves the settings, so it doesn't come back.
+/// Shown while there is no settings file yet. Closing it any way saves the
+/// settings, so it doesn't come back.
 pub struct Welcome {
 	engine: Rc<Engine>,
 	step: Step,

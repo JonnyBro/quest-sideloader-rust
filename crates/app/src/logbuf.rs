@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex};
 
 const MAX_LINES: usize = 2000;
 
-/// The last log lines, for the logs panel.
 #[derive(Clone, Default)]
 pub struct LogBuffer {
 	inner: Arc<Mutex<Inner>>,
@@ -93,7 +92,6 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for LogBuffer {
 	}
 }
 
-/// Colors log lines by level in the logs editor.
 pub mod highlight {
 	use std::cell::Cell;
 	use std::ops::Range;

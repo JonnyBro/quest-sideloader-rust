@@ -7,9 +7,7 @@ use std::time::Duration;
 use rust_i18n::t;
 use tokio::io::AsyncWriteExt;
 
-/// Release notes and manual downloads.
 pub const INFO_URL: &str = "https://developer.android.com/tools/releases/platform-tools";
-/// Terms the user accepts by downloading the package.
 pub const TERMS_URL: &str = "https://developer.android.com/studio/terms";
 /// Meta's USB driver, which Windows needs to see the headset.
 pub const QUEST_DRIVER_URL: &str =
@@ -35,8 +33,7 @@ pub fn adb_path(dir: &Path) -> PathBuf {
 	dir.join(if cfg!(windows) { "adb.exe" } else { "adb" })
 }
 
-/// Downloads the package and unpacks it into `dir` (replacing what was
-/// there). Returns the path of the adb binary.
+/// Replaces what was in `dir`; returns the adb path.
 pub async fn install(
 	dir: &Path,
 	progress: &(dyn Fn(u64, Option<u64>) + Send + Sync),

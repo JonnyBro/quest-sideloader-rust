@@ -62,9 +62,7 @@ impl Category {
 }
 
 pub enum SettingsEvent {
-	/// "Check everything" was clicked; the shell knows the state to check.
 	Checkup,
-	/// A key was imported or deleted, so the set of known copies changed.
 	KeysChanged,
 }
 
@@ -93,7 +91,6 @@ pub struct SettingsView {
 	keys: KeyStore,
 	key_rows: Option<Vec<KeyRow>>,
 	key_message: Option<Result<String, String>>,
-	/// Game names by package, from the synced catalog.
 	game_names: HashMap<String, String>,
 	_inputs: Vec<Subscription>,
 }
@@ -170,8 +167,7 @@ impl SettingsView {
 		cx.notify();
 	}
 
-	/// The engine saved settings. Returns true when the user asked for that
-	/// save with the Save button.
+	/// Returns true when the user asked for this save with the Save button.
 	pub fn on_saved(
 		&mut self,
 		settings: Settings,
@@ -207,7 +203,6 @@ impl SettingsView {
 		cx.notify();
 	}
 
-	/// A copy was built or a key imported; read the key list again.
 	pub fn keys_changed(&mut self, cx: &mut Context<Self>) {
 		self.key_rows = None;
 		cx.notify();
@@ -285,7 +280,6 @@ impl SettingsView {
 		cx.notify();
 	}
 
-	/// Small previews of the bundled dark or light schemes; a click picks one.
 	fn scheme_picker(&self, dark: bool, cx: &mut Context<Self>) -> AnyElement {
 		let theme = cx.theme().clone();
 		let (current, default) = if dark {
@@ -734,7 +728,7 @@ impl SettingsView {
 			))
 	}
 
-	/// Packages whose updates aren't offered; removing one saves at once.
+	/// Removing one saves at once.
 	fn held_updates(&self, cx: &mut Context<Self>) -> AnyElement {
 		let packages = &self.saved.update_ignored;
 		if packages.is_empty() {

@@ -19,7 +19,6 @@ pub type TaskId = u64;
 pub enum TaskKind {
 	Install,
 	Download,
-	/// Sending an app version from the headset to the mirror.
 	Upload,
 	Backup,
 	Restore,
@@ -29,22 +28,27 @@ pub enum TaskKind {
 	RcloneSetup,
 	/// Building a copy of a release under another package name.
 	Rename,
-	/// Copying files from the headset in the file manager.
 	PullFiles,
-	/// Copying files to the headset in the file manager.
 	PushFiles,
-	/// Copying or moving files from one headset folder to another.
 	PasteFiles,
 }
 
 /// The headset has the app signed with another key, so it must be
-/// uninstalled before this build installs; `source` can be installed again.
+/// uninstalled first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignatureConflict {
 	pub package: String,
 	pub source: PathBuf,
-	/// `source` is a download that only stayed because the install failed;
-	/// with "Keep downloaded files" off it goes once a reinstall succeeds.
+	pub streaming: bool,
+	/// A download that only stayed because the install failed; with "Keep
+	/// downloaded files" off it goes once a retry succeeds.
+	pub remove_after: bool,
+}
+
+/// A streamed install broke off; `source` can be installed without streaming.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrokenStream {
+	pub source: PathBuf,
 	pub remove_after: bool,
 }
 
@@ -80,8 +84,19 @@ pub struct TaskSnapshot {
 	pub warnings: Vec<String>,
 	/// Folder with the unpacked release, kept after a download-only job.
 	pub output: Option<PathBuf>,
-	/// Set when the install failed because of a signature mismatch.
 	pub conflict: Option<SignatureConflict>,
+	pub broken_stream: Option<BrokenStream>,
+}
+
+impl TaskSnapshot {
+	pub(crate) fn keep_removing_source(&mut self) {
+		if let Some(conflict) = &mut self.conflict {
+			conflict.remove_after = true;
+		}
+		if let Some(broken) = &mut self.broken_stream {
+			broken.remove_after = true;
+		}
+	}
 }
 
 const SEND_INTERVAL: Duration = Duration::from_millis(100);

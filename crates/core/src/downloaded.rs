@@ -1,5 +1,3 @@
-//! Releases that finished downloading and sit in the downloads folder.
-
 use rust_i18n::t;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
@@ -9,23 +7,20 @@ pub struct DownloadedRelease {
 	pub name: String,
 	pub path: PathBuf,
 	pub size: u64,
-	/// Unix seconds of the folder's last change.
+	/// Unix seconds.
 	pub modified: Option<u64>,
-	/// A download that stopped part way; its files are under [`INCOMPLETE_DIR`].
+	/// Its files are under [`INCOMPLETE_DIR`].
 	pub incomplete: bool,
 }
 
-/// Downloads in progress live here; a release is moved into the downloads
-/// folder only once it's complete, so a folder there is always whole.
+/// A release moves into the downloads folder only once it's complete.
 pub const INCOMPLETE_DIR: &str = ".incomplete";
 
-/// Free bytes on the drive holding `path`, if it can be read.
 pub fn free_space(path: &Path) -> Option<u64> {
 	fs4::available_space(path).ok()
 }
 
-/// Release folders in `root` and downloads that stopped part way, newest
-/// first. Other hidden entries and loose files are left out.
+/// Newest first; other hidden entries and loose files are skipped.
 pub fn list(root: &Path) -> Vec<DownloadedRelease> {
 	let mut releases = folders(root, false);
 	releases.extend(folders(&root.join(INCOMPLETE_DIR), true));
@@ -83,8 +78,7 @@ fn dir_size(dir: &Path) -> u64 {
 	total
 }
 
-/// Deletes the release folder `name` from `root`, or what an unfinished
-/// download of it left; refuses anything that is not a plain release folder name.
+/// Refuses anything but a plain release folder name.
 pub fn delete(root: &Path, name: &str, incomplete: bool) -> std::io::Result<()> {
 	let plain = !name.is_empty()
 		&& !name.starts_with('.')

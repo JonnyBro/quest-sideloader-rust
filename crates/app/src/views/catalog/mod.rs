@@ -109,7 +109,6 @@ pub enum Layout {
 	Grid,
 }
 
-/// The catalog's sort, filter and layout, kept between runs.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CatalogPrefs {
@@ -137,7 +136,6 @@ fn status_rank(status: GameStatus) -> u8 {
 	}
 }
 
-/// The headset the catalog is compared against.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Installed {
 	pub device_name: String,
@@ -146,7 +144,6 @@ pub struct Installed {
 	/// Unix seconds each package was installed or last updated.
 	pub installed_at: HashMap<String, u64>,
 	pub free_bytes: Option<u64>,
-	/// Packages whose updates the user doesn't want offered.
 	pub held: HashSet<String>,
 }
 
@@ -186,12 +183,9 @@ pub struct CatalogView {
 	status: CatalogStatus,
 	mirror: Option<String>,
 	mirror_id: Option<String>,
-	/// How the active mirror has been answering.
 	health: Option<MirrorHealth>,
 	installed: Option<Installed>,
-	/// Installed packages the catalog has a newer version of.
 	updates: usize,
-	/// Free space where downloads go.
 	pc_free: Option<u64>,
 	search: Entity<InputState>,
 	filter: Filter,
@@ -302,7 +296,6 @@ impl CatalogView {
 		cx.notify();
 	}
 
-	/// The active mirror's ID and name.
 	pub fn set_mirror(&mut self, mirror: Option<(String, String)>, cx: &mut Context<Self>) {
 		let (id, name) = mirror.unzip();
 		if self.mirror_id != id {
@@ -320,7 +313,6 @@ impl CatalogView {
 		}
 	}
 
-	/// A dot for the mirror's state and the details for its tooltip.
 	fn health_dot(&self, cx: &App) -> Option<AnyElement> {
 		self.mirror.as_ref()?;
 		let theme = cx.theme();
@@ -384,7 +376,6 @@ impl CatalogView {
 		}
 	}
 
-	/// How many games the synced catalog has, and what the sync is doing.
 	pub fn state(&self) -> (Option<usize>, &CatalogStatus) {
 		(self.catalog.as_ref().map(|c| c.games.len()), &self.status)
 	}
@@ -432,9 +423,8 @@ impl CatalogView {
 		};
 	}
 
-	/// Filter, sort and direction in effect. Without a headset to compare
-	/// against, the headset filters show all games and the status sort falls
-	/// back to names; the choice itself is kept for when one connects.
+	/// Without a headset the headset filters show all games and the status sort
+	/// falls back to names; the choice stays for when one connects.
 	fn effective(&self) -> (Filter, Sort, bool) {
 		let connected = self.installed.is_some();
 		let filter = if connected { self.filter } else { Filter::All };
@@ -513,13 +503,12 @@ impl CatalogView {
 		cx.notify();
 	}
 
-	/// A click toggles the details.
 	fn toggle(&mut self, index: usize, cx: &mut Context<Self>) {
 		let next = (self.selected != Some(index)).then_some(index);
 		self.select(next, cx);
 	}
 
-	fn download(&self, index: usize, install: bool) {
+	fn download(&self, index: usize, install: bool, streaming: bool) {
 		let Some(game) = self.catalog.as_ref().and_then(|c| c.games.get(index)) else {
 			return;
 		};
@@ -534,6 +523,7 @@ impl CatalogView {
 		self.engine.send(Command::Download {
 			game: game.clone(),
 			serial,
+			streaming,
 		});
 	}
 

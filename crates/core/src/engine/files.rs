@@ -42,6 +42,7 @@ fn tracker(
 			warnings: Vec::new(),
 			output: None,
 			conflict: None,
+			broken_stream: None,
 		},
 		sink.clone(),
 	)

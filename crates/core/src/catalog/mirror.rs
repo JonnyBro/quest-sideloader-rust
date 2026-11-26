@@ -91,7 +91,6 @@ impl Mirror {
 	}
 }
 
-/// Remote names (`[section]` headers) defined in an rclone config.
 pub fn rclone_remotes(config: &str) -> Vec<String> {
 	config
 		.lines()
