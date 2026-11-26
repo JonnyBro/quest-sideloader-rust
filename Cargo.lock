@@ -5260,7 +5260,7 @@ dependencies = [
 
 [[package]]
 name = "quest-sideloader"
-version = "2.3.2"
+version = "2.3.3"
 dependencies = [
  "chrono",
  "directories",
@@ -5281,7 +5281,7 @@ dependencies = [
 
 [[package]]
 name = "quest-sideloader-core"
-version = "2.3.2"
+version = "2.3.3"
 dependencies = [
  "apk-info",
  "base64 0.23.1",
