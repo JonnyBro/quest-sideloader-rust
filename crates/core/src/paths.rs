@@ -92,6 +92,16 @@ impl AppPaths {
 		self.config_dir.join("settings.toml")
 	}
 
+	/// The settings before the last save.
+	pub fn settings_backup_file(&self) -> PathBuf {
+		self.config_dir.join("settings.toml.bak")
+	}
+
+	/// A settings file that couldn't be read.
+	pub fn settings_broken_file(&self) -> PathBuf {
+		self.config_dir.join("settings.toml.broken")
+	}
+
 	pub fn ui_state_file(&self) -> PathBuf {
 		self.config_dir.join("ui.json")
 	}

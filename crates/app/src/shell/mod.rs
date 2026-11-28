@@ -150,7 +150,7 @@ pub struct Shell {
 pub struct Startup {
 	pub paths: AppPaths,
 	pub settings: Settings,
-	pub load_error: Option<String>,
+	pub load_error: Option<quest_sideloader_core::settings::LoadProblem>,
 	pub ui: UiState,
 	pub first_run: bool,
 	pub logs: LogBuffer,
@@ -215,9 +215,18 @@ impl Shell {
 				true
 			}
 		});
-		if let Some(error) = load_error {
+		if let Some(problem) = load_error {
 			cx.defer_in(window, move |this, window, cx| {
-				let text = t!("app.settings_load_error", error = error).into_owned();
+				let key = if problem.from_backup {
+					"app.settings_from_backup"
+				} else {
+					"app.settings_load_error"
+				};
+				let mut text = t!(key, error = problem.error).into_owned();
+				if let Some(kept) = &problem.kept {
+					text.push(' ');
+					text.push_str(&t!("app.settings_kept", path = kept.display()));
+				}
 				this.notify(Notification::error(text), window, cx);
 			});
 		}

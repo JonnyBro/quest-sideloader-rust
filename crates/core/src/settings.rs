@@ -120,7 +120,42 @@ impl Settings {
 	/// A missing file yields defaults; a broken one is an error so the user's
 	/// settings are never silently replaced.
 	pub fn load(paths: &AppPaths) -> Result<Self> {
-		let path = paths.settings_file();
+		Self::load_from(paths, paths.settings_file())
+	}
+
+	/// Like [`Self::load`], but never fails: a broken file is moved to
+	/// [`AppPaths::settings_broken_file`] and the backup from the last save is
+	/// used, or the defaults when there is none.
+	pub fn load_or_recover(paths: &AppPaths) -> (Self, Option<LoadProblem>) {
+		let error = match Self::load(paths) {
+			Ok(settings) => return (settings, None),
+			Err(e) => e,
+		};
+		let broken = paths.settings_broken_file();
+		let kept = std::fs::copy(paths.settings_file(), &broken)
+			.is_ok()
+			.then_some(broken);
+		match Self::load_from(paths, paths.settings_backup_file()) {
+			Ok(settings) if paths.settings_backup_file().exists() => (
+				settings,
+				Some(LoadProblem {
+					error: error.to_string(),
+					from_backup: true,
+					kept,
+				}),
+			),
+			_ => (
+				Self::defaults_for(paths),
+				Some(LoadProblem {
+					error: error.to_string(),
+					from_backup: false,
+					kept,
+				}),
+			),
+		}
+	}
+
+	fn load_from(paths: &AppPaths, path: PathBuf) -> Result<Self> {
 		let text = match std::fs::read_to_string(&path) {
 			Ok(text) => text,
 			Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -155,7 +190,18 @@ impl Settings {
 			}
 			None => toml::to_string_pretty(self)?,
 		};
-		write_atomically(&paths.settings_file(), text.as_bytes())
+		let file = paths.settings_file();
+		// A file that doesn't parse would replace the good backup.
+		if let Ok(old) = std::fs::read_to_string(&file)
+			&& old != text
+			&& toml::from_str::<Self>(&old).is_ok()
+		{
+			let backup = paths.settings_backup_file();
+			if let Err(e) = write_private(&backup, old.as_bytes()) {
+				tracing::warn!("could not back up {}: {e}", file.display());
+			}
+		}
+		write_atomically(&file, text.as_bytes())
 	}
 
 	pub fn normalize(&mut self) {
@@ -229,6 +275,16 @@ impl Default for Settings {
 			update_ignored: Vec::new(),
 		}
 	}
+}
+
+/// Why [`Settings::load_or_recover`] couldn't use the settings file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoadProblem {
+	pub error: String,
+	/// The backup from the last save was used instead of the defaults.
+	pub from_backup: bool,
+	/// Where the unreadable file was copied to.
+	pub kept: Option<PathBuf>,
 }
 
 /// Mirrors of a kind this version doesn't know (or that are broken) are
@@ -420,6 +476,61 @@ mod tests {
 			Settings::load(&paths),
 			Err(Error::SettingsParse { .. })
 		));
+	}
+
+	#[test]
+	fn save_keeps_the_previous_settings() {
+		let dir = tempfile::tempdir().unwrap();
+		let paths = AppPaths::under(dir.path());
+		let mut settings = Settings::defaults_for(&paths);
+		settings.save(&paths).unwrap();
+		assert!(
+			!paths.settings_backup_file().exists(),
+			"nothing to keep yet"
+		);
+
+		settings.max_concurrent_downloads = 1;
+		settings.save(&paths).unwrap();
+		let first = std::fs::read_to_string(paths.settings_backup_file()).unwrap();
+		settings.save(&paths).unwrap();
+		assert_eq!(
+			std::fs::read_to_string(paths.settings_backup_file()).unwrap(),
+			first,
+			"an unchanged save keeps the backup"
+		);
+
+		std::fs::write(paths.settings_file(), "theme = [").unwrap();
+		settings.save(&paths).unwrap();
+		assert_eq!(
+			std::fs::read_to_string(paths.settings_backup_file()).unwrap(),
+			first,
+			"a broken file never replaces the backup"
+		);
+	}
+
+	#[test]
+	fn broken_file_falls_back_to_the_backup() {
+		let dir = tempfile::tempdir().unwrap();
+		let paths = AppPaths::under(dir.path());
+		let mut settings = Settings::defaults_for(&paths);
+		settings.save(&paths).unwrap();
+		settings.max_concurrent_downloads = 1;
+		settings.save(&paths).unwrap();
+		std::fs::write(paths.settings_file(), "theme = [").unwrap();
+
+		let (loaded, problem) = Settings::load_or_recover(&paths);
+		let problem = problem.expect("the broken file is reported");
+		assert!(problem.from_backup);
+		assert_eq!(loaded, Settings::defaults_for(&paths));
+		assert_eq!(
+			std::fs::read_to_string(problem.kept.unwrap()).unwrap(),
+			"theme = ["
+		);
+
+		std::fs::remove_file(paths.settings_backup_file()).unwrap();
+		let (loaded, problem) = Settings::load_or_recover(&paths);
+		assert!(!problem.unwrap().from_backup);
+		assert_eq!(loaded, Settings::defaults_for(&paths));
 	}
 
 	#[test]

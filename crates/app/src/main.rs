@@ -32,13 +32,10 @@ fn main() {
 	let first_run = !paths.settings_file().exists();
 	let ui = ui_state::UiState::load(&paths.ui_state_file());
 	let scale = ui.scale.unwrap_or(1.);
-	let (settings, load_error) = match Settings::load(&paths) {
-		Ok(settings) => (settings, None),
-		Err(e) => {
-			tracing::error!("{e}");
-			(Settings::defaults_for(&paths), Some(e.to_string()))
-		}
-	};
+	let (settings, load_error) = Settings::load_or_recover(&paths);
+	if let Some(problem) = &load_error {
+		tracing::error!(from_backup = problem.from_backup, "{}", problem.error);
+	}
 	apply_language(settings.language);
 	#[cfg(target_os = "linux")]
 	desktop::refresh_if_installed();

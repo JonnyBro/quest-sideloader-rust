@@ -2168,9 +2168,17 @@ set.scale_reset:
   ru: "Сбросить"
   uk: "Скинути"
 app.settings_load_error:
-  en: "%{error}. Using defaults; saving will overwrite the file."
-  ru: "%{error}. Используются настройки по умолчанию; сохранение перезапишет файл."
-  uk: "%{error}. Використовуються налаштування за замовчуванням; збереження перезапише файл."
+  en: "%{error}. Using the default settings."
+  ru: "%{error}. Используются настройки по умолчанию."
+  uk: "%{error}. Використовуються налаштування за замовчуванням."
+app.settings_from_backup:
+  en: "%{error}. Loaded the settings as they were before the last save."
+  ru: "%{error}. Загружены настройки в том виде, в каком они были до последнего сохранения."
+  uk: "%{error}. Завантажено налаштування в тому вигляді, в якому вони були до останнього збереження."
+app.settings_kept:
+  en: "The damaged file is kept as %{path}."
+  ru: "Повреждённый файл сохранён как %{path}."
+  uk: "Пошкоджений файл збережено як %{path}."
 hs.tip_android:
   en: "Android version"
   ru: "Версия Android"
