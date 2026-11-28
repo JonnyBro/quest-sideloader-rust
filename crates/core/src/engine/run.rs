@@ -534,12 +534,19 @@ pub(super) async fn run(
 			}
 			Command::HoldUpdates { package, hold } => {
 				let mut settings = state.settings.clone();
-				let held = settings.update_ignored.contains(&package);
-				if hold && !held {
-					settings.update_ignored.push(package);
+				if Settings::set_listed(&mut settings.update_ignored, &package, hold) {
 					state.save_settings(settings).await;
-				} else if !hold && held {
-					settings.update_ignored.retain(|p| p != &package);
+				}
+			}
+			Command::SetFavorite { package, on } => {
+				let mut settings = state.settings.clone();
+				if Settings::set_listed(&mut settings.favorite_games, &package, on) {
+					state.save_settings(settings).await;
+				}
+			}
+			Command::SetHidden { package, on } => {
+				let mut settings = state.settings.clone();
+				if Settings::set_listed(&mut settings.hidden_games, &package, on) {
 					state.save_settings(settings).await;
 				}
 			}

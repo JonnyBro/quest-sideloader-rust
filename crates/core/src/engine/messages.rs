@@ -161,6 +161,16 @@ pub enum Command {
 		package: String,
 		hold: bool,
 	},
+	/// Star (`on`) or unstar a package in the catalog.
+	SetFavorite {
+		package: String,
+		on: bool,
+	},
+	/// Hide (`on`) or show again a package in the catalog.
+	SetHidden {
+		package: String,
+		on: bool,
+	},
 	/// Negative is earlier.
 	MoveDownload {
 		task: TaskId,

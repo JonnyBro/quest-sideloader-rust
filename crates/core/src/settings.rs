@@ -107,6 +107,12 @@ pub struct Settings {
 	/// For example to keep mods that need an older version.
 	#[serde(skip_serializing_if = "Vec::is_empty")]
 	pub update_ignored: Vec<String>,
+	/// Packages starred in the catalog.
+	#[serde(skip_serializing_if = "Vec::is_empty")]
+	pub favorite_games: Vec<String>,
+	/// Packages the catalog leaves out unless asked to show them.
+	#[serde(skip_serializing_if = "Vec::is_empty")]
+	pub hidden_games: Vec<String>,
 }
 
 impl Settings {
@@ -251,6 +257,19 @@ impl Settings {
 		let id = self.active_mirror.as_ref()?;
 		self.mirrors.iter().find(|m| &m.id == id)
 	}
+
+	/// Adds or removes `package`; returns whether `list` changed.
+	pub fn set_listed(list: &mut Vec<String>, package: &str, on: bool) -> bool {
+		let listed = list.iter().any(|p| p == package);
+		if on && !listed {
+			list.push(package.to_owned());
+		} else if !on && listed {
+			list.retain(|p| p != package);
+		} else {
+			return false;
+		}
+		true
+	}
 }
 
 impl Default for Settings {
@@ -273,6 +292,8 @@ impl Default for Settings {
 			mirrors: Vec::new(),
 			contribute_ignored: Vec::new(),
 			update_ignored: Vec::new(),
+			favorite_games: Vec::new(),
+			hidden_games: Vec::new(),
 		}
 	}
 }
@@ -420,6 +441,8 @@ mod tests {
 			}],
 			contribute_ignored: vec!["com.discord".into()],
 			update_ignored: vec!["com.beatgames.beatsaber".into()],
+			favorite_games: vec!["com.beatgames.beatsaber".into()],
+			hidden_games: vec!["com.example.hidden".into()],
 		};
 		settings.save(&paths).unwrap();
 		assert_eq!(Settings::load(&paths).unwrap(), settings);
@@ -476,6 +499,17 @@ mod tests {
 			Settings::load(&paths),
 			Err(Error::SettingsParse { .. })
 		));
+	}
+
+	#[test]
+	fn set_listed_reports_changes() {
+		let mut list = Vec::new();
+		assert!(Settings::set_listed(&mut list, "com.a", true));
+		assert!(!Settings::set_listed(&mut list, "com.a", true));
+		assert_eq!(list, ["com.a"]);
+		assert!(Settings::set_listed(&mut list, "com.a", false));
+		assert!(!Settings::set_listed(&mut list, "com.a", false));
+		assert!(list.is_empty());
 	}
 
 	#[test]

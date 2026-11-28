@@ -95,6 +95,26 @@ impl CatalogView {
 						.pt_4()
 						.gap_2()
 						.child(div().flex_1().min_w_0().text_lg().child(game.name.clone()))
+						.child({
+							let favorite = self.favorites.contains(&game.package);
+							let package = game.package.clone();
+							Button::new("favorite")
+								.icon(Icon::new(if favorite {
+									IconName::StarFill
+								} else {
+									IconName::Star
+								}))
+								.ghost()
+								.xsmall()
+								.tooltip(if favorite {
+									t!("lib.unfavorite")
+								} else {
+									t!("lib.favorite")
+								})
+								.on_click(cx.listener(move |this, _, _, _| {
+									this.set_favorite(package.clone(), !favorite)
+								}))
+						})
 						.child(
 							Button::new("close-details")
 								.icon(Icon::new(IconName::Close))
@@ -144,6 +164,22 @@ impl CatalogView {
 												this.download(index, false, true)
 											})),
 									)
+									.child({
+										let hidden = self.hidden.contains(&game.package);
+										let package = game.package.clone();
+										Button::new("hide")
+											.label(if hidden {
+												t!("lib.unhide")
+											} else {
+												t!("lib.hide")
+											})
+											.ghost()
+											.small()
+											.tooltip(t!("lib.hide_tip"))
+											.on_click(cx.listener(move |this, _, _, cx| {
+												this.set_hidden(package.clone(), !hidden, cx)
+											}))
+									})
 									.children(held.map(|held| {
 										let package = game.package.clone();
 										let (label, tip) = if held {

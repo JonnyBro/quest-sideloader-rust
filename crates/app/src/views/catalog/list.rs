@@ -137,7 +137,7 @@ impl CatalogView {
 						v_flex()
 							.flex_1()
 							.min_w(px(NAME_MIN))
-							.child(div().truncate().child(game.name.clone()))
+							.child(self.name_cell(game, cx))
 							.child(
 								div()
 									.truncate()
@@ -256,7 +256,7 @@ impl CatalogView {
 						.hover(|s| s.bg(theme.list_hover))
 						.on_click(cx.listener(move |this, _, _, cx| this.toggle(index, cx)))
 						.child(cover(&catalog, game, thumb, &theme))
-						.child(div().truncate().child(game.name.clone()))
+						.child(self.name_cell(game, cx))
 						.child(
 							h_flex()
 								.gap_2()
@@ -333,10 +333,35 @@ impl CatalogView {
 					Rc::new(move |this, _| this.download(index, true, false)),
 				));
 			}
+			let favorite = this.favorites.contains(&game.package);
+			let hidden = this.hidden.contains(&game.package);
+			let package = game.package.clone();
+			let star = item(
+				if favorite {
+					t!("lib.unfavorite")
+				} else {
+					t!("lib.favorite")
+				}
+				.into(),
+				Rc::new(move |this, _| this.set_favorite(package.clone(), !favorite)),
+			);
+			let package = game.package.clone();
+			let hide = item(
+				if hidden {
+					t!("lib.unhide")
+				} else {
+					t!("lib.hide")
+				}
+				.into(),
+				Rc::new(move |this, cx| this.set_hidden(package.clone(), !hidden, cx)),
+			);
 			menu.item(item(
 				t!("lib.download_only").into(),
 				Rc::new(move |this, _| this.download(index, false, true)),
 			))
+			.separator()
+			.item(star)
+			.item(hide)
 			.separator()
 			.item(copy(t!("lib.copy_name").into(), game.name.clone()))
 			.item(copy(

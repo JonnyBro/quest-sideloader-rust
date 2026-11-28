@@ -53,8 +53,15 @@ type MenuAction = Rc<dyn Fn(&mut CatalogView, &mut Context<CatalogView>)>;
 pub enum Filter {
 	#[default]
 	All,
+	Favorites,
 	Installed,
 	Updates,
+}
+
+impl Filter {
+	fn needs_headset(self) -> bool {
+		matches!(self, Self::Installed | Self::Updates)
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -193,6 +200,9 @@ pub struct CatalogView {
 	descending: bool,
 	layout: Layout,
 	show_adult: bool,
+	favorites: HashSet<String>,
+	hidden: HashSet<String>,
+	show_hidden: bool,
 	selected: Option<usize>,
 	rows: Vec<usize>,
 	rows_dirty: bool,
@@ -245,6 +255,9 @@ impl CatalogView {
 			descending: false,
 			layout: Layout::List,
 			show_adult: false,
+			favorites: HashSet::new(),
+			hidden: HashSet::new(),
+			show_hidden: false,
 			selected: None,
 			rows: Vec::new(),
 			rows_dirty: true,
@@ -355,6 +368,23 @@ impl CatalogView {
 		))
 	}
 
+	pub fn set_marks(
+		&mut self,
+		favorites: HashSet<String>,
+		hidden: HashSet<String>,
+		cx: &mut Context<Self>,
+	) {
+		if self.favorites != favorites || self.hidden != hidden {
+			if hidden.is_empty() {
+				self.show_hidden = false;
+			}
+			self.favorites = favorites;
+			self.hidden = hidden;
+			self.rows_dirty = true;
+			cx.notify();
+		}
+	}
+
 	pub fn set_held(&mut self, held: HashSet<String>, cx: &mut Context<Self>) {
 		if let Some(apps) = &mut self.installed
 			&& apps.held != held
@@ -427,7 +457,11 @@ impl CatalogView {
 	/// falls back to names; the choice stays for when one connects.
 	fn effective(&self) -> (Filter, Sort, bool) {
 		let connected = self.installed.is_some();
-		let filter = if connected { self.filter } else { Filter::All };
+		let filter = if connected || !self.filter.needs_headset() {
+			self.filter
+		} else {
+			Filter::All
+		};
 		match self.sort {
 			Sort::Status if !connected => (filter, Sort::Name, false),
 			sort => (filter, sort, self.descending),
@@ -469,11 +503,13 @@ impl CatalogView {
 				let status = installed.map_or(GameStatus::NotInstalled, |apps| apps.status(game));
 				let matches_filter = match filter {
 					Filter::All => true,
+					Filter::Favorites => self.favorites.contains(&game.package),
 					Filter::Installed => status != GameStatus::NotInstalled,
 					Filter::Updates => status == GameStatus::UpdateAvailable,
 				};
 				let shown =
-					self.show_adult || status != GameStatus::NotInstalled || !is_adult(game);
+					(self.show_adult || status != GameStatus::NotInstalled || !is_adult(game))
+						&& (self.show_hidden || !self.hidden.contains(&game.package));
 				matches_search && matches_filter && shown
 			})
 			.collect();
@@ -506,6 +542,36 @@ impl CatalogView {
 	fn toggle(&mut self, index: usize, cx: &mut Context<Self>) {
 		let next = (self.selected != Some(index)).then_some(index);
 		self.select(next, cx);
+	}
+
+	fn set_favorite(&self, package: String, on: bool) {
+		self.engine.send(Command::SetFavorite { package, on });
+	}
+
+	fn set_hidden(&mut self, package: String, on: bool, cx: &mut Context<Self>) {
+		if on && !self.show_hidden {
+			self.select(None, cx);
+		}
+		self.engine.send(Command::SetHidden { package, on });
+	}
+
+	/// The name with a star for favorites, faded for hidden games.
+	fn name_cell(&self, game: &Game, cx: &App) -> Div {
+		let theme = cx.theme();
+		h_flex()
+			.gap_1()
+			.min_w_0()
+			.when(self.favorites.contains(&game.package), |d| {
+				d.child(
+					Icon::new(IconName::StarFill)
+						.xsmall()
+						.text_color(theme.warning),
+				)
+			})
+			.when(self.hidden.contains(&game.package), |d| {
+				d.text_color(theme.muted_foreground)
+			})
+			.child(div().truncate().child(game.name.clone()))
 	}
 
 	fn download(&self, index: usize, install: bool, streaming: bool) {
@@ -651,8 +717,8 @@ impl CatalogView {
 				.ghost()
 				.small()
 				.selected(filter == value)
-				.disabled(value != Filter::All && !connected)
-				.when(value != Filter::All && !connected, |b| {
+				.disabled(value.needs_headset() && !connected)
+				.when(value.needs_headset() && !connected, |b| {
 					b.tooltip(t!("lib.connect_compare"))
 				})
 				.on_click(cx.listener(move |this, _, _, cx| {
@@ -694,6 +760,11 @@ impl CatalogView {
 						t!("lib.all").into(),
 					))
 					.child(filter_button(
+						"filter-favorites",
+						Filter::Favorites,
+						t!("lib.favorites").into(),
+					))
+					.child(filter_button(
 						"filter-installed",
 						Filter::Installed,
 						t!("lib.installed").into(),
@@ -719,7 +790,27 @@ impl CatalogView {
 								this.rows_dirty = true;
 								cx.notify();
 							})),
-					),
+					)
+					.when(!self.hidden.is_empty(), |bar| {
+						bar.child(
+							Button::new("filter-hidden")
+								.icon(Icon::new(IconName::EyeOff))
+								.label(self.hidden.len().to_string())
+								.ghost()
+								.small()
+								.selected(self.show_hidden)
+								.tooltip(if self.show_hidden {
+									t!("lib.hidden_shown")
+								} else {
+									t!("lib.hidden_hidden")
+								})
+								.on_click(cx.listener(|this, _, _, cx| {
+									this.show_hidden = !this.show_hidden;
+									this.rows_dirty = true;
+									cx.notify();
+								})),
+						)
+					}),
 			)
 			// The list sorts by its column headers; the grid has none.
 			.when(self.layout == Layout::Grid, |bar| {

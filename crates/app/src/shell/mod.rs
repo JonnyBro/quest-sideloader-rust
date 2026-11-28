@@ -632,12 +632,15 @@ impl Shell {
 			.map(|m| (m.id.clone(), m.name.clone()));
 		let no_upload = no_upload(&self.settings, &self.copies);
 		let held = held_updates(&self.settings);
+		let favorites = self.settings.favorite_games.iter().cloned().collect();
+		let hidden = self.settings.hidden_games.iter().cloned().collect();
 		self.headset
 			.update(cx, |h, cx| h.set_held(held.clone(), cx));
 		self.catalog.update(cx, |c, cx| {
 			c.set_mirror(mirror, cx);
 			c.set_no_upload(no_upload, cx);
 			c.set_held(held, cx);
+			c.set_marks(favorites, hidden, cx);
 		});
 	}
 

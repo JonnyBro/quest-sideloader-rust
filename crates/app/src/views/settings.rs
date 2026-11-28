@@ -182,6 +182,8 @@ impl SettingsView {
 			self.draft.language = settings.language;
 			self.draft.contribute_ignored = settings.contribute_ignored.clone();
 			self.draft.update_ignored = settings.update_ignored.clone();
+			self.draft.favorite_games = settings.favorite_games.clone();
+			self.draft.hidden_games = settings.hidden_games.clone();
 			self.saved = settings;
 		} else {
 			self.saved = settings.clone();

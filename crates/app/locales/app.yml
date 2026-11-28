@@ -883,6 +883,38 @@ lib.updates:
   en: "Updates"
   ru: "Обновления"
   uk: "Оновлення"
+lib.favorites:
+  en: "Favorites"
+  ru: "Избранное"
+  uk: "Обране"
+lib.favorite:
+  en: "Add to favorites"
+  ru: "Добавить в избранное"
+  uk: "Додати до обраного"
+lib.unfavorite:
+  en: "Remove from favorites"
+  ru: "Убрать из избранного"
+  uk: "Прибрати з обраного"
+lib.hide:
+  en: "Hide from the catalog"
+  ru: "Скрыть из каталога"
+  uk: "Приховати з каталогу"
+lib.unhide:
+  en: "Show in the catalog again"
+  ru: "Снова показывать в каталоге"
+  uk: "Знову показувати в каталозі"
+lib.hide_tip:
+  en: "Hidden games show up again with the eye button next to 18+."
+  ru: "Скрытые игры можно снова показать кнопкой с глазом рядом с 18+."
+  uk: "Приховані ігри можна знову показати кнопкою з оком поруч із 18+."
+lib.hidden_hidden:
+  en: "Games you hid are left out. Click to show them."
+  ru: "Скрытые вами игры не показываются. Нажмите, чтобы показать."
+  uk: "Приховані вами ігри не показуються. Натисніть, щоб показати."
+lib.hidden_shown:
+  en: "Games you hid are shown faded. Click to hide them."
+  ru: "Скрытые вами игры показаны бледным. Нажмите, чтобы скрыть."
+  uk: "Приховані вами ігри показано блідим. Натисніть, щоб приховати."
 lib.adult_hidden:
   en: "Games the mirror marks 18+ are hidden, except ones installed on the headset. Click to show them."
   ru: "Игры с пометкой 18+ скрыты, кроме установленных на шлеме. Нажмите, чтобы показать."
